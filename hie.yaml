@@ -1,13 +1,13 @@
 cradle:
   cabal:
     - path: "./src"
-      component: "lib:haskell-project-template"
+      component: "lib:kmkm"
 
     - path: "./app/main.hs"
-      component: "haskell-project-template:exe:app"
+      component: "kmkm:exe:app"
 
     - path: "./test/doctest"
-      component: "haskell-project-template:test:doctest"
+      component: "kmkm:test:doctest"
 
     - path: "./test/spec"
-      component: "haskell-project-template:test:spec"
+      component: "kmkm:test:spec"
