@@ -1,3 +1,9 @@
 packages: .
 
 write-ghc-environment-files: ghc8.4.4+
+
+package parsers
+  flags: -binary -parsec -attoparsec
+
+package language-c
+  flags: -usebytestrings

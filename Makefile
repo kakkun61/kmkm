@@ -9,7 +9,7 @@ build-deps:
 	cabal v2-build --only-dependencies
 
 .PHONY: test
-test: doctest spec
+test: doctest spec batch
 
 .PHONY: doctest
 doctest: build-deps
@@ -18,6 +18,10 @@ doctest: build-deps
 .PHONY: spec
 spec: build-deps
 	cabal v2-test spec
+
+.PHONY: batch
+batch: build-deps
+	cabal v2-test batch
 
 .PHONY: repl
 repl:

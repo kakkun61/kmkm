@@ -11,3 +11,6 @@ cradle:
 
     - path: "./test/spec"
       component: "kmkm:test:spec"
+
+    - path: "./test/batch"
+      component: "kmkm:test:batch"
