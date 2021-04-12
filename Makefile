@@ -2,26 +2,26 @@ PWSH = pwsh
 
 .PHONY: build
 build: build-deps
-	cabal v2-build $(CABAL_OPTIONS)
+	cabal v2-build
 
 .PHONY: build-deps
 build-deps:
-	cabal v2-build --only-dependencies $(CABAL_OPTIONS)
+	cabal v2-build --only-dependencies
 
 .PHONY: test
 test: doctest spec
 
 .PHONY: doctest
 doctest: build-deps
-	cabal v2-test doctest $(CABAL_OPTIONS)
+	cabal v2-test doctest
 
 .PHONY: spec
 spec: build-deps
-	cabal v2-test spec $(CABAL_OPTIONS)
+	cabal v2-test spec
 
 .PHONY: repl
 repl:
-	cabal v2-repl $(CABAL_OPTIONS)
+	cabal v2-repl
 
 .PHONY: format
 format:
