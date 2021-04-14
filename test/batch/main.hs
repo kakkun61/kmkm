@@ -3,6 +3,8 @@
 import qualified Language.Kmkm.Builder.C   as B
 import           Language.Kmkm.Parser.Sexp (parse)
 
+import           Control.Exception        (Exception (displayException))
+import           Control.Exception.Safe   (tryIO)
 import           Control.Monad            (unless)
 import           Data.Either.Result       (pattern Error, pattern Success)
 import           Data.List                (nub, sort)
@@ -19,8 +21,6 @@ import           System.Console.ANSI      (Color (Green, Red), ColorIntensity (V
 import           System.Directory         (listDirectory)
 import           System.Exit              (exitFailure)
 import qualified Text.PrettyPrint         as P
-import Control.Exception (Exception(displayException))
-import Control.Exception.Safe (tryIO)
 
 main :: IO ()
 main =
@@ -34,7 +34,7 @@ main =
         r <-
           tryIO $ do
             let path = dir <> "/" <> file
-            source <- T.readFile $ path <> ".km.lisp"
+            source <- T.readFile $ path <> ".s.km"
             expected <- readFile $ path <> ".c"
             case parseC expected $ C.position 0 file 0 0 Nothing of
               Left e -> do

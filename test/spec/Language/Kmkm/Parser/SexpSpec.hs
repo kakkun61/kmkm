@@ -16,16 +16,41 @@ spec = do
   describe "parse" $ do
     describe "integer" $ do
       it "123" $ do
-        parse' (integer <* M.eof) "spec" "123" `shouldReturn` 123
+        parse' (integer <* M.eof) "spec" "123" `shouldReturn` Integer 123 10
 
       it "0o123" $ do
-        parse' (integer <* M.eof) "spec" "0o123" `shouldReturn` 0o123
+        parse' (integer <* M.eof) "spec" "0o123" `shouldReturn` Integer 0o123 8
 
       it "0x123" $ do
-        parse' (integer <* M.eof) "spec" "0x123" `shouldReturn` 0x123
+        parse' (integer <* M.eof) "spec" "0x123" `shouldReturn` Integer 0x123 16
 
       it "0b101" $ do
-        parse' (integer <* M.eof) "spec" "0b101" `shouldReturn` 5
+        parse' (integer <* M.eof) "spec" "0b101" `shouldReturn` Integer 5 2
+
+    describe "fraction" $ do
+      it "3.14" $ do
+        parse' (fraction <* M.eof) "spec" "3.14" `shouldReturn` Fraction 314 2 0 10
+
+      it "314e-2" $ do
+        parse' (fraction <* M.eof) "spec" "314e-2" `shouldReturn` Fraction 314 0 (-2) 10
+
+      it "31.4e-1" $ do
+        parse' (fraction <* M.eof) "spec" "31.4e-1" `shouldReturn` Fraction 314 1 (-1) 10
+
+      it "1e1" $ do
+        parse' (fraction <* M.eof) "spec" "1e1" `shouldReturn` Fraction 1 0 1 10
+
+      it "1e-1" $ do
+        parse' (fraction <* M.eof) "spec" "1e-1" `shouldReturn` Fraction 1 0 (-1) 10
+
+      it "0x1p1" $ do
+        parse' (fraction <* M.eof) "spec" "0x1p1" `shouldReturn` Fraction 1 0 1 16
+
+      it "0x1p-1" $ do
+        parse' (fraction <* M.eof) "spec" "0x1p-1" `shouldReturn` Fraction 1 0 (-1) 16
+
+      it "0x1.1p1" $ do
+        parse' (fraction <* M.eof) "spec" "0x1.1p1" `shouldReturn` Fraction 17 1 1 16
 
     describe "string" $ do
       it "\"hello\"" $ do
@@ -34,17 +59,17 @@ spec = do
       it "\"\\\"\"" $ do
         parse' (string <* M.eof) "spec" "\"\\\"\"" `shouldReturn` "\""
 
-    describe "bool" $ do
-      it "true" $ do
-        parse' (bool <* M.eof) "spec" "true" `shouldReturn` True
-
     describe "alias" $ do
       it "(alias foo 123 int)" $ do
-        parse' (alias <* M.eof) "spec" "(alias foo 123 int)" `shouldReturn` Term (Identifier "foo") (Literal $ Fraction 123 0 0) (T.Variable $ Identifier "int")
+        parse' (alias <* M.eof) "spec" "(alias foo 123 int)"
+          `shouldReturn`
+            Term (Identifier "foo") (Literal $ Integer 123 10) (T.Variable $ Identifier "int")
 
     describe "definition" $ do
       it "(define bool (false true))" $ do
-        parse' (definition <* M.eof) "spec" "(define bool (list false true))" `shouldReturn` Definition (Identifier "bool") [(Identifier "false", []), (Identifier "true", [])]
+        parse' (definition <* M.eof) "spec" "(define bool (list false true))"
+          `shouldReturn`
+            Definition (Identifier "bool") [(Identifier "false", []), (Identifier "true", [])]
 
       it "(define book (list book (list (title string) (author string))))" $ do
         parse' (definition <* M.eof) "spec" "(define book (list (book (list (title string) (author string)))))"
@@ -55,7 +80,7 @@ spec = do
       it "(module math (list (alias foo 123 int)" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (alias foo 123 int)))"
           `shouldReturn`
-            Module (Identifier "math") [Alias $ Term (Identifier "foo") (Literal $ Fraction 123 0 0) (T.Variable $ Identifier "int")]
+            Module (Identifier "math") [Alias $ Term (Identifier "foo") (Literal $ Integer 123 10) (T.Variable $ Identifier "int")]
 
       it "(module math (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"

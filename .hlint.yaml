@@ -1,4 +1,5 @@
 - ignore: { name: Reduce duplication }
 - ignore: { name: Use lambda-case }
 - ignore: { name: Use list comprehension }
+- ignore: { name: Use section }
 - ignore: { name: Use tuple-section }

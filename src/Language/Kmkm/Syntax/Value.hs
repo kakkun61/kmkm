@@ -3,6 +3,8 @@
 
 #if __GLASGOW_HASKELL__ >= 902
 {-# LANGUAGE NoFieldSelectors #-}
+#else
+{-# OPTIONS_GHC -Wno-partial-fields #-}
 #endif
 
 module Language.Kmkm.Syntax.Value
@@ -22,7 +24,7 @@ data Term
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Literal
-  = Fraction { significand :: Integer, exponent :: Integer, base :: Integer }
+  = Integer { value :: Integer, base :: Word }
+  | Fraction { significand :: Integer, fractionDigits :: Word, exponent :: Int, base :: Word }
   | String Text
-  | Bool Bool
   deriving (Show, Read, Eq, Ord, Generic)

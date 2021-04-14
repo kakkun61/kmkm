@@ -9,13 +9,13 @@ module Language.Kmkm.Builder.C
 import qualified Language.Kmkm.Builder.C.Phase1 as P1
 import qualified Language.Kmkm.Builder.C.Phase2 as P2
 
-import           Language.Kmkm.Syntax       (Module (Module))
-import Language.Kmkm.Syntax.Base ( Identifier(Identifier) )
+import Language.Kmkm.Syntax      (Module (Module))
+import Language.Kmkm.Syntax.Base (Identifier (Identifier))
 
-import qualified Text.PrettyPrint      as Pretty
-import Language.C (CTranslUnit)
+import qualified Data.Text         as Text
+import           Language.C        (CTranslUnit)
 import qualified Language.C.Pretty as C
-import qualified Data.Text as Text
+import qualified Text.PrettyPrint  as Pretty
 
 build :: Module -> Pretty.Doc
 build m@(Module (Identifier i) _) =

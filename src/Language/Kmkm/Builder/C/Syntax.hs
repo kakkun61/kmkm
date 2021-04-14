@@ -1,10 +1,30 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Language.Kmkm.Builder.C.Syntax where
+module Language.Kmkm.Builder.C.Syntax
+  ( File (..)
+  , Element (..)
+  , Declaration (..)
+  , Definition (..)
+  , VariableQualifier (..)
+  , TypeQualifier (..)
+  , Type (..)
+  , QualifiedType
+  , Field (..)
+  , Identifier (..)
+  , Initializer (..)
+  , Expression (..)
+  , Literal (..)
+  , IntBase (..)
+  , FractionBase (..)
+  , ArithmeticExpression (..)
+  , Statement (..)
+  , Branch (..)
+  , ConstantExpression (..)
+  ) where
 
-import GHC.Generics (Generic)
-import Data.Text (Text)
 import Data.Hashable (Hashable)
+import Data.Text     (Text)
+import GHC.Generics  (Generic)
 
 data File =
   File Text [Element]
@@ -71,10 +91,14 @@ data Expression
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Literal
-  = Integer Integer
-  | Fraction { significand :: Integer, exponent :: Integer, base :: Integer }
+  = Integer Integer IntBase
+  | Fraction Integer Word Int FractionBase
   | String Text
   deriving (Show, Read, Eq, Ord, Generic)
+
+data IntBase = IntBinary | IntOctal | IntDecimal | IntHexadecimal deriving (Show, Read, Eq, Ord, Enum, Generic)
+
+data FractionBase = FractionDecimal | FractionHexadecimal deriving (Show, Read, Eq, Ord, Enum, Generic)
 
 data ArithmeticExpression e
   = Add e e

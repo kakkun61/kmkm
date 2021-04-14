@@ -6,22 +6,37 @@ module Language.Kmkm.Builder.C.Phase2
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
-import Language.C
-import qualified Data.Text as Text
-import Language.C.Data.Ident
-import Data.Hashable (Hashable(hash))
-import Debug.Trace
-import Data.Text (Text)
+
+import           Data.Hashable         (Hashable (hash))
+import qualified Data.List             as L
+import           Data.Text             (Text)
+import qualified Data.Text             as T
+import           Language.C            (CCompoundBlockItem (CBlockStmt), CConst, CConstant (CFloatConst, CIntConst),
+                                        CDecl, CDeclaration (CDecl),
+                                        CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
+                                        CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr), CEnumeration (CEnum),
+                                        CExpr, CExpression (CCompoundLit, CConst, CVar), CExtDecl,
+                                        CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
+                                        CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
+                                        CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger), CStat,
+                                        CStatement (CCompound, CReturn), CStorageSpecifier (CTypedef),
+                                        CStructTag (CStructTag, CUnionTag), CStructureUnion (CStruct), CTranslUnit,
+                                        CTranslationUnit (CTranslUnit), CTypeQual, CTypeQualifier (CConstQual),
+                                        CTypeSpec,
+                                        CTypeSpecifier (CBoolType, CDoubleType, CEnumType, CIntType, CSUType, CTypeDef, CUnsigType),
+                                        Ident, noFlags, undefNode)
+import           Language.C.Data.Ident (Ident (Ident))
+import           Numeric               (showHex)
 
 file :: I.File -> CTranslUnit
 file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
 
 element :: I.Element -> CExtDecl
-element (I.Declaration (I.ValueDeclaration qs t i)) = CDeclExt $ valueDeclaration qs t i Nothing
-element (I.Declaration (I.FunctionDeclaration qs t i ps)) = undefined
-element (I.Definition (I.ValueDefinition qs t i l)) = CDeclExt $ valueDeclaration qs t (Just i) (Just l)
+element (I.Declaration (I.ValueDeclaration qs t i))       = CDeclExt $ valueDeclaration qs t i Nothing
+element (I.Declaration (I.FunctionDeclaration qs t i ps)) = undefined qs t i ps
+element (I.Definition (I.ValueDefinition qs t i l))       = CDeclExt $ valueDeclaration qs t (Just i) (Just l)
 element (I.Definition (I.FunctionDefinition qs t i ps s)) = CFDefExt $ functionDefinition qs t i ps s
-element (I.TypeDefinition t i) = CDeclExt $ typeDefinition t i
+element (I.TypeDefinition t i)                            = CDeclExt $ typeDefinition t i
 
 valueDeclaration :: [I.VariableQualifier] -> I.QualifiedType -> Maybe I.Identifier -> Maybe I.Initializer -> CDecl
 valueDeclaration qs t i l =
@@ -63,7 +78,7 @@ identifier :: I.Identifier -> Ident
 identifier (I.Identifier t) = textIdentifier t
 
 textIdentifier :: Text -> Ident
-textIdentifier t = Ident (Text.unpack t) (hash t) undefNode
+textIdentifier t = Ident (T.unpack t) (hash t) undefNode
 
 variableQualifier :: I.VariableQualifier -> CTypeQual
 variableQualifier I.Constant = CConstQual undefNode
@@ -76,6 +91,7 @@ typeQualifier I.Unsigned = CUnsigType undefNode
 
 typ :: I.Type -> CTypeSpec
 typ I.Int = CIntType undefNode
+typ I.Double = CDoubleType undefNode
 typ (I.EnumerableLiteral i is) = enumerableLiteral i is
 typ (I.StructureLiteral i fs) = structureLiteral i fs
 typ (I.Union fs) = union fs
@@ -83,7 +99,7 @@ typ (I.TypeVariable (I.Identifier "bool")) = CBoolType undefNode
 typ (I.TypeVariable i@(I.Identifier _)) = CTypeDef (identifier i) undefNode
 typ (I.Enumerable i) = CEnumType (CEnum (Just $ identifier i) Nothing [] undefNode) undefNode
 typ (I.Structure i) = CSUType (CStruct CStructTag (Just $ identifier i) Nothing [] undefNode) undefNode
-typ t = trace (show t) undefined
+typ t = error $ show t
 
 enumerableLiteral :: Maybe I.Identifier -> [I.Identifier] -> CTypeSpec
 enumerableLiteral i is =
@@ -132,15 +148,33 @@ initializer (I.List is) =
   where go i = ([], initializer i)
 
 expression :: I.Expression -> CExpr
-expression (I.Literal l) = CConst $ literal l
-expression (I.Variable v) = CVar (identifier v) undefNode
+expression (I.Literal l)     = CConst $ literal l
+expression (I.Variable v)    = CVar (identifier v) undefNode
 expression (I.Compound t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
-expression e = trace (show e) undefined
+expression e                 = error $ show e
 
 literal :: I.Literal -> CConst
-literal (I.Integer i) = CIntConst (CInteger i DecRepr noFlags) undefNode
-literal l = trace (show l) undefined
+literal (I.Integer i b) =
+  CIntConst (CInteger i repr noFlags) undefNode
+  where
+    repr =
+      case b of
+        I.IntBinary      -> HexRepr
+        I.IntOctal       -> OctalRepr
+        I.IntDecimal     -> DecRepr
+        I.IntHexadecimal -> HexRepr
+literal (I.Fraction s f e b) =
+  CFloatConst (CFloat $ mconcat [hstr, istr, dstr, fstr, kstr, estr] ) undefNode
+  where
+    hstr, sstr, istr, fstr, dstr, kstr, estr :: String
+    hstr = case b of { I.FractionDecimal -> ""; I.FractionHexadecimal -> "0x" }
+    sstr = (case b of { I.FractionDecimal -> show; I.FractionHexadecimal -> flip showHex "" }) s
+    (istr, fstr) = L.genericSplitAt (L.genericLength sstr - f) sstr
+    dstr = if f == 0 then "" else "."
+    kstr = case b of { I.FractionDecimal -> "e"; I.FractionHexadecimal -> "p" }
+    estr = show e
+literal l                = error $ show l
 
 statement :: I.Statement -> CStat
 statement (I.Return e) = CCompound [] [CBlockStmt $ CReturn (Just $ expression e) undefNode] undefNode
-statement s = trace (show s) undefined
+statement s            = error $ show s
