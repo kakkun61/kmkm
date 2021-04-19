@@ -71,11 +71,14 @@ test source expected = do
   case parse (T.unpack source) source of
     Error e -> Fail e
     Success m ->
-      let result = C.pretty $ B.buildC m
-      in
-        if result == expected
-          then Pass
-          else Mismatch result
+      case B.buildC m of
+        Left e -> Fail $ displayException e
+        Right d ->
+          let result = C.pretty d
+          in
+            if result == expected
+              then Pass
+              else Mismatch result
 
 putStrLnGreen :: String -> IO ()
 putStrLnGreen s = do

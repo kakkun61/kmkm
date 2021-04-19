@@ -19,7 +19,6 @@ module Language.Kmkm.Builder.C.Syntax
   , ArithmeticExpression (..)
   , Statement (..)
   , Branch (..)
-  , ConstantExpression (..)
   ) where
 
 import Data.Hashable (Hashable)
@@ -65,6 +64,7 @@ data Type
   | StructureLiteral (Maybe Identifier) [Field]
   | Union [Field]
   | EnumerableLiteral (Maybe Identifier) [Identifier]
+  | Function Type [Type]
   deriving (Show, Read, Eq, Ord, Generic)
 
 type QualifiedType = ([TypeQualifier], Type)
@@ -87,7 +87,8 @@ data Expression
   = Variable Identifier
   | Literal Literal
   | Compound QualifiedType [Initializer]
-  | ArithmeticExpression (ArithmeticExpression Expression)
+  | ArithmeticExpression ArithmeticExpression
+  | Call Identifier [Expression]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Literal
@@ -100,12 +101,12 @@ data IntBase = IntBinary | IntOctal | IntDecimal | IntHexadecimal deriving (Show
 
 data FractionBase = FractionDecimal | FractionHexadecimal deriving (Show, Read, Eq, Ord, Enum, Generic)
 
-data ArithmeticExpression e
-  = Add e e
-  | Subtract e e
-  | Multiple e e
-  | Divide e e
-  | Minus e
+data ArithmeticExpression
+  = Add Expression Expression
+  | Subtract Expression Expression
+  | Multiple Expression Expression
+  | Divide Expression Expression
+  | Minus Expression
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Statement
@@ -116,10 +117,5 @@ data Statement
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Branch =
-  Branch ConstantExpression Statement
-  deriving (Show, Read, Eq, Ord, Generic)
-
-data ConstantExpression
-  = ConstantLiteral Literal
-  | ConstantArithmeticExpression ConstantExpression
+  Branch Expression Statement
   deriving (Show, Read, Eq, Ord, Generic)

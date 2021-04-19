@@ -1,12 +1,12 @@
 (module
   math
   (list
-    (alias pi_int_decimal 3 int)
-    (alias pi_int_binary 0b11 int)
-    (alias pi_int_octal 0o3 int)
-    (alias pi_int_hexadecimal 0x3 int)
-    (alias pi_double_decimal 3.1415926535 frac2)
-    (alias pi_double_hexadecimal 0x3.243f6a8822e87c199acbp0 frac2)
-    (alias test1_double_hexadecimal 0x1p1 frac2)
-    (alias test2_double_hexadecimal 0x1p-1 frac2)
-    (alias test3_double_hexadecimal 0x1.1p1 frac2)))
+    (bind pi_int_decimal 3 int)
+    (bind pi_int_binary 0b11 int)
+    (bind pi_int_octal 0o3 int)
+    (bind pi_int_hexadecimal 0x3 int)
+    (bind pi_double_decimal 3.1415926535 frac2)
+    (bind pi_double_hexadecimal 0x3.243f6a8822e87c199acbp0 frac2)
+    (bind test1_double_hexadecimal 0x1p1 frac2)
+    (bind test2_double_hexadecimal 0x1p-1 frac2)
+    (bind test3_double_hexadecimal 0x1.1p1 frac2)))

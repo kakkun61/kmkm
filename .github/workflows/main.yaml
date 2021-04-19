@@ -8,7 +8,7 @@ jobs:
   test:
     strategy:
       matrix:
-        ghc: ['8.6', '8.8', '8.10']
+        ghc: ['8.8', '8.10']
         test: [doctest, spec]
         continue-on-error: [false]
         include:

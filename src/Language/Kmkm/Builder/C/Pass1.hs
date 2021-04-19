@@ -1,20 +1,26 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Phase1
-  ( module'
-  , member
+module Language.Kmkm.Builder.C.Pass1
+  ( convert
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
-import           Language.Kmkm.Syntax           (Alias (Term), Member (Alias, Definition), Module (Module))
+import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Type      (Type)
+import           Language.Kmkm.Syntax.Phase3    (Application (Application), Bind, Function (Function), Literal, Member,
+                                                 Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
-import           Language.Kmkm.Syntax.Value     (Literal (Fraction, Integer), Term (Literal))
+import qualified Language.Kmkm.Syntax.Value     as V
+
+import Data.Coerce (Coercible, coerce)
+
+convert :: Module -> I.File
+convert = module'
 
 module' :: Module -> I.File
-module' (Module (Identifier t) ms) =
+module' (S.Module (Identifier t) ms) =
   I.File t $ member =<< ms
 
 -- |
@@ -30,7 +36,7 @@ module' (Module (Identifier t) ms) =
 --            |     |         | function  | function
 -- @
 member :: Member -> [I.Element]
-member (Definition i cs) =
+member (S.Definition i cs) =
   mconcat
     [ tagEnum
     , [structure]
@@ -70,21 +76,37 @@ member (Definition i cs) =
             (1, _:_) -> argument <$> fs
             _        -> I.Expression (I.Variable $ tagEnumIdent c) : (argument <$> fs)
         argument (i, _) = I.Expression $ I.Variable $ identifier i
-member (Alias a) = [alias a]
+member (S.Bind a) = [bind a]
 
-alias :: Alias -> I.Element
-alias (Term i v t) = I.Definition $ I.ValueDefinition [] (typ t) (identifier i) $ I.Expression $ term v
-alias a            = error $ show a
+bind :: Bind -> I.Element
+bind (S.Term i (V.Literal (V.Function' f)) (T.Arrow' a)) = I.Definition $ functionDefinition i f a
+bind (S.Term i v t) = I.Definition $ I.ValueDefinition [] (typ t) (identifier i) $ I.Expression $ term v
+bind a            = error $ show a
+
+functionDefinition :: Identifier -> Function -> T.ArrowN -> I.Definition
+functionDefinition i (Function (V.Function1 i0 v)) (T.Arrow1 t0 t) =
+  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0)] $ I.Return $ term v
+functionDefinition i (Function (V.Function2 i0 i1 v)) (T.Arrow2 t0 t1 t) =
+  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1)] $ I.Return $ term v
+functionDefinition i (Function (V.Function3 i0 i1 i2 v)) (T.Arrow3 t0 t1 t2 t) =
+  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1), ([I.Constant], typ t2, identifier i2)] $ I.Return $ term v
+functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier
 identifier (Identifier t) = I.Identifier t
 
-term :: Term -> I.Expression
-term (Literal l) = I.Literal $ literal l
-term t           = error $ show t
+term :: Coercible a Term => a -> I.Expression
+term = term' . coerce
+
+term' :: Term -> I.Expression
+term' (V.Variable i)                                             = I.Variable $ identifier i
+term' (V.Literal l)                                              = I.Literal $ literal l
+term' (V.Application' (Application (V.Application1 i t0)))       = I.Call (identifier i) [term t0]
+term' (V.Application' (Application (V.Application2 i t0 t1)))    = I.Call (identifier i) $ term <$> [t0, t1]
+term' (V.Application' (Application (V.Application3 i t0 t1 t2))) = I.Call (identifier i) $ term <$> [t0, t1, t2]
 
 literal :: Literal -> I.Literal
-literal (Integer i b) =
+literal (V.Integer i b) =
   I.Integer i $
     case b of
       2  -> I.IntBinary
@@ -92,7 +114,7 @@ literal (Integer i b) =
       10 -> I.IntDecimal
       16 -> I.IntHexadecimal
       _  -> error $ "literal: base: " ++ show b
-literal (Fraction s f e b) =
+literal (V.Fraction s f e b) =
   I.Fraction s f e $
     case b of
       10 -> I.FractionDecimal

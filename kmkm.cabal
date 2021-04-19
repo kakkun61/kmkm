@@ -28,15 +28,22 @@ library
   hs-source-dirs: src
   exposed-modules: Language.Kmkm
                    Language.Kmkm.Builder.C
-                   Language.Kmkm.Builder.C.Phase1
-                   Language.Kmkm.Builder.C.Phase2
+                   Language.Kmkm.Builder.C.Pass1
+                   Language.Kmkm.Builder.C.Pass2
                    Language.Kmkm.Builder.C.Syntax
+                   Language.Kmkm.Builder.Pass1
+                   Language.Kmkm.Builder.Pass2
+                   Language.Kmkm.Exception
+                   Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
                    Language.Kmkm.Syntax.Base
+                   Language.Kmkm.Syntax.Phase1
+                   Language.Kmkm.Syntax.Phase2
+                   Language.Kmkm.Syntax.Phase3
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
-                   Language.Kmkm.Parser.Sexp
-  build-depends: megaparsec,
+  build-depends: exceptions,
+                 megaparsec,
                  hashable,
                  language-c,
                  parsers,

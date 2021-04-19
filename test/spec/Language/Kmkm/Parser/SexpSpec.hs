@@ -59,9 +59,9 @@ spec = do
       it "\"\\\"\"" $ do
         parse' (string <* M.eof) "spec" "\"\\\"\"" `shouldReturn` "\""
 
-    describe "alias" $ do
-      it "(alias foo 123 int)" $ do
-        parse' (alias <* M.eof) "spec" "(alias foo 123 int)"
+    describe "bind" $ do
+      it "(bind foo 123 int)" $ do
+        parse' (bind <* M.eof) "spec" "(bind foo 123 int)"
           `shouldReturn`
             Term (Identifier "foo") (Literal $ Integer 123 10) (T.Variable $ Identifier "int")
 
@@ -77,10 +77,10 @@ spec = do
             Definition (Identifier "book") [(Identifier "book", [(Identifier "title", T.Variable $ Identifier "string"), (Identifier "author", T.Variable $ Identifier "string")])]
 
     describe "module" $ do
-      it "(module math (list (alias foo 123 int)" $ do
-        parse' (module' <* M.eof) "spec" "(module math (list (alias foo 123 int)))"
+      it "(module math (list (bind foo 123 int)" $ do
+        parse' (module' <* M.eof) "spec" "(module math (list (bind foo 123 int)))"
           `shouldReturn`
-            Module (Identifier "math") [Alias $ Term (Identifier "foo") (Literal $ Integer 123 10) (T.Variable $ Identifier "int")]
+            Module (Identifier "math") [Bind $ Term (Identifier "foo") (Literal $ Integer 123 10) (T.Variable $ Identifier "int")]
 
       it "(module math (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"

@@ -3,7 +3,7 @@
 module Language.Kmkm.Syntax
   ( Module (..)
   , Member (..)
-  , Alias (..)
+  , Bind (..)
   ) where
 
 import Language.Kmkm.Syntax.Base  (Identifier)
@@ -12,16 +12,16 @@ import Language.Kmkm.Syntax.Value (Term)
 
 import GHC.Generics (Generic)
 
-data Module =
-  Module Identifier [Member]
+data Module function application arrow callee =
+  Module Identifier [Member function application arrow callee]
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Member
-  = Definition Identifier [(Identifier, [(Identifier, Type)])]
-  | Alias Alias
+data Member function application arrow callee
+  = Definition Identifier [(Identifier, [(Identifier, Type arrow)])]
+  | Bind (Bind function application arrow callee)
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Alias
-  = Type Identifier Type
-  | Term Identifier Term Type
+data Bind function application arrow callee
+  = Type Identifier (Type arrow)
+  | Term Identifier (Term function application callee) (Type arrow)
   deriving (Show, Read, Eq, Ord, Generic)

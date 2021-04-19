@@ -1,0 +1,29 @@
+(module
+  definition
+  (list
+    (define
+      myBool
+      (list
+        myFalse
+        myTrue))
+    (define
+      fraction
+      (list
+        (fraction
+          (list
+            (numerator int)
+            (denominator int)))))
+    (define
+      passenger
+      (list
+        (person
+          (list
+            (class uint)))
+        (pet
+          (list
+            (species uint)))))
+    (define
+      unit
+      (list
+        (unit
+          (list))))))

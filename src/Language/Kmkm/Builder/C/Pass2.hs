@@ -1,8 +1,8 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Phase2
-  ( file
+module Language.Kmkm.Builder.C.Pass2
+  ( convert
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
@@ -15,7 +15,7 @@ import           Language.C            (CCompoundBlockItem (CBlockStmt), CConst,
                                         CDecl, CDeclaration (CDecl),
                                         CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
                                         CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr), CEnumeration (CEnum),
-                                        CExpr, CExpression (CCompoundLit, CConst, CVar), CExtDecl,
+                                        CExpr, CExpression (CCall, CCompoundLit, CConst, CVar), CExtDecl,
                                         CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
                                         CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
                                         CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger), CStat,
@@ -27,6 +27,9 @@ import           Language.C            (CCompoundBlockItem (CBlockStmt), CConst,
                                         Ident, noFlags, undefNode)
 import           Language.C.Data.Ident (Ident (Ident))
 import           Numeric               (showHex)
+
+convert :: I.File -> CTranslUnit
+convert = file
 
 file :: I.File -> CTranslUnit
 file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
@@ -151,6 +154,7 @@ expression :: I.Expression -> CExpr
 expression (I.Literal l)     = CConst $ literal l
 expression (I.Variable v)    = CVar (identifier v) undefNode
 expression (I.Compound t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
+expression (I.Call i as)     = CCall (CVar (identifier i) undefNode) (expression <$> as) undefNode
 expression e                 = error $ show e
 
 literal :: I.Literal -> CConst

@@ -1,0 +1,7 @@
+(module
+  function
+  (list
+    (bind
+      add
+      (function a (function b (apply (apply add_int a) b)))
+      (function int (function int int)))))

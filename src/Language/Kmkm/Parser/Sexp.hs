@@ -6,7 +6,7 @@ module Language.Kmkm.Parser.Sexp
   , parse'
   , module'
   , definition
-  , alias
+  , bind
   , identifier
   , term
   , literal
@@ -15,17 +15,19 @@ module Language.Kmkm.Parser.Sexp
   , string
   ) where
 
-import           Language.Kmkm.Syntax       (Alias (Term, Type), Member (Alias, Definition), Module (Module))
-import           Language.Kmkm.Syntax.Base  (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Type  (Type)
-import qualified Language.Kmkm.Syntax.Type  as T
-import           Language.Kmkm.Syntax.Value (Literal (Fraction, Integer, String), Term (Literal))
-import qualified Language.Kmkm.Syntax.Value as V
+import qualified Language.Kmkm.Syntax        as S
+import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
+import           Language.Kmkm.Syntax.Phase1 (Application (Application), Bind, Function (Function), Member, Module,
+                                              Term (Term), Term', Type)
+import qualified Language.Kmkm.Syntax.Type   as T
+import           Language.Kmkm.Syntax.Value  (Literal (Fraction, Function', Integer, String))
+import qualified Language.Kmkm.Syntax.Value  as V
 
 import           Control.Applicative        (Alternative (many, (<|>)))
 import           Control.Monad              (void)
 import           Data.Bool                  (bool)
 import qualified Data.Char                  as C
+import           Data.Coerce                (coerce)
 import           Data.Functor               (($>))
 import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
@@ -39,11 +41,6 @@ import qualified Text.Parser.Char           as P
 import           Text.Parser.Combinators    ((<?>))
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
-
-#if !MIN_VERSION_base(4,13,0)
-import Control.Monad.Fail (MonadFail)
-#endif
-
 
 type Parser = ParsecT Void Text Identity
 
@@ -61,8 +58,8 @@ module' =
   (<?> "module") $
     P.parens $ do
       void $ P.textSymbol "module"
-      i <- P.token identifier
-      Module i <$> list member
+      i <- identifier
+      S.Module i <$> list member
 
 list :: Parser a -> Parser [a]
 list p =
@@ -76,7 +73,7 @@ member =
   "member" <!>
     P.choice
       [ P.try definition
-      , Alias <$> alias
+      , S.Bind <$> bind
       ]
 
 definition :: Parser Member
@@ -84,62 +81,71 @@ definition =
   (<?> "definition") $
     P.parens $ do
       void $ P.textSymbol "define"
-      i <- P.token identifier
-      Definition i <$> list valueConstructor
+      i <- identifier
+      S.Definition i <$> list valueConstructor
 
 valueConstructor :: Parser (Identifier, [(Identifier, Type)])
 valueConstructor =
   "valueConstructor" <!>
     P.choice
       [ do
-          i <- P.token identifier
+          i <- identifier
           pure (i, [])
       , P.parens $ do
-          i <- P.token identifier
+          i <- identifier
           fs <- list field
           pure (i, fs)
       ]
 
 field :: Parser (Identifier, Type)
-field = (<?> "field") $ P.parens $ (,) <$> P.token identifier <*> typ
+field = (<?> "field") $ P.parens $ (,) <$> identifier <*> typ
 
-alias :: Parser Alias
-alias =
-  (<?> "alias") $
+bind :: Parser Bind
+bind =
+  (<?> "bind") $
     P.parens $ do
-      void $ P.textSymbol "alias"
-      i <- P.token identifier
+      void $ P.textSymbol "bind"
+      i <- identifier
       P.choice
-        [ Term i <$> term <*> typ
-        , Type i <$> undefined
+        [ S.Term i <$> term <*> typ
+        , S.Type i <$> undefined
         ]
 
 identifier :: Parser Identifier
 identifier =
-  "identifier" <!> do
-    a <- asciiAlphabet
-    b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
-    pure $ Identifier $ T.pack $ a:b
+  (<?> "identifier") $
+    P.token $ do
+      a <- asciiAlphabet
+      b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
+      pure $ Identifier $ T.pack $ a:b
 
-term :: Parser Term
+term :: Parser Term'
 term =
   "term" <!>
     P.choice
-      [ V.Variable <$> P.token identifier
-      , Literal <$> literal
-      , P.parens $ V.Application <$> term <*> term
+      [ V.Variable <$> identifier
+      , P.try $ V.Literal <$> literal
+      , V.Application' <$> application
       ]
 
-literal :: Parser Literal
+literal :: Parser (Literal Function)
 literal =
   "literal" <!>
     P.choice
       [ P.try fraction
       , integer
       , String <$> string
+      , Function' <$> function
       ]
 
-integer :: Parser Literal
+application :: Parser Application
+application =
+  (<?> "application") $
+    P.parens $ do
+      void $ P.textSymbol "apply"
+      Application <$> (V.Application <$> (Term <$> term) <*> coerce term)
+
+integer :: Parser (Literal Function)
 integer =
   "integer" <!> do
     P.token $
@@ -150,11 +156,10 @@ integer =
         , flip Integer 10 <$> M.decimal
         ]
 
-fraction :: Parser Literal
+fraction :: Parser (Literal Function)
 fraction =
   "fraction" <!> do P.token $ hexadecimal <|> decimal
   where
-    hexadecimal, decimal :: Parser Literal
     hexadecimal = do
       void $ P.text "0x"
       istr <- digits 16
@@ -215,13 +220,35 @@ string =
               , T.singleton <$> P.notChar '"'
               ]
 
+function :: Parser Function
+function =
+  (<?> "function") $
+    P.parens $ do
+      void $ P.textSymbol "function"
+      Function <$> (V.Function <$> identifier <*> coerce term)
+
 typ :: Parser Type
 typ =
   "type" <!> do
     P.choice
-      [ T.Variable <$> P.token identifier
-      , P.parens $ T.Application <$> typ <*> typ
+      [ T.Variable <$> identifier
+      , T.Arrow' <$> arrow
+      , uncurry T.Application <$> typeApplication
       ]
+
+arrow :: Parser T.Arrow
+arrow =
+  (<?> "arrow") $
+    P.parens $ do
+      void $ P.textSymbol "function"
+      T.Arrow <$> typ <*> typ
+
+typeApplication :: Parser (Type, Type)
+typeApplication =
+  (<?> "typeApplication") $
+    P.parens $ do
+      void $ P.textSymbol "apply"
+      (,) <$> typ <*> typ
 
 doubleQuotes :: Parser a -> Parser a
 doubleQuotes = (<?> "doubleQuotes") . P.between (void $ P.text "\"") (void $ P.text "\"")
