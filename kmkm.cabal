@@ -32,14 +32,12 @@ library
                    Language.Kmkm.Builder.C.Pass2
                    Language.Kmkm.Builder.C.Syntax
                    Language.Kmkm.Builder.Pass1
-                   Language.Kmkm.Builder.Pass2
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
                    Language.Kmkm.Syntax.Base
                    Language.Kmkm.Syntax.Phase1
                    Language.Kmkm.Syntax.Phase2
-                   Language.Kmkm.Syntax.Phase3
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
   build-depends: exceptions,

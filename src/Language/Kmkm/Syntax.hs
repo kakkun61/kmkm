@@ -12,16 +12,16 @@ import Language.Kmkm.Syntax.Value (Term)
 
 import GHC.Generics (Generic)
 
-data Module function application arrow callee =
-  Module Identifier [Member function application arrow callee]
+data Module function application arrow =
+  Module Identifier [Member function application arrow]
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Member function application arrow callee
+data Member function application arrow
   = Definition Identifier [(Identifier, [(Identifier, Type arrow)])]
-  | Bind (Bind function application arrow callee)
+  | Bind (Bind function application arrow)
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Bind function application arrow callee
+data Bind function application arrow
   = Type Identifier (Type arrow)
-  | Term Identifier (Term function application callee) (Type arrow)
+  | Term Identifier (Term function application) (Type arrow)
   deriving (Show, Read, Eq, Ord, Generic)

@@ -9,7 +9,6 @@ module Language.Kmkm.Builder.C
 import qualified Language.Kmkm.Builder.C.Pass1 as BC1
 import qualified Language.Kmkm.Builder.C.Pass2 as BC2
 import qualified Language.Kmkm.Builder.Pass1   as B1
-import qualified Language.Kmkm.Builder.Pass2   as B2
 import           Language.Kmkm.Syntax.Phase1   (Module)
 
 import qualified Language.Kmkm.Syntax      as S
@@ -42,4 +41,4 @@ build m@(S.Module (Identifier i) _) = do
     newline = Pretty.char '\n'
 
 buildC :: MonadThrow m => Module -> m CTranslUnit
-buildC m = BC2.convert . BC1.convert . B2.convert <$> B1.convert m
+buildC m = BC2.convert . BC1.convert <$> B1.convert m

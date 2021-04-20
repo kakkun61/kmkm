@@ -88,7 +88,7 @@ data Expression
   | Literal Literal
   | Compound QualifiedType [Initializer]
   | ArithmeticExpression ArithmeticExpression
-  | Call Identifier [Expression]
+  | Call Expression [Expression]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Literal

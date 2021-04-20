@@ -154,7 +154,7 @@ expression :: I.Expression -> CExpr
 expression (I.Literal l)     = CConst $ literal l
 expression (I.Variable v)    = CVar (identifier v) undefNode
 expression (I.Compound t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
-expression (I.Call i as)     = CCall (CVar (identifier i) undefNode) (expression <$> as) undefNode
+expression (I.Call t as)     = CCall (expression t) (expression <$> as) undefNode
 expression e                 = error $ show e
 
 literal :: I.Literal -> CConst

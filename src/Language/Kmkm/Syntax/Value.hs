@@ -21,7 +21,7 @@ import Language.Kmkm.Syntax.Base (Identifier)
 import Data.Text    (Text)
 import GHC.Generics (Generic)
 
-data Term function application callee
+data Term function application
   = Variable Identifier
   | Literal (Literal function)
   | Application' application
@@ -34,22 +34,22 @@ data Literal function
   | Function' function
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Application function callee =
-  Application callee (Term function (Application function callee) callee)
+data Application function =
+  Application (Term function (Application function)) (Term function (Application function))
   deriving (Show, Read, Eq, Ord, Generic)
 
-data ApplicationN function callee
-  = Application1 callee (Term function (ApplicationN function callee) callee)
-  | Application2 callee (Term function (ApplicationN function callee) callee) (Term function (ApplicationN function callee) callee)
-  | Application3 callee (Term function (ApplicationN function callee) callee) (Term function (ApplicationN function callee) callee) (Term function (ApplicationN function callee) callee)
+data ApplicationN function
+  = Application1 (Term function (ApplicationN function)) (Term function (ApplicationN function))
+  | Application2 (Term function (ApplicationN function)) (Term function (ApplicationN function)) (Term function (ApplicationN function))
+  | Application3 (Term function (ApplicationN function)) (Term function (ApplicationN function)) (Term function (ApplicationN function)) (Term function (ApplicationN function))
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Function application callee =
-  Function Identifier (Term (Function application callee) application callee)
+data Function application =
+  Function Identifier (Term (Function application) application)
   deriving (Show, Read, Eq, Ord, Generic)
 
-data FunctionN application callee
-  = Function1 Identifier (Term (FunctionN application callee) application callee)
-  | Function2 Identifier Identifier (Term (FunctionN application callee) application callee)
-  | Function3 Identifier Identifier Identifier (Term (FunctionN application callee) application callee)
+data FunctionN application
+  = Function1 Identifier (Term (FunctionN application) application)
+  | Function2 Identifier Identifier (Term (FunctionN application) application)
+  | Function3 Identifier Identifier Identifier (Term (FunctionN application) application)
   deriving (Show, Read, Eq, Ord, Generic)

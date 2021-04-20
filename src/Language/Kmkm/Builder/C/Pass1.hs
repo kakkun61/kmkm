@@ -9,7 +9,7 @@ module Language.Kmkm.Builder.C.Pass1
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Phase3    (Application (Application), Bind, Function (Function), Literal, Member,
+import           Language.Kmkm.Syntax.Phase2    (Application (Application), Bind, Function (Function), Literal, Member,
                                                  Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
@@ -101,9 +101,9 @@ term = term' . coerce
 term' :: Term -> I.Expression
 term' (V.Variable i)                                             = I.Variable $ identifier i
 term' (V.Literal l)                                              = I.Literal $ literal l
-term' (V.Application' (Application (V.Application1 i t0)))       = I.Call (identifier i) [term t0]
-term' (V.Application' (Application (V.Application2 i t0 t1)))    = I.Call (identifier i) $ term <$> [t0, t1]
-term' (V.Application' (Application (V.Application3 i t0 t1 t2))) = I.Call (identifier i) $ term <$> [t0, t1, t2]
+term' (V.Application' (Application (V.Application1 t t0)))       = I.Call (term t) [term t0]
+term' (V.Application' (Application (V.Application2 t t0 t1)))    = I.Call (term t) $ term <$> [t0, t1]
+term' (V.Application' (Application (V.Application3 t t0 t1 t2))) = I.Call (term t) $ term <$> [t0, t1, t2]
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =

@@ -47,14 +47,14 @@ typ (T.Arrow' a)        = T.Arrow' <$> arrow a
 term :: (MonadThrow m, Coercible a P1.Term, Coercible P2.Term b) => a -> m b
 term = (coerce <$>) . term' . coerce
 
-term' :: MonadThrow m => P1.Term' -> m P2.Term'
+term' :: MonadThrow m => P1.Term -> m P2.Term
 term' (V.Variable i)      = pure $ V.Variable i
 term' (V.Literal l)       = V.Literal <$> literal l
-term' (V.Application' (P1.Application (V.Application (P1.Term (V.Application' (P1.Application (V.Application (P1.Term (V.Application' (P1.Application (V.Application (P1.Term (V.Application' _)) _)))) _)))) _))) =
+term' (V.Application' (P1.Application (V.Application (V.Application' (V.Application (V.Application' (V.Application (V.Application' _) _)) _)) _))) =
   throwM $ Exception "function arity > 3"
-term' (V.Application' (P1.Application (V.Application (P1.Term (V.Application' (P1.Application (V.Application (P1.Term (V.Application' (P1.Application (V.Application t t0)))) t1)))) t2))) =
+term' (V.Application' (P1.Application (V.Application (V.Application' (V.Application (V.Application' (V.Application t t0)) t1)) t2))) =
   V.Application' . P2.Application <$> (V.Application3 <$> term t <*> term t0 <*> term t1 <*> term t2)
-term' (V.Application' (P1.Application (V.Application (P1.Term (V.Application' (P1.Application (V.Application t t0)))) t1))) =
+term' (V.Application' (P1.Application (V.Application (V.Application' (V.Application t t0)) t1))) =
   V.Application' . P2.Application <$> (V.Application2 <$> term t <*> term t0 <*> term t1)
 term' (V.Application' (P1.Application (V.Application t t0))) =
   V.Application' . P2.Application <$> (V.Application1 <$> term t <*> term t0)

@@ -18,7 +18,7 @@ module Language.Kmkm.Parser.Sexp
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
 import           Language.Kmkm.Syntax.Phase1 (Application (Application), Bind, Function (Function), Member, Module,
-                                              Term (Term), Term', Type)
+                                              Term, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
 import           Language.Kmkm.Syntax.Value  (Literal (Fraction, Function', Integer, String))
 import qualified Language.Kmkm.Syntax.Value  as V
@@ -119,7 +119,7 @@ identifier =
       b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
       pure $ Identifier $ T.pack $ a:b
 
-term :: Parser Term'
+term :: Parser Term
 term =
   "term" <!>
     P.choice
@@ -143,7 +143,7 @@ application =
   (<?> "application") $
     P.parens $ do
       void $ P.textSymbol "apply"
-      Application <$> (V.Application <$> (Term <$> term) <*> coerce term)
+      Application <$> (V.Application <$> coerce term <*> coerce term)
 
 integer :: Parser (Literal Function)
 integer =
