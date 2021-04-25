@@ -9,12 +9,9 @@ module Language.Kmkm.Builder.C.Pass1
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Phase2    (Application (Application), Bind, Function (Function), Literal, Member,
-                                                 Module, Term, Type)
+import           Language.Kmkm.Syntax.Phase2    (Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
-
-import Data.Coerce (Coercible, coerce)
 
 convert :: Module -> I.File
 convert = module'
@@ -84,26 +81,23 @@ bind (S.Term i v t) = I.Definition $ I.ValueDefinition [] (typ t) (identifier i)
 bind a            = error $ show a
 
 functionDefinition :: Identifier -> Function -> T.ArrowN -> I.Definition
-functionDefinition i (Function (V.Function1 i0 v)) (T.Arrow1 t0 t) =
+functionDefinition i (V.Function1 i0 v) (T.Arrow1 t0 t) =
   I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0)] $ I.Return $ term v
-functionDefinition i (Function (V.Function2 i0 i1 v)) (T.Arrow2 t0 t1 t) =
+functionDefinition i (V.Function2 i0 i1 v) (T.Arrow2 t0 t1 t) =
   I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1)] $ I.Return $ term v
-functionDefinition i (Function (V.Function3 i0 i1 i2 v)) (T.Arrow3 t0 t1 t2 t) =
+functionDefinition i (V.Function3 i0 i1 i2 v) (T.Arrow3 t0 t1 t2 t) =
   I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1), ([I.Constant], typ t2, identifier i2)] $ I.Return $ term v
 functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier
 identifier (Identifier t) = I.Identifier t
 
-term :: Coercible a Term => a -> I.Expression
-term = term' . coerce
-
-term' :: Term -> I.Expression
-term' (V.Variable i)                                             = I.Variable $ identifier i
-term' (V.Literal l)                                              = I.Literal $ literal l
-term' (V.Application' (Application (V.Application1 t t0)))       = I.Call (term t) [term t0]
-term' (V.Application' (Application (V.Application2 t t0 t1)))    = I.Call (term t) $ term <$> [t0, t1]
-term' (V.Application' (Application (V.Application3 t t0 t1 t2))) = I.Call (term t) $ term <$> [t0, t1, t2]
+term :: Term -> I.Expression
+term (V.Variable i)                               = I.Variable $ identifier i
+term (V.Literal l)                                = I.Literal $ literal l
+term (V.Application' (V.Application1 t t0))       = I.Call (term t) [term t0]
+term (V.Application' (V.Application2 t t0 t1))    = I.Call (term t) $ term <$> [t0, t1]
+term (V.Application' (V.Application3 t t0 t1 t2)) = I.Call (term t) $ term <$> [t0, t1, t2]
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =

@@ -17,17 +17,14 @@ module Language.Kmkm.Parser.Sexp
 
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Phase1 (Application (Application), Bind, Function (Function), Member, Module,
-                                              Term, Type)
+import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
-import           Language.Kmkm.Syntax.Value  (Literal (Fraction, Function', Integer, String))
 import qualified Language.Kmkm.Syntax.Value  as V
 
 import           Control.Applicative        (Alternative (many, (<|>)))
 import           Control.Monad              (void)
 import           Data.Bool                  (bool)
 import qualified Data.Char                  as C
-import           Data.Coerce                (coerce)
 import           Data.Functor               (($>))
 import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
@@ -128,14 +125,14 @@ term =
       , V.Application' <$> application
       ]
 
-literal :: Parser (Literal Function)
+literal :: Parser Literal
 literal =
   "literal" <!>
     P.choice
       [ P.try fraction
       , integer
-      , String <$> string
-      , Function' <$> function
+      , V.String <$> string
+      , V.Function' <$> function
       ]
 
 application :: Parser Application
@@ -143,20 +140,20 @@ application =
   (<?> "application") $
     P.parens $ do
       void $ P.textSymbol "apply"
-      Application <$> (V.Application <$> coerce term <*> coerce term)
+      V.ApplicationC <$> term <*> term
 
-integer :: Parser (Literal Function)
+integer :: Parser Literal
 integer =
   "integer" <!> do
     P.token $
       P.choice
-        [ P.text "0b" >> flip Integer 2 <$> M.binary
-        , P.text "0o" >> flip Integer 8 <$> M.octal
-        , P.text "0x" >> flip Integer 16 <$> M.hexadecimal
-        , flip Integer 10 <$> M.decimal
+        [ P.text "0b" >> flip V.Integer 2 <$> M.binary
+        , P.text "0o" >> flip V.Integer 8 <$> M.octal
+        , P.text "0x" >> flip V.Integer 16 <$> M.hexadecimal
+        , flip V.Integer 10 <$> M.decimal
         ]
 
-fraction :: Parser (Literal Function)
+fraction :: Parser Literal
 fraction =
   "fraction" <!> do P.token $ hexadecimal <|> decimal
   where
@@ -172,7 +169,7 @@ fraction =
       epos <- sign
       estr <- digits 16
       exponent <- if T.null estr then pure 0 else parse' M.decimal "fraction.hexadecimal.exponent" estr
-      pure $ Fraction significand fractionDigits (sign' epos exponent) 16
+      pure $ V.Fraction significand fractionDigits (sign' epos exponent) 16
     decimal = do
       istr <- digits 10
       (fstr, epos, estr) <-
@@ -196,7 +193,7 @@ fraction =
         fractionDigits = fromIntegral $ T.length fstr
       significand <- parse' M.decimal "fraction.decimal.significand" $ istr <> fstr
       exponent <- if T.null estr then pure 0 else parse' M.decimal "fraction.decimal.exponent" estr
-      pure $ Fraction significand fractionDigits (sign' epos exponent) 10
+      pure $ V.Fraction significand fractionDigits (sign' epos exponent) 10
     sign' :: Num n => Bool -> n -> n
     sign' = bool negate id
 
@@ -225,7 +222,7 @@ function =
   (<?> "function") $
     P.parens $ do
       void $ P.textSymbol "function"
-      Function <$> (V.Function <$> identifier <*> coerce term)
+      V.FunctionC <$> identifier <*> term
 
 typ :: Parser Type
 typ =
@@ -236,7 +233,7 @@ typ =
       , uncurry T.Application <$> typeApplication
       ]
 
-arrow :: Parser T.Arrow
+arrow :: Parser Arrow
 arrow =
   (<?> "arrow") $
     P.parens $ do

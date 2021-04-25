@@ -2,6 +2,7 @@
 
 module Language.Kmkm.Syntax.Base
   ( Identifier (..)
+  , Curriness (..)
   ) where
 
 import Data.Hashable (Hashable)
@@ -13,3 +14,8 @@ newtype Identifier
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance Hashable Identifier
+
+data Curriness
+  = Curried
+  | Uncurried
+  deriving (Show, Read, Eq, Ord, Generic)

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DataKinds #-}
 
 module Language.Kmkm.Syntax.Phase1
   ( Module
@@ -7,33 +7,30 @@ module Language.Kmkm.Syntax.Phase1
   , Type
   , Term
   , Literal
-  , Function (..)
-  , Function'
-  , Application (..)
-  , Application'
+  , Function
+  , Application
+  , Arrow
   ) where
 
-import           GHC.Generics               (Generic)
 import qualified Language.Kmkm.Syntax       as S
+import           Language.Kmkm.Syntax.Base  (Curriness (Curried))
 import qualified Language.Kmkm.Syntax.Type  as T
 import qualified Language.Kmkm.Syntax.Value as V
 
-type Module = S.Module Function Application T.Arrow
+type Module = S.Module 'Curried
 
-type Member = S.Member Function Application T.Arrow
+type Member = S.Member 'Curried
 
-type Bind = S.Bind Function Application T.Arrow
+type Bind = S.Bind 'Curried
 
-type Type = T.Type T.Arrow
+type Type = T.Type 'Curried
 
-type Term = V.Term Function Application
+type Term = V.Term 'Curried
 
-type Literal = V.Literal Function
+type Literal = V.Literal 'Curried
 
-newtype Function = Function Function' deriving (Show, Read, Eq, Ord, Generic)
+type Function = V.Function 'Curried
 
-type Function' = V.Function Application
+type Application = V.Application 'Curried
 
-newtype Application = Application Application' deriving (Show, Read, Eq, Ord, Generic)
-
-type Application' = V.Application Function
+type Arrow = T.Arrow 'Curried
