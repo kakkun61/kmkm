@@ -6,6 +6,7 @@ module Language.Kmkm.Syntax.Phase2
   , Bind
   , Type
   , Term
+  , Term'
   , Literal
   , Function
   , Application
@@ -13,24 +14,26 @@ module Language.Kmkm.Syntax.Phase2
   ) where
 
 import qualified Language.Kmkm.Syntax       as S
-import           Language.Kmkm.Syntax.Base  (Curriness (Uncurried))
+import           Language.Kmkm.Syntax.Base  (Curriness (Curried), Typing (Typed))
 import qualified Language.Kmkm.Syntax.Type  as T
 import qualified Language.Kmkm.Syntax.Value as V
 
-type Module = S.Module 'Uncurried
+type Module = S.Module 'Curried 'Typed
 
-type Member = S.Member 'Uncurried
+type Member = S.Member 'Curried 'Typed
 
-type Bind = S.Bind 'Uncurried
+type Bind = S.Bind 'Curried 'Typed
 
-type Type = T.Type 'Uncurried
+type Type = T.Type 'Curried
 
-type Term = V.Term 'Uncurried
+type Term = V.Term 'Curried 'Typed
 
-type Literal = V.Literal 'Uncurried
+type Term' = V.Term' 'Curried 'Typed
 
-type Function = V.Function 'Uncurried
+type Literal = V.Literal 'Curried 'Typed
 
-type Application = V.Application 'Uncurried
+type Function = V.Function 'Curried 'Typed
 
-type Arrow = T.Arrow 'Uncurried
+type Application = V.Application 'Curried 'Typed
+
+type Arrow = T.Arrow 'Curried

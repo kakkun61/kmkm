@@ -3,5 +3,5 @@
   (list
     (bind
       add
-      (function a (function b (apply (apply add_int a) b)))
+      (function a int (function b int (apply (apply add a) b)))
       (function int (function int int)))))

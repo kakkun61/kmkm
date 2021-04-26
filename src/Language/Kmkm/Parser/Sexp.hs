@@ -118,12 +118,13 @@ identifier =
 
 term :: Parser Term
 term =
-  "term" <!>
-    P.choice
-      [ V.Variable <$> identifier
-      , P.try $ V.Literal <$> literal
-      , V.Application' <$> application
-      ]
+  (<?> "term'") $
+    V.UntypedTerm <$>
+      P.choice
+        [ V.Variable <$> identifier
+        , P.try $ V.Literal <$> literal
+        , V.Application' <$> application
+        ]
 
 literal :: Parser Literal
 literal =
@@ -222,7 +223,7 @@ function =
   (<?> "function") $
     P.parens $ do
       void $ P.textSymbol "function"
-      V.FunctionC <$> identifier <*> term
+      V.FunctionC <$> identifier <*> typ <*> term
 
 typ :: Parser Type
 typ =
@@ -238,7 +239,7 @@ arrow =
   (<?> "arrow") $
     P.parens $ do
       void $ P.textSymbol "function"
-      T.Arrow <$> typ <*> typ
+      T.ArrowC <$> typ <*> typ
 
 typeApplication :: Parser (Type, Type)
 typeApplication =

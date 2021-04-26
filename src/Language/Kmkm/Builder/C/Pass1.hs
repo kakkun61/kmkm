@@ -9,9 +9,11 @@ module Language.Kmkm.Builder.C.Pass1
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Phase2    (Bind, Function, Literal, Member, Module, Term, Type)
+import           Language.Kmkm.Syntax.Phase3    (Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
+
+import Control.Exception (assert)
 
 convert :: Module -> I.File
 convert = module'
@@ -76,28 +78,28 @@ member (S.Definition i cs) =
 member (S.Bind a) = [bind a]
 
 bind :: Bind -> I.Element
-bind (S.Term i (V.Literal (V.Function' f)) (T.Arrow' a)) = I.Definition $ functionDefinition i f a
+bind (S.Term i (V.TypedTerm (V.Literal (V.Function' f)) (T.Arrow' a)) (T.Arrow' a')) = assert (a == a') $ I.Definition $ functionDefinition i f a
 bind (S.Term i v t) = I.Definition $ I.ValueDefinition [] (typ t) (identifier i) $ I.Expression $ term v
 bind a            = error $ show a
 
-functionDefinition :: Identifier -> Function -> T.ArrowN -> I.Definition
-functionDefinition i (V.Function1 i0 v) (T.Arrow1 t0 t) =
-  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0)] $ I.Return $ term v
-functionDefinition i (V.Function2 i0 i1 v) (T.Arrow2 t0 t1 t) =
-  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1)] $ I.Return $ term v
-functionDefinition i (V.Function3 i0 i1 i2 v) (T.Arrow3 t0 t1 t2 t) =
-  I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1), ([I.Constant], typ t2, identifier i2)] $ I.Return $ term v
+functionDefinition :: Identifier -> Function -> Arrow -> I.Definition
+functionDefinition i (V.Function1 i0 t0 v) (T.Arrow1 t0' t) =
+  assert (t0 == t0') $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0)] $ I.Return $ term v
+functionDefinition i (V.Function2 i0 t0 i1 t1 v) (T.Arrow2 t0' t1' t) =
+  assert ((t0, t1) == (t0', t1')) $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1)] $ I.Return $ term v
+functionDefinition i (V.Function3 i0 t0 i1 t1 i2 t2 v) (T.Arrow3 t0' t1' t2' t) =
+  assert ((t0, t1, t2) == (t0', t1', t2')) $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1), ([I.Constant], typ t2, identifier i2)] $ I.Return $ term v
 functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier
 identifier (Identifier t) = I.Identifier t
 
 term :: Term -> I.Expression
-term (V.Variable i)                               = I.Variable $ identifier i
-term (V.Literal l)                                = I.Literal $ literal l
-term (V.Application' (V.Application1 t t0))       = I.Call (term t) [term t0]
-term (V.Application' (V.Application2 t t0 t1))    = I.Call (term t) $ term <$> [t0, t1]
-term (V.Application' (V.Application3 t t0 t1 t2)) = I.Call (term t) $ term <$> [t0, t1, t2]
+term (V.TypedTerm (V.Variable i) _)                               = I.Variable $ identifier i
+term (V.TypedTerm (V.Literal l) _)                                = I.Literal $ literal l
+term (V.TypedTerm (V.Application' (V.Application1 t t0)) _)       = I.Call (term t) [term t0]
+term (V.TypedTerm (V.Application' (V.Application2 t t0 t1)) _)    = I.Call (term t) $ term <$> [t0, t1]
+term (V.TypedTerm (V.Application' (V.Application3 t t0 t1 t2)) _) = I.Call (term t) $ term <$> [t0, t1, t2]
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =

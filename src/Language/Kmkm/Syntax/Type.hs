@@ -8,9 +8,7 @@
 
 module Language.Kmkm.Syntax.Type
   ( Type (..)
-  , Arrow
-  , ArrowC (..)
-  , ArrowN (..)
+  , Arrow (..)
   ) where
 
 import Language.Kmkm.Syntax.Base (Curriness (Curried, Uncurried), Identifier)
@@ -31,15 +29,13 @@ deriving instance Eq (Arrow c) => Eq (Type c)
 deriving instance Ord (Arrow c) => Ord (Type c)
 
 type Arrow :: Curriness -> K.Type
-type family Arrow c where
-  Arrow 'Curried = ArrowC
-  Arrow 'Uncurried = ArrowN
+data family Arrow c
 
-data ArrowC =
-  Arrow (Type 'Curried) (Type 'Curried)
+data instance Arrow 'Curried =
+  ArrowC (Type 'Curried) (Type 'Curried)
   deriving (Show, Read, Eq, Ord, Generic)
 
-data ArrowN
+data instance Arrow 'Uncurried
   = Arrow1 (Type 'Uncurried) (Type 'Uncurried)
   | Arrow2 (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried)
   | Arrow3 (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried)

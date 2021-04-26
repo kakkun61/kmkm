@@ -16,64 +16,136 @@
 
 module Language.Kmkm.Syntax.Value
   ( Term (..)
+  , Term' (..)
   , Literal (..)
   , Application (..)
   , Function (..)
   ) where
 
-import Language.Kmkm.Syntax.Base (Curriness (Curried, Uncurried), Identifier)
+import Language.Kmkm.Syntax.Base (Curriness (Curried, Uncurried), Identifier, Typing (Typed, Untyped))
+import Language.Kmkm.Syntax.Type (Type)
 
-import Data.Kind    (Type)
-import Data.Text    (Text)
-import GHC.Generics (Generic)
+import qualified Data.Kind    as K
+import           Data.Text    (Text)
+import           GHC.Generics (Generic)
 
-type Term :: Curriness -> Type
-data Term c
-  = Variable Identifier
-  | Literal (Literal c)
-  | Application' (Application c)
+type Term :: Curriness -> Typing -> K.Type
+data family Term c t
+
+data instance Term c 'Typed =
+  TypedTerm (Term' c 'Typed) (Type c)
   deriving Generic
 
-deriving instance (Show (Application c), Show (Literal c)) => Show (Term c)
-deriving instance (Read (Application c), Read (Literal c)) => Read (Term c)
-deriving instance (Eq (Application c), Eq (Literal c)) => Eq (Term c)
-deriving instance (Ord (Application c), Ord (Literal c)) => Ord (Term c)
+newtype instance Term c 'Untyped =
+  UntypedTerm (Term' c 'Untyped)
+  deriving Generic
 
-type Literal :: Curriness -> Type
-data Literal c
+deriving instance Show (Term 'Curried 'Typed)
+deriving instance Read (Term 'Curried 'Typed)
+deriving instance Eq (Term 'Curried 'Typed)
+deriving instance Ord (Term 'Curried 'Typed)
+
+deriving instance Show (Term 'Curried 'Untyped)
+deriving instance Read (Term 'Curried 'Untyped)
+deriving instance Eq (Term 'Curried 'Untyped)
+deriving instance Ord (Term 'Curried 'Untyped)
+
+deriving instance Show (Term 'Uncurried 'Typed)
+deriving instance Read (Term 'Uncurried 'Typed)
+deriving instance Eq (Term 'Uncurried 'Typed)
+deriving instance Ord (Term 'Uncurried 'Typed)
+
+deriving instance Show (Term 'Uncurried 'Untyped)
+deriving instance Read (Term 'Uncurried 'Untyped)
+deriving instance Eq (Term 'Uncurried 'Untyped)
+deriving instance Ord (Term 'Uncurried 'Untyped)
+
+data Term' c t
+  = Variable Identifier
+  | Literal (Literal c t)
+  | Application' (Application c t)
+  deriving Generic
+
+deriving instance (Show (Application c t), Show (Literal c t)) => Show (Term' c t)
+deriving instance (Read (Application c t), Read (Literal c t)) => Read (Term' c t)
+deriving instance (Eq (Application c t), Eq (Literal c t)) => Eq (Term' c t)
+deriving instance (Ord (Application c t), Ord (Literal c t)) => Ord (Term' c t)
+
+type Literal :: Curriness -> Typing -> K.Type
+data Literal c t
   = Integer { value :: Integer, base :: Word }
   | Fraction { significand :: Integer, fractionDigits :: Word, exponent :: Int, base :: Word }
   | String Text
-  | Function' (Function c)
+  | Function' (Function c t)
   deriving Generic
 
-deriving instance Show (Function c) => Show (Literal c)
-deriving instance Read (Function c) => Read (Literal c)
-deriving instance Eq (Function c) => Eq (Literal c)
-deriving instance Ord (Function c) => Ord (Literal c)
+deriving instance Show (Function c t) => Show (Literal c t)
+deriving instance Read (Function c t) => Read (Literal c t)
+deriving instance Eq (Function c t) => Eq (Literal c t)
+deriving instance Ord (Function c t) => Ord (Literal c t)
 
-type Application :: Curriness -> Type
-data family Application c
+type Application :: Curriness -> Typing -> K.Type
+data family Application c t
 
-data instance Application 'Curried =
-  ApplicationC (Term 'Curried) (Term 'Curried)
-  deriving (Show, Read, Eq, Ord, Generic)
+data instance Application 'Curried t =
+  ApplicationC (Term 'Curried t) (Term 'Curried t)
+  deriving Generic
 
-data instance Application 'Uncurried
-  = Application1 (Term 'Uncurried) (Term 'Uncurried)
-  | Application2 (Term 'Uncurried) (Term 'Uncurried) (Term 'Uncurried)
-  | Application3 (Term 'Uncurried) (Term 'Uncurried) (Term 'Uncurried) (Term 'Uncurried)
-  deriving (Show, Read, Eq, Ord, Generic)
+data instance Application 'Uncurried t
+  = Application1 (Term 'Uncurried t) (Term 'Uncurried t)
+  | Application2 (Term 'Uncurried t) (Term 'Uncurried t) (Term 'Uncurried t)
+  | Application3 (Term 'Uncurried t) (Term 'Uncurried t) (Term 'Uncurried t) (Term 'Uncurried t)
+  deriving Generic
 
-type Function :: Curriness -> Type
+deriving instance Show (Application 'Curried 'Typed)
+deriving instance Read (Application 'Curried 'Typed)
+deriving instance Eq (Application 'Curried 'Typed)
+deriving instance Ord (Application 'Curried 'Typed)
+
+deriving instance Show (Application 'Curried 'Untyped)
+deriving instance Read (Application 'Curried 'Untyped)
+deriving instance Eq (Application 'Curried 'Untyped)
+deriving instance Ord (Application 'Curried 'Untyped)
+
+deriving instance Show (Application 'Uncurried 'Typed)
+deriving instance Read (Application 'Uncurried 'Typed)
+deriving instance Eq (Application 'Uncurried 'Typed)
+deriving instance Ord (Application 'Uncurried 'Typed)
+
+deriving instance Show (Application 'Uncurried 'Untyped)
+deriving instance Read (Application 'Uncurried 'Untyped)
+deriving instance Eq (Application 'Uncurried 'Untyped)
+deriving instance Ord (Application 'Uncurried 'Untyped)
+
+type Function :: Curriness -> Typing -> K.Type
 data family Function c
 
-data instance Function 'Curried =
-  FunctionC Identifier (Term 'Curried)
-  deriving (Show, Read, Eq, Ord, Generic)
+data instance Function 'Curried t =
+  FunctionC Identifier (Type 'Curried) (Term 'Curried t)
+  deriving Generic
 
-data instance Function 'Uncurried
-  = Function1 Identifier (Term 'Uncurried)
-  | Function2 Identifier Identifier (Term 'Uncurried)
-  | Function3 Identifier Identifier Identifier (Term 'Uncurried)
-  deriving (Show, Read, Eq, Ord, Generic)
+data instance Function 'Uncurried t
+  = Function1 Identifier (Type 'Uncurried) (Term 'Uncurried t)
+  | Function2 Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) (Term 'Uncurried t)
+  | Function3 Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) (Term 'Uncurried t)
+  deriving Generic
+
+deriving instance Show (Function 'Curried 'Typed)
+deriving instance Read (Function 'Curried 'Typed)
+deriving instance Eq (Function 'Curried 'Typed)
+deriving instance Ord (Function 'Curried 'Typed)
+
+deriving instance Show (Function 'Curried 'Untyped)
+deriving instance Read (Function 'Curried 'Untyped)
+deriving instance Eq (Function 'Curried 'Untyped)
+deriving instance Ord (Function 'Curried 'Untyped)
+
+deriving instance Show (Function 'Uncurried 'Typed)
+deriving instance Read (Function 'Uncurried 'Typed)
+deriving instance Eq (Function 'Uncurried 'Typed)
+deriving instance Ord (Function 'Uncurried 'Typed)
+
+deriving instance Show (Function 'Uncurried 'Untyped)
+deriving instance Read (Function 'Uncurried 'Untyped)
+deriving instance Eq (Function 'Uncurried 'Untyped)
+deriving instance Ord (Function 'Uncurried 'Untyped)

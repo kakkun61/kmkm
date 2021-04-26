@@ -1,74 +1,77 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeFamilies          #-}
 
--- | \"Uncurry\" pass.
+-- | \"Type check\" pass.
 module Language.Kmkm.Builder.Pass1
-  ( convert
+  ( typeCheck
   ) where
 
 import           Language.Kmkm.Exception     (Exception (Exception))
 import qualified Language.Kmkm.Syntax        as S
+import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
 import qualified Language.Kmkm.Syntax.Phase1 as P1
 import qualified Language.Kmkm.Syntax.Phase2 as P2
 import qualified Language.Kmkm.Syntax.Type   as T
-import           Language.Kmkm.Syntax.Value  (Literal (Fraction, Function', Integer, String))
 import qualified Language.Kmkm.Syntax.Value  as V
 
-import Control.Monad.Catch (MonadThrow (throwM))
+import           Control.Exception   (assert)
+import           Control.Monad.Catch (MonadThrow (throwM))
+import           Data.Map.Strict     (Map)
+import qualified Data.Map.Strict     as M
 
-convert :: MonadThrow m => P1.Module -> m P2.Module
-convert = module'
+type Context = Map Identifier P1.Type
 
-module' :: MonadThrow m => P1.Module -> m P2.Module
-module' (S.Module i ms) = S.Module i <$> sequence (member <$> ms)
+typeCheck :: MonadThrow m => P1.Module -> m P2.Module
+typeCheck (S.Module i ms) = do
+  ctx <- globalContext ms
+  ms' <- typeCheck' ctx ms
+  pure $ S.Module i ms'
 
-member :: MonadThrow m => P1.Member -> m P2.Member
-member (S.Definition i cs) =
-  S.Definition i <$> sequence (go <$> cs)
+globalContext :: MonadThrow m => [P1.Member] -> m Context
+globalContext =
+  foldr member $ pure M.empty
   where
-    go (i, fs) =
-      (,) i <$> sequence (go <$> fs)
+    member :: MonadThrow m => P1.Member -> m Context -> m Context
+    member (S.Definition i cs) =
+      flip (foldr constructor) cs
       where
-        go (i, t) = (,) i <$> typ t
-member (S.Bind b) = S.Bind <$> bind b
+        constructor (c, fs) =
+          (M.insert c (foldr field (T.Variable i) fs) <$>)
+          where
+            field (_, t) t' = T.Arrow' $ T.ArrowC t t'
+    member (S.Bind S.Type {}) = id
+    member (S.Bind (S.Term i _ t)) = (M.insert i t <$>)
 
-bind :: MonadThrow m => P1.Bind -> m P2.Bind
-bind (S.Type i t)   = S.Type i <$> typ t
-bind (S.Term i v t) = S.Term i <$> term v <*> typ t
+typeCheck' :: MonadThrow m => Context -> [P1.Member] -> m [P2.Member]
+typeCheck' ctx =
+  sequence . (member <$>)
+  where
+    member :: MonadThrow m => P1.Member -> m P2.Member
+    member (S.Definition i cs) = pure $ S.Definition i cs
+    member (S.Bind (S.Type i t)) = pure $ S.Bind $ S.Type i t
+    member (S.Bind (S.Term i (V.UntypedTerm v) t)) = do
+        v'@(V.TypedTerm _ t') <- typeOf ctx v
+        assert (t == t') $ pure $ S.Bind $ S.Term i v' t'
 
-typ :: MonadThrow m => P1.Type -> m P2.Type
-typ (T.Variable i)      = pure $ T.Variable i
-typ (T.Application t s) = T.Application <$> typ t <*> typ s
-typ (T.Arrow' a)        = T.Arrow' <$> arrow a
-
-term :: MonadThrow m => P1.Term -> m P2.Term
-term (V.Variable i)      = pure $ V.Variable i
-term (V.Literal l)       = V.Literal <$> literal l
-term (V.Application' (V.ApplicationC (V.Application' (V.ApplicationC (V.Application' (V.ApplicationC (V.Application' _) _)) _)) _)) =
-  throwM $ Exception "function arity > 3"
-term (V.Application' (V.ApplicationC (V.Application' (V.ApplicationC (V.Application' (V.ApplicationC t t0)) t1)) t2)) =
-  V.Application' <$> (V.Application3 <$> term t <*> term t0 <*> term t1 <*> term t2)
-term (V.Application' (V.ApplicationC (V.Application' (V.ApplicationC t t0)) t1)) =
-  V.Application' <$> (V.Application2 <$> term t <*> term t0 <*> term t1)
-term (V.Application' (V.ApplicationC t t0)) =
-  V.Application' <$> (V.Application1 <$> term t <*> term t0)
-
-literal :: MonadThrow m => P1.Literal -> m P2.Literal
-literal (Integer v b)      = pure $ Integer v b
-literal (Fraction s f e b) = pure $ Fraction s f e b
-literal (String t)         = pure $ String t
-literal (Function' f)      = Function' <$> function f
-
-arrow :: MonadThrow m => P1.Arrow -> m P2.Arrow
-arrow (T.Arrow _ (T.Arrow' (T.Arrow _ (T.Arrow' (T.Arrow _ (T.Arrow' T.Arrow {})))))) = throwM $ Exception "function arity > 3"
-arrow (T.Arrow t0 (T.Arrow' (T.Arrow t1 (T.Arrow' (T.Arrow t2 t))))) = T.Arrow3 <$> typ t0 <*> typ t1 <*> typ t2 <*> typ t
-arrow (T.Arrow t0 (T.Arrow' (T.Arrow t1 t))) = T.Arrow2 <$> typ t0 <*> typ t1 <*> typ t
-arrow (T.Arrow t0 t) = T.Arrow1 <$> typ t0 <*> typ t
-
-function :: MonadThrow m => P1.Function -> m P2.Function
-function (V.FunctionC _ (V.Literal (V.Function' (V.FunctionC _ (V.Literal (Function' (V.FunctionC _ (V.Literal Function' {})))))))) = throwM $ Exception "function arity > 3"
-function (V.FunctionC i0 (V.Literal (Function' (V.FunctionC i1 (V.Literal (Function' (V.FunctionC i2 t))))))) = V.Function3 i0 i1 i2 <$> term t
-function (V.FunctionC i0 (V.Literal (Function' (V.FunctionC i1 t)))) = V.Function2 i0 i1 <$> term t
-function (V.FunctionC i0 t) = V.Function1 i0 <$> term t
+typeOf :: MonadThrow m => Context -> P1.Term' -> m P2.Term
+typeOf ctx (V.Variable i) =
+  case M.lookup i ctx of
+    Nothing -> throwM $ Exception $ "not found in type context: " ++ show i
+    Just t  -> pure $ V.TypedTerm (V.Variable i) t
+typeOf _ (V.Literal (V.Integer v b)) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable $ Identifier "int")
+typeOf _ (V.Literal (V.Fraction s d e b)) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable $ Identifier "frac2")
+typeOf _ (V.Literal (V.String t)) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable $ Identifier "string")
+typeOf ctx (V.Literal (V.Function' (V.FunctionC i t (V.UntypedTerm v)))) = do
+  v'@(V.TypedTerm _ t') <- typeOf (M.insert i t ctx) v
+  pure $ V.TypedTerm (V.Literal (V.Function' (V.FunctionC i t v'))) (T.Arrow' $ T.ArrowC t t')
+typeOf ctx (V.Application' (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm v1))) = do
+  v0'@(V.TypedTerm _ t0) <- typeOf ctx v0
+  v1'@(V.TypedTerm _ t1) <- typeOf ctx v1
+  case t0 of
+    T.Arrow' (T.ArrowC t00 t01)
+      | t1 == t00 -> pure $ V.TypedTerm (V.Application' (V.ApplicationC v0' v1')) t01
+      | otherwise -> throwM $ Exception $ "type check: mismatch parameter: expected: " ++ show t00 ++ " actual: " ++ show t1
+    _ -> throwM $ Exception $ "type check: expected: arrow actual: " ++ show t0
