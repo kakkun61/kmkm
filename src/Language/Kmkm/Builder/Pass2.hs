@@ -6,7 +6,8 @@
 
 -- | \"Uncurry\" pass.
 module Language.Kmkm.Builder.Pass2
-  ( convert
+  ( uncurry
+  , Exception (..)
   ) where
 
 import qualified Language.Kmkm.Exception     as X
@@ -20,9 +21,10 @@ import qualified Control.Exception   as E
 import           Control.Monad.Catch (MonadThrow (throwM))
 import qualified Data.Typeable       as Y
 import           GHC.Generics        (Generic)
+import           Prelude             (Applicative (pure, (<*>)), Eq, Ord, Read, Show, sequence, ($), (.), (<$>))
 
-convert :: MonadThrow m => P2.Module -> m P3.Module
-convert = module'
+uncurry :: MonadThrow m => P2.Module -> m P3.Module
+uncurry = module'
 
 module' :: MonadThrow m => P2.Module -> m P3.Module
 module' (S.Module i ms) = S.Module i <$> sequence (member <$> ms)

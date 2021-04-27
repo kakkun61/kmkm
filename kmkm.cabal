@@ -89,7 +89,8 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test/spec
-  other-modules: Language.Kmkm.Parser.SexpSpec
+  other-modules: Language.Kmkm.Builder.Pass1Spec
+                 Language.Kmkm.Parser.SexpSpec
   build-depends: kmkm,
                  megaparsec,
                  hspec

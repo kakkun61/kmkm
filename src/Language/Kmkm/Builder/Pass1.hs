@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -5,9 +6,16 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeFamilies          #-}
 
+#if __GLASGOW_HASKELL__ >= 902
+{-# LANGUAGE NoFieldSelectors      #-}
+#else
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+#endif
+
 -- | \"Type check\" pass.
 module Language.Kmkm.Builder.Pass1
   ( typeCheck
+  , Exception (..)
   ) where
 
 import qualified Language.Kmkm.Exception     as X
@@ -18,7 +26,6 @@ import qualified Language.Kmkm.Syntax.Phase2 as P2
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
-import           Control.Exception   (assert)
 import qualified Control.Exception   as E
 import           Control.Monad.Catch (MonadThrow (throwM))
 import           Data.Map.Strict     (Map)
@@ -58,7 +65,9 @@ typeCheck' ctx =
     member (S.Bind (S.Type i t)) = pure $ S.Bind $ S.Type i t
     member (S.Bind (S.Term i (V.UntypedTerm v) t)) = do
         v'@(V.TypedTerm _ t') <- typeOf ctx v
-        assert (t == t') $ pure $ S.Bind $ S.Term i v' t'
+        if t == t'
+          then pure $ S.Bind $ S.Term i v' t'
+          else throwM $ MismatchException (show t) $ show t'
 
 typeOf :: MonadThrow m => Context -> P1.Term' -> m P2.Term
 typeOf ctx (V.Variable i) =
@@ -82,7 +91,7 @@ typeOf ctx (V.Application' (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm v1)
 
 data Exception
   = NotFoundException String
-  | MismatchException String String
+  | MismatchException { expected :: String, actual :: String}
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where

@@ -42,4 +42,4 @@ build m@(S.Module (Identifier i) _) = do
     newline = Pretty.char '\n'
 
 buildC :: MonadThrow m => Module -> m CTranslUnit
-buildC m = BC2.convert . BC1.convert <$> (B2.convert =<< B1.typeCheck m)
+buildC m = BC2.convert . BC1.convert <$> (B2.uncurry =<< B1.typeCheck m)
