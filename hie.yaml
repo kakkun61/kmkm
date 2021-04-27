@@ -4,7 +4,7 @@ cradle:
       component: "lib:kmkm"
 
     - path: "./app/main.hs"
-      component: "kmkm:exe:app"
+      component: "kmkm:exe:kmkm"
 
     - path: "./test/doctest"
       component: "kmkm:test:doctest"

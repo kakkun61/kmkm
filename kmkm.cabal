@@ -66,11 +66,16 @@ library
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
 
-executable app
+executable kmkm
   import: common
   hs-source-dirs: app
   main-is: main.hs
-  build-depends: kmkm
+  build-depends: kmkm,
+                 filepath,
+                 optparse-declarative,
+                 pretty,
+                 text,
+                 with-utf8
 
 test-suite doctest
   import: common

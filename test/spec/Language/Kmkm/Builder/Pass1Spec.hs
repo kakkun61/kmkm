@@ -7,7 +7,7 @@ import           Language.Kmkm.Syntax
 import qualified Language.Kmkm.Syntax.Type   as T
 import           Language.Kmkm.Syntax.Value
 
-import           Test.Hspec
+import Test.Hspec
 
 spec :: Spec
 spec = do

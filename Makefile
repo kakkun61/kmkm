@@ -27,6 +27,10 @@ batch: build-deps
 repl:
 	cabal v2-repl
 
+.PHONY: run
+run: build
+	cabal exec kmkm -- $(KMKM_RUN_OPTIONS)
+
 .PHONY: format
 format:
 	$(PWSH) -Command "& { Get-ChildItem -Filter '*.hs' -Recurse src, app, test | ForEach-Object { stylish-haskell -i $$_.FullName } }"
