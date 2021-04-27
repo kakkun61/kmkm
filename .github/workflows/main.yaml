@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         ghc: ['8.10']
-        test: [doctest, spec]
+        test: [doctest, spec, batch]
         continue-on-error: [false]
         include:
           - ghc: latest
