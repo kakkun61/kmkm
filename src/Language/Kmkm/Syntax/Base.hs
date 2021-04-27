@@ -11,14 +11,15 @@ import Data.String   (IsString (fromString))
 import Data.Text     (Text)
 import GHC.Generics  (Generic)
 
-newtype Identifier
-  = Identifier Text
+data Identifier
+  = UserIdentifier Text
+  | SystemIdentifier Word
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance Hashable Identifier
 
 instance IsString Identifier where
-  fromString = Identifier . fromString
+  fromString = UserIdentifier . fromString
 
 data Curriness
   = Curried

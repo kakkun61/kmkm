@@ -90,7 +90,7 @@ data Initializer
 data Expression
   = Variable Identifier
   | Literal Literal
-  | Compound QualifiedType [Initializer]
+  | CompoundLiteral QualifiedType [Initializer]
   | ArithmeticExpression ArithmeticExpression
   | Call Expression [Expression]
   deriving (Show, Read, Eq, Ord, Generic)

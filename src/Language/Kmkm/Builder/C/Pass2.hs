@@ -153,7 +153,7 @@ initializer (I.List is) =
 expression :: I.Expression -> CExpr
 expression (I.Literal l)     = CConst $ literal l
 expression (I.Variable v)    = CVar (identifier v) undefNode
-expression (I.Compound t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
+expression (I.CompoundLiteral t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
 expression (I.Call t as)     = CCall (expression t) (expression <$> as) undefNode
 expression e                 = error $ show e
 

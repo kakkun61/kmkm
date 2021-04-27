@@ -10,10 +10,11 @@ import qualified Language.Kmkm.Builder.C.Pass1 as BC1
 import qualified Language.Kmkm.Builder.C.Pass2 as BC2
 import qualified Language.Kmkm.Builder.Pass1   as B1
 import qualified Language.Kmkm.Builder.Pass2   as B2
+import qualified Language.Kmkm.Builder.Pass3   as B3
 import           Language.Kmkm.Syntax.Phase1   (Module)
 
 import qualified Language.Kmkm.Syntax      as S
-import           Language.Kmkm.Syntax.Base (Identifier (Identifier))
+import           Language.Kmkm.Syntax.Base (Identifier (UserIdentifier))
 
 import           Control.Monad.Catch (MonadThrow)
 import qualified Data.Text           as Text
@@ -22,7 +23,7 @@ import qualified Language.C.Pretty   as C
 import qualified Text.PrettyPrint    as Pretty
 
 build :: MonadThrow m => Module -> m Pretty.Doc
-build m@(S.Module (Identifier i) _) = do
+build m@(S.Module (UserIdentifier i) _) = do
   u <- buildC m
   pure $
     mconcat
@@ -42,4 +43,4 @@ build m@(S.Module (Identifier i) _) = do
     newline = Pretty.char '\n'
 
 buildC :: MonadThrow m => Module -> m CTranslUnit
-buildC m = BC2.convert . BC1.convert <$> (B2.uncurry =<< B1.typeCheck m)
+buildC m = BC2.convert . BC1.convert . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)

@@ -16,7 +16,7 @@ module Language.Kmkm.Parser.Sexp
   ) where
 
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
+import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier))
 import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
@@ -114,7 +114,7 @@ identifier =
     P.token $ do
       a <- asciiAlphabet
       b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
-      pure $ Identifier $ T.pack $ a:b
+      pure $ UserIdentifier $ T.pack $ a:b
 
 term :: Parser Term
 term =

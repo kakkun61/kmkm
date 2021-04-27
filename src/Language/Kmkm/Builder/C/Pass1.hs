@@ -8,19 +8,20 @@ module Language.Kmkm.Builder.C.Pass1
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import qualified Language.Kmkm.Syntax           as S
-import           Language.Kmkm.Syntax.Base      (Identifier (Identifier))
-import           Language.Kmkm.Syntax.Phase3    (Arrow, Bind, Function, Literal, Member, Module, Term, Type)
+import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier))
+import           Language.Kmkm.Syntax.Phase4    (Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
 
-import Control.Exception (assert)
+import           Control.Exception (assert)
+import           Data.Text         (Text)
+import qualified Data.Text         as T
 
 convert :: Module -> I.File
 convert = module'
 
 module' :: Module -> I.File
-module' (S.Module (Identifier t) ms) =
-  I.File t $ member =<< ms
+module' (S.Module i ms) = I.File (identifier' i) $ member =<< ms
 
 -- |
 -- @
@@ -42,7 +43,8 @@ member (S.Definition i cs) =
     , I.Definition . constructor (length cs) <$> cs
     ]
   where
-    tagEnumIdent (Identifier t) = I.Identifier $ t <> "_tag"
+    tagEnumIdent (UserIdentifier t)   = I.Identifier $ t <> "_tag"
+    tagEnumIdent (SystemIdentifier n) = I.Identifier $ T.pack $ '_' : show n ++ "_tag"
     tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
     tagEnum =
       case cs of
@@ -69,7 +71,7 @@ member (S.Definition i cs) =
       I.FunctionDefinition [] structType (identifier c) (parameter <$> fs) statement
       where
         parameter (i, t) = ([I.Constant], typ t, identifier i)
-        statement = I.Return $ I.Compound structType arguments
+        statement = I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
             (1, _:_) -> argument <$> fs
@@ -92,7 +94,11 @@ functionDefinition i (V.Function3 i0 t0 i1 t1 i2 t2 v) (T.Arrow3 t0' t1' t2' t) 
 functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier
-identifier (Identifier t) = I.Identifier t
+identifier = I.Identifier . identifier'
+
+identifier' :: Identifier -> Text
+identifier' (UserIdentifier t)   = t
+identifier' (SystemIdentifier n) = T.pack $ '_' : show n
 
 term :: Term -> I.Expression
 term (V.TypedTerm (V.Variable i) _)                               = I.Variable $ identifier i

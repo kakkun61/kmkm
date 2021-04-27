@@ -4,4 +4,8 @@
     (bind
       add
       (function a int (function b int (apply (apply add a) b)))
-      (function int (function int int)))))
+      (function int (function int int)))
+    (bind
+      succ
+      (apply add 1)
+      (function int int))))

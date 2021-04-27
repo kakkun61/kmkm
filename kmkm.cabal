@@ -34,6 +34,7 @@ library
                    Language.Kmkm.Builder.C.Syntax
                    Language.Kmkm.Builder.Pass1
                    Language.Kmkm.Builder.Pass2
+                   Language.Kmkm.Builder.Pass3
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
@@ -41,6 +42,7 @@ library
                    Language.Kmkm.Syntax.Phase1
                    Language.Kmkm.Syntax.Phase2
                    Language.Kmkm.Syntax.Phase3
+                   Language.Kmkm.Syntax.Phase4
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
   build-depends: containers,
@@ -48,6 +50,7 @@ library
                  megaparsec,
                  hashable,
                  language-c,
+                 mtl,
                  parsers,
                  parsers-megaparsec,
                  pretty,
