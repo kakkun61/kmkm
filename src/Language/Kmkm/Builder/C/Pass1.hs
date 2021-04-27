@@ -56,10 +56,10 @@ member (S.Definition i cs) =
           case cs of
             [(_, fs@(_:_))] -> field <$> fs
             _ ->
-              I.Field tagEnumType (I.Identifier "tag")
+              I.Field tagEnumType "tag"
                 :
                   if hasFields
-                    then [I.Field ([], I.Union $ constructor <$> cs) (I.Identifier "body")]
+                    then [I.Field ([], I.Union $ constructor <$> cs) "body"]
                     else []
         field (i, t) = I.Field (typ t) $ identifier i
         constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
@@ -119,7 +119,7 @@ literal (V.Fraction s f e b) =
 literal l = error (show l)
 
 typ :: Type -> I.QualifiedType
-typ (T.Variable (Identifier "int"))   = ([], I.Int)
-typ (T.Variable (Identifier "uint"))  = ([I.Unsigned], I.Int)
-typ (T.Variable (Identifier "frac2")) = ([], I.Double)
-typ t                                 = error $ show t
+typ (T.Variable "int")   = ([], I.Int)
+typ (T.Variable "uint")  = ([I.Unsigned], I.Int)
+typ (T.Variable "frac2") = ([], I.Double)
+typ t                    = error $ show t

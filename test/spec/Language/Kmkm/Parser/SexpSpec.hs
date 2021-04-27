@@ -4,7 +4,6 @@ module Language.Kmkm.Parser.SexpSpec where
 
 import           Language.Kmkm.Parser.Sexp
 import           Language.Kmkm.Syntax
-import           Language.Kmkm.Syntax.Base
 import qualified Language.Kmkm.Syntax.Type  as T
 import           Language.Kmkm.Syntax.Value
 
@@ -63,26 +62,26 @@ spec = do
       it "(bind foo 123 int)" $ do
         parse' (bind <* M.eof) "spec" "(bind foo 123 int)"
           `shouldReturn`
-            Term (Identifier "foo") (UntypedTerm $ Literal $ Integer 123 10) (T.Variable $ Identifier "int")
+            Term "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int")
 
     describe "definition" $ do
       it "(define bool (false true))" $ do
         parse' (definition <* M.eof) "spec" "(define bool (list false true))"
           `shouldReturn`
-            Definition (Identifier "bool") [(Identifier "false", []), (Identifier "true", [])]
+            Definition "bool" [("false", []), ("true", [])]
 
       it "(define book (list book (list (title string) (author string))))" $ do
         parse' (definition <* M.eof) "spec" "(define book (list (book (list (title string) (author string)))))"
           `shouldReturn`
-            Definition (Identifier "book") [(Identifier "book", [(Identifier "title", T.Variable $ Identifier "string"), (Identifier "author", T.Variable $ Identifier "string")])]
+            Definition "book" [("book", [("title", T.Variable "string"), ("author", T.Variable "string")])]
 
     describe "module" $ do
       it "(module math (list (bind foo 123 int)" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (bind foo 123 int)))"
           `shouldReturn`
-            Module (Identifier "math") [Bind $ Term (Identifier "foo") (UntypedTerm $ Literal $ Integer 123 10) (T.Variable $ Identifier "int")]
+            Module "math" [Bind $ Term "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int")]
 
       it "(module math (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"
           `shouldReturn`
-            Module (Identifier "math") [Definition (Identifier "bool") [(Identifier "false", []), (Identifier "true", [])]]
+            Module "math" [Definition "bool" [("false", []), ("true", [])]]

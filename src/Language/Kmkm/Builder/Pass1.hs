@@ -20,7 +20,7 @@ module Language.Kmkm.Builder.Pass1
 
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (Identifier))
+import           Language.Kmkm.Syntax.Base   (Identifier)
 import qualified Language.Kmkm.Syntax.Phase1 as P1
 import qualified Language.Kmkm.Syntax.Phase2 as P2
 import qualified Language.Kmkm.Syntax.Type   as T
@@ -74,9 +74,9 @@ typeOf ctx (V.Variable i) =
   case M.lookup i ctx of
     Nothing -> throwM $ NotFoundException $ show i
     Just t  -> pure $ V.TypedTerm (V.Variable i) t
-typeOf _ (V.Literal (V.Integer v b)) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable $ Identifier "int")
-typeOf _ (V.Literal (V.Fraction s d e b)) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable $ Identifier "frac2")
-typeOf _ (V.Literal (V.String t)) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable $ Identifier "string")
+typeOf _ (V.Literal (V.Integer v b)) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
+typeOf _ (V.Literal (V.Fraction s d e b)) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
+typeOf _ (V.Literal (V.String t)) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
 typeOf ctx (V.Literal (V.Function' (V.FunctionC i t (V.UntypedTerm v)))) = do
   v'@(V.TypedTerm _ t') <- typeOf (M.insert i t ctx) v
   pure $ V.TypedTerm (V.Literal (V.Function' (V.FunctionC i t v'))) (T.Arrow' $ T.ArrowC t t')

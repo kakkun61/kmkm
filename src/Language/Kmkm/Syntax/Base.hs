@@ -7,6 +7,7 @@ module Language.Kmkm.Syntax.Base
   ) where
 
 import Data.Hashable (Hashable)
+import Data.String   (IsString (fromString))
 import Data.Text     (Text)
 import GHC.Generics  (Generic)
 
@@ -15,6 +16,9 @@ newtype Identifier
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance Hashable Identifier
+
+instance IsString Identifier where
+  fromString = Identifier . fromString
 
 data Curriness
   = Curried

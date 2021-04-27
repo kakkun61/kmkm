@@ -4,9 +4,9 @@ module Language.Kmkm.Builder.Pass1Spec where
 
 import           Language.Kmkm.Builder.Pass1
 import           Language.Kmkm.Syntax
-import           Language.Kmkm.Syntax.Base
 import qualified Language.Kmkm.Syntax.Type   as T
 import           Language.Kmkm.Syntax.Value
+
 import           Test.Hspec
 
 spec :: Spec
@@ -15,14 +15,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck (Module (Identifier "") [Bind $ Term (Identifier "ten") (UntypedTerm $ Literal $ Integer 10 10) (T.Variable $ Identifier "int")])
+          typeCheck (Module "" [Bind $ Term "ten" (UntypedTerm $ Literal $ Integer 10 10) (T.Variable "int")])
             `shouldReturn`
-              Module (Identifier "") [Bind $ Term (Identifier "ten") (TypedTerm (Literal $ Integer 10 10) (T.Variable $ Identifier "int")) (T.Variable $ Identifier "int")]
+              Module "" [Bind $ Term "ten" (TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) (T.Variable "int")]
 
         it "0x10" $ do
-          typeCheck (Module (Identifier "") [Bind $ Term (Identifier "sixteen") (UntypedTerm $ Literal $ Integer 16 16) (T.Variable $ Identifier "int")])
+          typeCheck (Module "" [Bind $ Term "sixteen" (UntypedTerm $ Literal $ Integer 16 16) (T.Variable "int")])
             `shouldReturn`
-              Module (Identifier "") [Bind $ Term (Identifier "sixteen") (TypedTerm (Literal $ Integer 16 16) (T.Variable $ Identifier "int")) (T.Variable $ Identifier "int")]
+              Module "" [Bind $ Term "sixteen" (TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) (T.Variable "int")]
 
     describe "application" $ do
       describe "succ" $ do
@@ -30,49 +30,49 @@ spec = do
           let
             source =
               Module
-                (Identifier "")
+                ""
                 [ Bind $
                     Term
-                      (Identifier "succ")
+                      "succ"
                       ( UntypedTerm $
                           Literal $
                             Function' $
                               FunctionC
-                                (Identifier "a")
-                                (T.Variable $ Identifier "int")
+                                "a"
+                                (T.Variable "int")
                                 ( UntypedTerm $
                                     Application' $
                                       ApplicationC
-                                        (UntypedTerm $ Variable (Identifier "succ"))
-                                        (UntypedTerm $ Variable (Identifier "a"))
+                                        (UntypedTerm $ Variable "succ")
+                                        (UntypedTerm $ Variable "a")
                                 )
                       )
-                      (T.Arrow' $ T.ArrowC (T.Variable $ Identifier "int") (T.Variable $ Identifier "int"))
+                      (T.Arrow' $ T.ArrowC (T.Variable "int") (T.Variable "int"))
                 ]
             result =
               Module
-                (Identifier "")
+                ""
                 [ Bind $
                     Term
-                      (Identifier "succ")
+                      "succ"
                       ( TypedTerm
                           ( Literal $
                               Function' $
                                 FunctionC
-                                  (Identifier "a")
-                                  (T.Variable $ Identifier "int")
+                                  "a"
+                                  (T.Variable "int")
                                   ( TypedTerm
                                       (Application' $
                                         ApplicationC
-                                          (TypedTerm (Variable $ Identifier "succ") (T.Arrow' $ T.ArrowC (T.Variable $ Identifier "int") (T.Variable $ Identifier "int")))
-                                          (TypedTerm (Variable $ Identifier "a") (T.Variable $ Identifier "int"))
+                                          (TypedTerm (Variable "succ") (T.Arrow' $ T.ArrowC (T.Variable "int") (T.Variable "int")))
+                                          (TypedTerm (Variable "a") (T.Variable "int"))
                                       )
-                                      (T.Variable $ Identifier "int")
+                                      (T.Variable "int")
                                   )
                           )
-                          (T.Arrow' $ T.ArrowC (T.Variable $ Identifier "int") (T.Variable $ Identifier "int"))
+                          (T.Arrow' $ T.ArrowC (T.Variable "int") (T.Variable "int"))
                       )
-                      (T.Arrow' $ T.ArrowC (T.Variable $ Identifier "int") (T.Variable $ Identifier "int"))
+                      (T.Arrow' $ T.ArrowC (T.Variable "int") (T.Variable "int"))
                 ]
           typeCheck source `shouldReturn` result
 
@@ -80,18 +80,18 @@ spec = do
           let
             source =
               Module
-                (Identifier "")
+                ""
                 [ Bind $
                     Term
-                      (Identifier "succ")
+                      "succ"
                       (UntypedTerm $
                         Literal $
                           Function' $
                             FunctionC
-                              (Identifier "a")
-                              (T.Variable $ Identifier "int")
-                              (UntypedTerm $ Variable (Identifier "succ"))
+                              "a"
+                              (T.Variable "int")
+                              (UntypedTerm $ Variable "succ")
                       )
-                      (T.Arrow' $ T.ArrowC (T.Variable $ Identifier "int") (T.Variable $ Identifier "int"))
+                      (T.Arrow' $ T.ArrowC (T.Variable "int") (T.Variable "int"))
                 ]
           typeCheck source `shouldThrow` \MismatchException {} -> True
