@@ -5,13 +5,13 @@ enum myBool_tag {
 struct myBool {
   enum myBool_tag tag;
 };
-const struct myBool myFalse = { myFalse_tag };
-const struct myBool myTrue = { myTrue_tag };
+struct myBool const myFalse = { myFalse_tag };
+struct myBool const myTrue = { myTrue_tag };
 struct fraction {
   int numerator;
   int denominator;
 };
-struct fraction fraction(const int numerator, const int denominator) {
+struct fraction fraction(int const numerator, int const denominator) {
   return (struct fraction) { numerator, denominator };
 }
 enum passenger_tag {
@@ -29,10 +29,10 @@ struct passenger {
     } pet;
   } body;
 };
-struct passenger person(const unsigned int class) {
+struct passenger person(unsigned int const class) {
   return (struct passenger) { person_tag, class };
 }
-struct passenger pet(const unsigned int species) {
+struct passenger pet(unsigned int const species) {
   return (struct passenger) { pet_tag, species };
 }
 enum unit_tag {
@@ -41,4 +41,4 @@ enum unit_tag {
 struct unit {
   enum unit_tag tag;
 };
-const struct unit unit = { unit_tag };
+struct unit const unit = { unit_tag };

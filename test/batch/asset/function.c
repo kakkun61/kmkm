@@ -1,8 +1,8 @@
-int add(const int a, const int b)
+int add(int const a, int const b)
 {
   return add(a, b);
 }
-int succ(const int _0)
+int succ(int const _0)
 {
   return add(1, _0);
 }

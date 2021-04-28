@@ -49,10 +49,10 @@ member (S.Definition i cs) =
     tagEnum =
       case cs of
         [(_, _:_)] -> []
-        _ -> [I.Declaration $ I.ValueDeclaration [] ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) Nothing]
+        _ -> [I.Declaration $ I.ValueDeclaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing]
     structType = ([], I.Structure $ identifier i)
     structure =
-      I.Declaration $ I.ValueDeclaration [] ([], I.StructureLiteral (Just $ identifier i) fields) Nothing
+      I.Declaration $ I.ValueDeclaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing
       where
         fields =
           case cs of
@@ -66,11 +66,11 @@ member (S.Definition i cs) =
         field (i, t) = I.Field (typ t) $ identifier i
         constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
-    constructor _ (c, []) = I.ValueDefinition [I.Constant] structType (identifier c) $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
+    constructor _ (c, []) = I.ValueDefinition structType [I.Constant] (identifier c) $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
-      I.FunctionDefinition [] structType (identifier c) (parameter <$> fs) statement
+      I.FunctionDefinition structType [] (identifier c) (parameter <$> fs) statement
       where
-        parameter (i, t) = ([I.Constant], typ t, identifier i)
+        parameter (i, t) = (typ t, [I.Constant], identifier i)
         statement = I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
@@ -81,16 +81,16 @@ member (S.Bind a) = [bind a]
 
 bind :: Bind -> I.Element
 bind (S.Term i (V.TypedTerm (V.Literal (V.Function' f)) (T.Arrow' a)) (T.Arrow' a')) = assert (a == a') $ I.Definition $ functionDefinition i f a
-bind (S.Term i v t) = I.Definition $ I.ValueDefinition [] (typ t) (identifier i) $ I.Expression $ term v
+bind (S.Term i v t) = I.Definition $ I.ValueDefinition (typ t) [] (identifier i) $ I.Expression $ term v
 bind a            = error $ show a
 
 functionDefinition :: Identifier -> Function -> Arrow -> I.Definition
 functionDefinition i (V.Function1 i0 t0 v) (T.Arrow1 t0' t) =
-  assert (t0 == t0') $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0)] $ I.Return $ term v
+  assert (t0 == t0') $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0)] $ I.Return $ term v
 functionDefinition i (V.Function2 i0 t0 i1 t1 v) (T.Arrow2 t0' t1' t) =
-  assert ((t0, t1) == (t0', t1')) $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1)] $ I.Return $ term v
+  assert ((t0, t1) == (t0', t1')) $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0), (typ t1, [I.Constant], identifier i1)] $ I.Return $ term v
 functionDefinition i (V.Function3 i0 t0 i1 t1 i2 t2 v) (T.Arrow3 t0' t1' t2' t) =
-  assert ((t0, t1, t2) == (t0', t1', t2')) $ I.FunctionDefinition [] (typ t) (identifier i) [([I.Constant], typ t0, identifier i0), ([I.Constant], typ t1, identifier i1), ([I.Constant], typ t2, identifier i2)] $ I.Return $ term v
+  assert ((t0, t1, t2) == (t0', t1', t2')) $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0), (typ t1, [I.Constant], identifier i1), (typ t2, [I.Constant], identifier i2)] $ I.Return $ term v
 functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier

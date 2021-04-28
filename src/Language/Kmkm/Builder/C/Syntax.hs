@@ -37,13 +37,13 @@ data Element
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Declaration
-  = ValueDeclaration [VariableQualifier] QualifiedType (Maybe Identifier)
-  | FunctionDeclaration [VariableQualifier] QualifiedType Identifier [([VariableQualifier], QualifiedType, Identifier)]
+  = ValueDeclaration QualifiedType [VariableQualifier] (Maybe Identifier)
+  | FunctionDeclaration QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Definition
-  = ValueDefinition [VariableQualifier] QualifiedType Identifier Initializer
-  | FunctionDefinition [VariableQualifier] QualifiedType Identifier [([VariableQualifier], QualifiedType, Identifier)] Statement
+  = ValueDefinition QualifiedType [VariableQualifier] Identifier Initializer
+  | FunctionDefinition QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)] Statement
   deriving (Show, Read, Eq, Ord, Generic)
 
 data VariableQualifier

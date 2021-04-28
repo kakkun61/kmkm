@@ -35,34 +35,34 @@ file :: I.File -> CTranslUnit
 file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
 
 element :: I.Element -> CExtDecl
-element (I.Declaration (I.ValueDeclaration qs t i))       = CDeclExt $ valueDeclaration qs t i Nothing
-element (I.Declaration (I.FunctionDeclaration qs t i ps)) = undefined qs t i ps
-element (I.Definition (I.ValueDefinition qs t i l))       = CDeclExt $ valueDeclaration qs t (Just i) (Just l)
-element (I.Definition (I.FunctionDefinition qs t i ps s)) = CFDefExt $ functionDefinition qs t i ps s
+element (I.Declaration (I.ValueDeclaration t qs i))       = CDeclExt $ valueDeclaration t qs i Nothing
+element (I.Declaration (I.FunctionDeclaration t qs i ps)) = undefined qs t i ps
+element (I.Definition (I.ValueDefinition t qs i l))       = CDeclExt $ valueDeclaration t qs (Just i) (Just l)
+element (I.Definition (I.FunctionDefinition t qs i ps s)) = CFDefExt $ functionDefinition t qs i ps s
 element (I.TypeDefinition t i)                            = CDeclExt $ typeDefinition t i
 
-valueDeclaration :: [I.VariableQualifier] -> I.QualifiedType -> Maybe I.Identifier -> Maybe I.Initializer -> CDecl
-valueDeclaration qs t i l =
+valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> Maybe I.Initializer -> CDecl
+valueDeclaration t qs i l =
   CDecl
-    ((CTypeQual . variableQualifier <$> qs) ++ (CTypeSpec <$> qualifiedType t))
+    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
     [ ( Just $ CDeclr (identifier <$> i) [] Nothing [] undefNode
       , initializer <$> l
       , Nothing
       )
     ] undefNode
 
-functionDefinition :: [I.VariableQualifier] -> I.QualifiedType -> I.Identifier -> [([I.VariableQualifier], I.QualifiedType, I.Identifier)] -> I.Statement -> CFunDef
-functionDefinition qs t i ps s =
+functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [(I.QualifiedType, [I.VariableQualifier], I.Identifier)] -> I.Statement -> CFunDef
+functionDefinition t qs i ps s =
   CFunDef
-    ((CTypeQual . variableQualifier <$> qs) ++ (CTypeSpec <$> qualifiedType t))
+    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
     (CDeclr (Just $ identifier i) [CFunDeclr (Right (parameter <$> ps, False)) [] undefNode] Nothing [] undefNode)
     []
     (statement s)
     undefNode
     where
-      parameter (qs, t, i) =
+      parameter (t, qs, i) =
         CDecl
-          ((CTypeQual . variableQualifier <$> qs) ++ (CTypeSpec <$> qualifiedType t))
+          ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
           [(Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode, Nothing, Nothing)]
           undefNode
 
