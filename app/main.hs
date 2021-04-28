@@ -23,6 +23,6 @@ main' dest src =
     srcTree <- parse (O.get src) srcText
     doc <- build srcTree
     let destText = P.render doc
-    case L.splitAt (length (O.get src) - 4) (O.get src) of
-      (path, "s.km") -> writeFile (O.get dest </> path ++ ".c") destText
+    case L.splitAt (length (O.get src) - 5) (O.get src) of
+      (path, ".s.km") -> writeFile (O.get dest </> path ++ ".c") destText
       _              -> fail "extension is not \"s.km\""
