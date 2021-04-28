@@ -10,14 +10,14 @@ module Language.Kmkm.Syntax
   , Bind (..)
   ) where
 
-import Language.Kmkm.Syntax.Base  (Identifier)
+import Language.Kmkm.Syntax.Base  (Identifier, ModuleName)
 import Language.Kmkm.Syntax.Type  (Type)
 import Language.Kmkm.Syntax.Value (Application, Function, Term)
 
 import GHC.Generics (Generic)
 
 data Module c t =
-  Module Identifier [Member c t]
+  Module ModuleName [Member c t]
   deriving Generic
 
 deriving instance Show (Member c t) => Show (Module c t)

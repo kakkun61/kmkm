@@ -8,7 +8,7 @@ module Language.Kmkm.Builder.C.Pass1
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import qualified Language.Kmkm.Syntax           as S
-import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier))
+import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase4    (Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
@@ -21,7 +21,7 @@ convert :: Module -> I.File
 convert = module'
 
 module' :: Module -> I.File
-module' (S.Module i ms) = I.File (identifier' i) $ member =<< ms
+module' (S.Module n ms) = I.File (moduleName n) $ member =<< ms
 
 -- |
 -- @
@@ -94,11 +94,11 @@ functionDefinition i (V.Function3 i0 t0 i1 t1 i2 t2 v) (T.Arrow3 t0' t1' t2' t) 
 functionDefinition i f a = error $ show (i, f, a)
 
 identifier :: Identifier -> I.Identifier
-identifier = I.Identifier . identifier'
+identifier (UserIdentifier t)   = I.Identifier t
+identifier (SystemIdentifier n) = I.Identifier $ T.pack $ '_' : show n
 
-identifier' :: Identifier -> Text
-identifier' (UserIdentifier t)   = t
-identifier' (SystemIdentifier n) = T.pack $ '_' : show n
+moduleName :: ModuleName -> Text
+moduleName (ModuleName n) = n
 
 term :: Term -> I.Expression
 term (V.TypedTerm (V.Variable i) _)                               = I.Variable $ identifier i

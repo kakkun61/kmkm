@@ -16,7 +16,7 @@ module Language.Kmkm.Parser.Sexp
   ) where
 
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier))
+import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
@@ -55,8 +55,8 @@ module' =
   (<?> "module") $
     P.parens $ do
       void $ P.textSymbol "module"
-      i <- identifier
-      S.Module i <$> list member
+      n <- moduleName
+      S.Module n <$> list member
 
 list :: Parser a -> Parser [a]
 list p =
@@ -115,6 +115,14 @@ identifier =
       a <- asciiAlphabet
       b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
       pure $ UserIdentifier $ T.pack $ a:b
+
+moduleName :: Parser ModuleName
+moduleName =
+  (<?> "moduleName") $
+    P.token $ do
+      a <- asciiAlphabet
+      b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
+      pure $ ModuleName $ T.pack $ a:b
 
 term :: Parser Term
 term =

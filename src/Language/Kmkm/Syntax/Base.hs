@@ -1,7 +1,9 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Language.Kmkm.Syntax.Base
   ( Identifier (..)
+  , ModuleName (..)
   , Curriness (..)
   , Typing (..)
   ) where
@@ -20,6 +22,8 @@ instance Hashable Identifier
 
 instance IsString Identifier where
   fromString = UserIdentifier . fromString
+
+newtype ModuleName = ModuleName Text deriving (Show, Read, Eq, Ord, Generic, IsString)
 
 data Curriness
   = Curried
