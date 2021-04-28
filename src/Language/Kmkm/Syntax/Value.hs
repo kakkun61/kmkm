@@ -30,7 +30,7 @@ import           Data.Text    (Text)
 import           GHC.Generics (Generic)
 
 type Term :: Curriness -> Typing -> K.Type
-data family Term c t
+data family Term
 
 data instance Term c 'Typed =
   TypedTerm (Term' c 'Typed) (Type c)
@@ -85,7 +85,7 @@ deriving instance Eq (Function c t) => Eq (Literal c t)
 deriving instance Ord (Function c t) => Ord (Literal c t)
 
 type Application :: Curriness -> Typing -> K.Type
-data family Application c t
+data family Application
 
 data instance Application 'Curried t =
   ApplicationC (Term 'Curried t) (Term 'Curried t)
@@ -108,7 +108,7 @@ deriving instance Eq (Term 'Uncurried t) => Eq (Application 'Uncurried t)
 deriving instance (Eq (Term 'Uncurried t), Ord (Term 'Uncurried t)) => Ord (Application 'Uncurried t)
 
 type Function :: Curriness -> Typing -> K.Type
-data family Function c
+data family Function
 
 data instance Function 'Curried t =
   FunctionC Identifier (Type 'Curried) (Term 'Curried t)
