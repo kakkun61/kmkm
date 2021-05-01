@@ -4,8 +4,9 @@
 module Language.Kmkm.Syntax.Base
   ( Identifier (..)
   , ModuleName (..)
-  , Curriness (..)
+  , Currying (..)
   , Typing (..)
+  , LambdaLifting (..)
   ) where
 
 import Data.Hashable (Hashable)
@@ -15,7 +16,7 @@ import GHC.Generics  (Generic)
 
 data Identifier
   = UserIdentifier Text
-  | SystemIdentifier Word
+  | SystemIdentifier Char Word
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance Hashable Identifier
@@ -25,7 +26,7 @@ instance IsString Identifier where
 
 newtype ModuleName = ModuleName Text deriving (Show, Read, Eq, Ord, Generic, IsString)
 
-data Curriness
+data Currying
   = Curried
   | Uncurried
   deriving (Show, Read, Eq, Ord, Generic)
@@ -33,4 +34,9 @@ data Curriness
 data Typing
  = Typed
  | Untyped
+  deriving (Show, Read, Eq, Ord, Generic)
+
+data LambdaLifting
+  = LambdaLifted
+  | LambdaUnlifted
   deriving (Show, Read, Eq, Ord, Generic)

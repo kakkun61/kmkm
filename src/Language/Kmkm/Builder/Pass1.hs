@@ -52,9 +52,9 @@ globalContext =
         constructor (c, fs) =
           (M.insert c (foldr field (T.Variable i) fs) <$>)
           where
-            field (_, t) t' = T.Arrow' $ T.ArrowC t t'
-    member (S.Bind S.Type {}) = id
-    member (S.Bind (S.Term i _ t)) = (M.insert i t <$>)
+            field (_, t) t' = T.Arrow $ T.ArrowC t t'
+    member (S.Bind S.TypeBind {}) = id
+    member (S.Bind (S.TermBind (S.TermBindUU i _ t))) = (M.insert i t <$>)
 
 typeCheck' :: MonadThrow m => Context -> [P1.Member] -> m [P2.Member]
 typeCheck' ctx =
@@ -62,11 +62,11 @@ typeCheck' ctx =
   where
     member :: MonadThrow m => P1.Member -> m P2.Member
     member (S.Definition i cs) = pure $ S.Definition i cs
-    member (S.Bind (S.Type i t)) = pure $ S.Bind $ S.Type i t
-    member (S.Bind (S.Term i (V.UntypedTerm v) t)) = do
+    member (S.Bind (S.TypeBind i t)) = pure $ S.Bind $ S.TypeBind i t
+    member (S.Bind (S.TermBind (S.TermBindUU i (V.UntypedTerm v) t))) = do
         v'@(V.TypedTerm _ t') <- typeOf ctx v
         if t == t'
-          then pure $ S.Bind $ S.Term i v' t'
+          then pure $ S.Bind $ S.TermBind $ S.TermBindUT i v'
           else throwM $ MismatchException (show t) $ show t'
 
 typeOf :: MonadThrow m => Context -> P1.Term' -> m P2.Term
@@ -77,15 +77,15 @@ typeOf ctx (V.Variable i) =
 typeOf _ (V.Literal (V.Integer v b)) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
 typeOf _ (V.Literal (V.Fraction s d e b)) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
 typeOf _ (V.Literal (V.String t)) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
-typeOf ctx (V.Literal (V.Function' (V.FunctionC i t (V.UntypedTerm v)))) = do
+typeOf ctx (V.Literal (V.Function (V.FunctionC i t (V.UntypedTerm v)))) = do
   v'@(V.TypedTerm _ t') <- typeOf (M.insert i t ctx) v
-  pure $ V.TypedTerm (V.Literal (V.Function' (V.FunctionC i t v'))) (T.Arrow' $ T.ArrowC t t')
-typeOf ctx (V.Application' (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm v1))) = do
+  pure $ V.TypedTerm (V.Literal (V.Function (V.FunctionC i t v'))) (T.Arrow $ T.ArrowC t t')
+typeOf ctx (V.Application (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm v1))) = do
   v0'@(V.TypedTerm _ t0) <- typeOf ctx v0
   v1'@(V.TypedTerm _ t1) <- typeOf ctx v1
   case t0 of
-    T.Arrow' (T.ArrowC t00 t01)
-      | t1 == t00 -> pure $ V.TypedTerm (V.Application' (V.ApplicationC v0' v1')) t01
+    T.Arrow (T.ArrowC t00 t01)
+      | t1 == t00 -> pure $ V.TypedTerm (V.Application (V.ApplicationC v0' v1')) t01
       | otherwise -> throwM $ MismatchException (show t00) $ show t1
     _ -> throwM $ MismatchException "arrow" $ show t0
 

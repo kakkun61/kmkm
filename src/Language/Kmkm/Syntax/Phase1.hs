@@ -4,6 +4,7 @@ module Language.Kmkm.Syntax.Phase1
   ( Module
   , Member
   , Bind
+  , TermBind
   , Type
   , Term
   , Term'
@@ -14,26 +15,28 @@ module Language.Kmkm.Syntax.Phase1
   ) where
 
 import qualified Language.Kmkm.Syntax       as S
-import           Language.Kmkm.Syntax.Base  (Curriness (Curried), Typing (Untyped))
+import           Language.Kmkm.Syntax.Base  (Currying (Curried), LambdaLifting (LambdaUnlifted), Typing (Untyped))
 import qualified Language.Kmkm.Syntax.Type  as T
 import qualified Language.Kmkm.Syntax.Value as V
 
-type Module = S.Module 'Curried 'Untyped
+type Module = S.Module 'Curried 'LambdaUnlifted 'Untyped
 
-type Member = S.Member 'Curried 'Untyped
+type Member = S.Member 'Curried 'LambdaUnlifted 'Untyped
 
-type Bind = S.Bind 'Curried 'Untyped
+type Bind = S.Bind 'Curried 'LambdaUnlifted 'Untyped
+
+type TermBind = S.TermBind 'Curried 'LambdaUnlifted 'Untyped
 
 type Type = T.Type 'Curried
 
-type Term = V.Term 'Curried 'Untyped
+type Term = V.Term 'Curried 'LambdaUnlifted 'Untyped
 
-type Term' = V.Term' 'Curried 'Untyped
+type Term' = V.Term' 'Curried 'LambdaUnlifted 'Untyped
 
-type Literal = V.Literal 'Curried 'Untyped
+type Literal = V.Literal 'Curried 'LambdaUnlifted 'Untyped
 
-type Function = V.Function 'Curried 'Untyped
+type Function = V.Function 'Curried 'LambdaUnlifted 'Untyped
 
-type Application = V.Application 'Curried 'Untyped
+type Application = V.Application 'Curried 'LambdaUnlifted 'Untyped
 
 type Arrow = T.Arrow 'Curried

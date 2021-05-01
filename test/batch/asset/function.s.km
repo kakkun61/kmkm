@@ -8,4 +8,8 @@
     (bind
       succ
       (apply add 1)
-      (function int int))))
+      (function int int))
+    (bind
+      closure1
+      (apply (function a int a) 0)
+      int)))

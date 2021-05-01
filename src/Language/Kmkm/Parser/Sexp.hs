@@ -17,7 +17,8 @@ module Language.Kmkm.Parser.Sexp
 
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term, Type)
+import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term,
+                                              TermBind, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -104,9 +105,12 @@ bind =
       void $ P.textSymbol "bind"
       i <- identifier
       P.choice
-        [ S.Term i <$> term <*> typ
-        , S.Type i <$> undefined
+        [ S.TermBind <$> termBind i
+        , S.TypeBind i <$> undefined
         ]
+
+termBind :: Identifier -> Parser TermBind
+termBind i = (S.TermBindUU i <$> term <*> typ) <?> "termBind"
 
 identifier :: Parser Identifier
 identifier =
@@ -131,7 +135,7 @@ term =
       P.choice
         [ V.Variable <$> identifier
         , P.try $ V.Literal <$> literal
-        , V.Application' <$> application
+        , V.Application <$> application
         ]
 
 literal :: Parser Literal
@@ -141,7 +145,7 @@ literal =
       [ P.try fraction
       , integer
       , V.String <$> string
-      , V.Function' <$> function
+      , V.Function <$> function
       ]
 
 application :: Parser Application
@@ -238,7 +242,7 @@ typ =
   "type" <!> do
     P.choice
       [ T.Variable <$> identifier
-      , T.Arrow' <$> arrow
+      , T.Arrow <$> arrow
       , uncurry T.Application <$> typeApplication
       ]
 

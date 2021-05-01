@@ -35,6 +35,7 @@ library
                    Language.Kmkm.Builder.Pass1
                    Language.Kmkm.Builder.Pass2
                    Language.Kmkm.Builder.Pass3
+                   Language.Kmkm.Builder.Pass4
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
@@ -43,6 +44,7 @@ library
                    Language.Kmkm.Syntax.Phase2
                    Language.Kmkm.Syntax.Phase3
                    Language.Kmkm.Syntax.Phase4
+                   Language.Kmkm.Syntax.Phase5
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
   build-depends: containers,

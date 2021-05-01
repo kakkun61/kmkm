@@ -62,7 +62,7 @@ spec = do
       it "(bind foo 123 int)" $ do
         parse' (bind <* M.eof) "spec" "(bind foo 123 int)"
           `shouldReturn`
-            Term "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int")
+            TermBind (TermBindUU "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int"))
 
     describe "definition" $ do
       it "(define bool (false true))" $ do
@@ -79,7 +79,7 @@ spec = do
       it "(module math (list (bind foo 123 int)" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (bind foo 123 int)))"
           `shouldReturn`
-            Module "math" [Bind $ Term "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int")]
+            Module "math" [Bind $ TermBind $ TermBindUU "foo" (UntypedTerm $ Literal $ Integer 123 10) (T.Variable "int")]
 
       it "(module math (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"
