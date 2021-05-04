@@ -11,14 +11,14 @@ import           Data.Hashable         (Hashable (hash))
 import qualified Data.List             as L
 import           Data.Text             (Text)
 import qualified Data.Text             as T
-import           Language.C            (CCompoundBlockItem (CBlockStmt), CConst, CConstant (CFloatConst, CIntConst),
-                                        CDecl, CDeclaration (CDecl),
+import           Language.C            (CBlockItem, CCompoundBlockItem (CBlockDecl, CBlockStmt, CNestedFunDef), CConst,
+                                        CConstant (CFloatConst, CIntConst), CDecl, CDeclaration (CDecl),
                                         CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
                                         CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr), CEnumeration (CEnum),
                                         CExpr, CExpression (CCall, CCompoundLit, CConst, CVar), CExtDecl,
                                         CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
                                         CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
-                                        CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger), CStat,
+                                        CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger),
                                         CStatement (CCompound, CReturn), CStorageSpecifier (CTypedef),
                                         CStructTag (CStructTag, CUnionTag), CStructureUnion (CStruct), CTranslUnit,
                                         CTranslationUnit (CTranslUnit), CTypeQual, CTypeQualifier (CConstQual),
@@ -51,13 +51,13 @@ valueDeclaration t qs i l =
       )
     ] undefNode
 
-functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [(I.QualifiedType, [I.VariableQualifier], I.Identifier)] -> I.Statement -> CFunDef
-functionDefinition t qs i ps s =
+functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [(I.QualifiedType, [I.VariableQualifier], I.Identifier)] -> [I.Statement] -> CFunDef
+functionDefinition t qs i ps ss =
   CFunDef
     ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
     (CDeclr (Just $ identifier i) [CFunDeclr (Right (parameter <$> ps, False)) [] undefNode] Nothing [] undefNode)
     []
-    (statement s)
+    (CCompound [] (statement <$> ss) undefNode)
     undefNode
     where
       parameter (t, qs, i) =
@@ -179,6 +179,9 @@ literal (I.Fraction s f e b) =
     estr = show e
 literal l                = error $ show l
 
-statement :: I.Statement -> CStat
-statement (I.Return e) = CCompound [] [CBlockStmt $ CReturn (Just $ expression e) undefNode] undefNode
-statement s            = error $ show s
+statement :: I.Statement -> CBlockItem
+statement (I.Return e) = CBlockStmt $ CReturn (Just $ expression e) undefNode
+statement (I.Block ss) = CBlockStmt $ CCompound [] (statement <$> ss) undefNode
+statement (I.DefinitionStatement (I.ValueDefinition t qs i l)) = CBlockDecl $ valueDeclaration t qs (Just i) (Just l)
+statement (I.DefinitionStatement (I.FunctionDefinition t qs i ps s)) = CNestedFunDef $ functionDefinition t qs i ps s
+statement s = error $ show s

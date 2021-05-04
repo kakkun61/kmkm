@@ -105,7 +105,7 @@ bind =
       void $ P.textSymbol "bind"
       i <- identifier
       P.choice
-        [ S.TermBind <$> termBind i
+        [ S.TermBind <$> termBind i <*> list member
         , S.TypeBind i <$> undefined
         ]
 

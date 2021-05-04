@@ -43,7 +43,7 @@ data Declaration
 
 data Definition
   = ValueDefinition QualifiedType [VariableQualifier] Identifier Initializer
-  | FunctionDefinition QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)] Statement
+  | FunctionDefinition QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)] [Statement]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data VariableQualifier
@@ -118,6 +118,10 @@ data Statement
   | Return Expression
   | If Expression Statement (Maybe Statement)
   | Case Expression [Branch]
+  | DeclarationStatement Declaration
+  | DefinitionStatement Definition
+  | TypeDefinitionStatement QualifiedType Identifier -- ^ GCC extension.
+  | Block [Statement]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Branch =

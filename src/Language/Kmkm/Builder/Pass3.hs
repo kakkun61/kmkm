@@ -27,9 +27,10 @@ member (S.Bind b)        = S.Bind <$> bind b
 
 bind :: P3.Bind -> Pass P4.Bind
 bind t@S.TypeBind {} = pure t
-bind (S.TermBind (S.TermBindUT i v)) = do
+bind (S.TermBind (S.TermBindUT i v) ms) = do
   v' <- term v
-  pure $ S.TermBind (S.TermBindUT i v')
+  ms' <- sequence $ member <$> ms
+  pure $ S.TermBind (S.TermBindUT i v') ms'
 
 term :: P3.Term -> Pass P4.Term
 term v@(V.TypedTerm V.Variable {} _) = pure v

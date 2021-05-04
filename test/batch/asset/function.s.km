@@ -4,12 +4,20 @@
     (bind
       add
       (function a int (function b int (apply (apply add a) b)))
-      (function int (function int int)))
+      (function int (function int int))
+      (list))
     (bind
       succ
       (apply add 1)
-      (function int int))
+      (function int int)
+      (list))
     (bind
       closure1
       (apply (function a int a) 0)
-      int)))
+      int
+      (list))
+    (bind
+      closure2
+      (function a int (apply (function b int a) 0))
+      (function int int)
+      (list))))

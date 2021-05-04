@@ -43,7 +43,7 @@ deriving instance (Ord (Type c), Ord (Bind c l t)) => Ord (Member c l t)
 
 data Bind c l t
   = TypeBind Identifier (Type c)
-  | TermBind (TermBind c l t)
+  | TermBind (TermBind c l t) [Member c l t]
   deriving Generic
 
 deriving instance (Show (Term c l t), Show (Type c), Show (TermBind c l t)) => Show (Bind c l t)

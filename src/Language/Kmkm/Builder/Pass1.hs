@@ -37,12 +37,12 @@ type Context = Map Identifier P1.Type
 
 typeCheck :: MonadThrow m => P1.Module -> m P2.Module
 typeCheck (S.Module i ms) = do
-  ctx <- globalContext ms
+  ctx <- context ms
   ms' <- typeCheck' ctx ms
   pure $ S.Module i ms'
 
-globalContext :: MonadThrow m => [P1.Member] -> m Context
-globalContext =
+context :: MonadThrow m => [P1.Member] -> m Context
+context =
   foldr member $ pure M.empty
   where
     member :: MonadThrow m => P1.Member -> m Context -> m Context
@@ -54,7 +54,7 @@ globalContext =
           where
             field (_, t) t' = T.Arrow $ T.ArrowC t t'
     member (S.Bind S.TypeBind {}) = id
-    member (S.Bind (S.TermBind (S.TermBindUU i _ t))) = (M.insert i t <$>)
+    member (S.Bind (S.TermBind (S.TermBindUU i _ t) _)) = (M.insert i t <$>)
 
 typeCheck' :: MonadThrow m => Context -> [P1.Member] -> m [P2.Member]
 typeCheck' ctx =
@@ -63,11 +63,13 @@ typeCheck' ctx =
     member :: MonadThrow m => P1.Member -> m P2.Member
     member (S.Definition i cs) = pure $ S.Definition i cs
     member (S.Bind (S.TypeBind i t)) = pure $ S.Bind $ S.TypeBind i t
-    member (S.Bind (S.TermBind (S.TermBindUU i (V.UntypedTerm v) t))) = do
-        v'@(V.TypedTerm _ t') <- typeOf ctx v
-        if t == t'
-          then pure $ S.Bind $ S.TermBind $ S.TermBindUT i v'
-          else throwM $ MismatchException (show t) $ show t'
+    member (S.Bind (S.TermBind (S.TermBindUU i (V.UntypedTerm v) t) ms)) = do
+      ctx' <- M.union ctx <$> context ms
+      v'@(V.TypedTerm _ t') <- typeOf ctx' v
+      ms' <- typeCheck' ctx' ms
+      if t == t'
+        then pure $ S.Bind $ S.TermBind (S.TermBindUT i v') ms'
+        else throwM $ MismatchException (show t) $ show t'
 
 typeOf :: MonadThrow m => Context -> P1.Term' -> m P2.Term
 typeOf ctx (V.Variable i) =

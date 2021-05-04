@@ -8,9 +8,17 @@ int succ(int const _a0)
 }
 int closure1()
 {
+  int _l0(int const a)
+  {
+    return a;
+  }
   return _l0(0);
 }
-int _l0(int const a)
+int closure2(int const a)
 {
-  return a;
+  int _l1(int const b)
+  {
+    return a;
+  }
+  return _l1(0);
 }
