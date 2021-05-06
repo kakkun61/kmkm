@@ -20,4 +20,14 @@
       closure2
       (function a int (apply (function b int a) 0))
       (function int int)
+      (list))
+    (bind
+      succ2
+      succ
+      (function int int)
+      (list))
+    (bind
+      higher1
+      (function a (function int int) (apply a 0))
+      (function (function int int) int)
       (list))))

@@ -3,12 +3,12 @@
 module Language.Kmkm.Builder.C.Syntax
   ( File (..)
   , Element (..)
-  , Declaration (..)
   , Definition (..)
   , VariableQualifier (..)
   , TypeQualifier (..)
   , Type (..)
   , QualifiedType
+  , Deriver (..)
   , Field (..)
   , Identifier (..)
   , Initializer (..)
@@ -31,19 +31,14 @@ data File =
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Element
-  = Declaration Declaration
+  = Declaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | Definition Definition
   | TypeDefinition QualifiedType Identifier
   deriving (Show, Read, Eq, Ord, Generic)
 
-data Declaration
-  = ValueDeclaration QualifiedType [VariableQualifier] (Maybe Identifier)
-  | FunctionDeclaration QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)]
-  deriving (Show, Read, Eq, Ord, Generic)
-
 data Definition
-  = ValueDefinition QualifiedType [VariableQualifier] Identifier Initializer
-  | FunctionDefinition QualifiedType [VariableQualifier] Identifier [(QualifiedType, [VariableQualifier], Identifier)] [Statement]
+  = ExpressionDefinition QualifiedType [VariableQualifier] Identifier [Deriver] Initializer
+  | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] [Statement]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data VariableQualifier
@@ -65,10 +60,14 @@ data Type
   | StructureLiteral (Maybe Identifier) [Field]
   | Union [Field]
   | EnumerableLiteral (Maybe Identifier) [Identifier]
-  | Function Type [Type]
   deriving (Show, Read, Eq, Ord, Generic)
 
 type QualifiedType = ([TypeQualifier], Type)
+
+data Deriver
+  = Pointer [VariableQualifier]
+  | Function [(QualifiedType, [VariableQualifier], Maybe Identifier, [Deriver])]
+  deriving (Show, Read, Eq, Ord, Generic)
 
 data Field =
   Field QualifiedType Identifier
@@ -118,7 +117,7 @@ data Statement
   | Return Expression
   | If Expression Statement (Maybe Statement)
   | Case Expression [Branch]
-  | DeclarationStatement Declaration
+  | DeclarationStatement QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | DefinitionStatement Definition
   | TypeDefinitionStatement QualifiedType Identifier -- ^ GCC extension.
   | Block [Statement]

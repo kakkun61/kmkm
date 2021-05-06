@@ -4,6 +4,7 @@
 
 module Language.Kmkm.Builder.C.Pass1
   ( convert
+  , bind
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
@@ -48,10 +49,10 @@ member (S.Definition i cs) =
     tagEnum =
       case cs of
         [(_, _:_)] -> []
-        _ -> [I.Declaration $ I.ValueDeclaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing]
+        _ -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
     structType = ([], I.Structure $ identifier i)
     structure =
-      I.Declaration $ I.ValueDeclaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing
+      I.Declaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing []
       where
         fields =
           case cs of
@@ -65,11 +66,11 @@ member (S.Definition i cs) =
         field (i, t) = I.Field (typ t) $ identifier i
         constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
-    constructor _ (c, []) = I.ValueDefinition structType [I.Constant] (identifier c) $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
+    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (identifier c) [] $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
-      I.FunctionDefinition structType [] (identifier c) (parameter <$> fs) [statement]
+      I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [statement]
       where
-        parameter (i, t) = (typ t, [I.Constant], identifier i)
+        parameter (i, t) = (typ t, [I.Constant], Just $ identifier i, [])
         statement = I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
@@ -79,17 +80,23 @@ member (S.Definition i cs) =
 member (S.Bind a) = [bind a]
 
 bind :: Bind -> I.Element
-bind (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _) = I.Definition $ I.ValueDefinition (typ t) [] (identifier i) $ I.Expression $ term v
-bind (S.TermBind (S.TermBind0 i v@(V.TypedTerm _ t)) ms) = I.Definition $ I.FunctionDefinition (typ t) [] (identifier i) [] $ (elementStatement <$> (member =<< ms)) ++ [I.Return (term v)]
-bind (S.TermBind (S.TermBind1 i i0 t0 v@(V.TypedTerm _ t)) ms) = I.Definition $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0)] $ (elementStatement <$> (member =<< ms)) ++ [I.Return $ term v]
-bind (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v@(V.TypedTerm _ t)) ms) = I.Definition $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0), (typ t1, [I.Constant], identifier i1)] $ (elementStatement <$> (member =<< ms)) ++ [I.Return $ term v]
-bind (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v@(V.TypedTerm _ t)) ms) = I.Definition $ I.FunctionDefinition (typ t) [] (identifier i) [(typ t0, [I.Constant], identifier i0), (typ t1, [I.Constant], identifier i1), (typ t2, [I.Constant], identifier i2)] $ (elementStatement <$> (member =<< ms)) ++ [I.Return $ term v]
-bind a = error $ show a
+bind (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ t) [] (identifier i) (deriver t) $ I.Expression $ term v
+bind (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN i [] v ms
+bind (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN i [(i0, t0)] v ms
+bind (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN i [(i0, t0), (i1, t1)] v ms
+bind (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN i [(i0, t0), (i1, t1), (i2, t2)] v ms
+bind a                                                   = error $ show a
+
+bindTermN :: Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
+bindTermN i ps v@(V.TypedTerm _ t) ms =
+  I.Definition $ I.StatementDefinition (typ t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot t) $ (elementStatement <$> (member =<< ms)) ++ [I.Return (term v)]
+  where
+    parameter (i, t) = (typ t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver t)
 
 elementStatement :: I.Element -> I.Statement
-elementStatement (I.Declaration d)      = I.DeclarationStatement d
-elementStatement (I.Definition d)       = I.DefinitionStatement d
-elementStatement (I.TypeDefinition t i) = I.TypeDefinitionStatement t i
+elementStatement (I.Declaration t qs i ds) = I.DeclarationStatement t qs i ds
+elementStatement (I.Definition d)          = I.DefinitionStatement d
+elementStatement (I.TypeDefinition t i)    = I.TypeDefinitionStatement t i
 
 identifier :: Identifier -> I.Identifier
 identifier (UserIdentifier t)     = I.Identifier t
@@ -123,7 +130,23 @@ literal (V.Fraction s f e b) =
 literal l = error (show l)
 
 typ :: Type -> I.QualifiedType
-typ (T.Variable "int")   = ([], I.Int)
-typ (T.Variable "uint")  = ([I.Unsigned], I.Int)
-typ (T.Variable "frac2") = ([], I.Double)
-typ t                    = error $ show t
+typ (T.Variable "int")       = ([], I.Int)
+typ (T.Variable "uint")      = ([I.Unsigned], I.Int)
+typ (T.Variable "frac2")     = ([], I.Double)
+typ (T.Arrow (T.Arrow1 _ t)) = typ t
+typ t                        = error $ show t
+
+deriverRoot :: Type -> [I.Deriver]
+deriverRoot (T.Arrow (T.Arrow1 t1 _)) = deriverArrow True [t1]
+deriverRoot (T.Arrow (T.Arrow2 t1 t2 _)) = deriverArrow True [t1, t2]
+deriverRoot (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow True [t1, t2, t3]
+deriverRoot _ = []
+
+deriver :: Type -> [I.Deriver]
+deriver (T.Arrow (T.Arrow1 t1 _)) = deriverArrow False [t1]
+deriver (T.Arrow (T.Arrow2 t1 t2 _)) = deriverArrow False [t1, t2]
+deriver (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow False [t1, t2, t3]
+deriver _ = []
+
+deriverArrow :: Bool -> [Type] -> [I.Deriver]
+deriverArrow root ts = [I.Pointer if root then [] else [I.Constant], I.Function $ go <$> ts] where go t = (typ t, [I.Constant], Nothing, deriver t)

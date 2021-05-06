@@ -22,3 +22,11 @@ int closure2(int const a)
   }
   return _l1(0);
 }
+int (* succ2())(int const)
+{
+  return succ;
+}
+int higher1(int (* const a)(int const))
+{
+  return a(0);
+}

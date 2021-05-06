@@ -14,9 +14,9 @@ import qualified Data.Text             as T
 import           Language.C            (CBlockItem, CCompoundBlockItem (CBlockDecl, CBlockStmt, CNestedFunDef), CConst,
                                         CConstant (CFloatConst, CIntConst), CDecl, CDeclaration (CDecl),
                                         CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
-                                        CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr), CEnumeration (CEnum),
-                                        CExpr, CExpression (CCall, CCompoundLit, CConst, CVar), CExtDecl,
-                                        CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
+                                        CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr, CPtrDeclr), CDerivedDeclr,
+                                        CEnumeration (CEnum), CExpr, CExpression (CCall, CCompoundLit, CConst, CVar),
+                                        CExtDecl, CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
                                         CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
                                         CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger),
                                         CStatement (CCompound, CReturn), CStorageSpecifier (CTypedef),
@@ -35,36 +35,29 @@ file :: I.File -> CTranslUnit
 file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
 
 element :: I.Element -> CExtDecl
-element (I.Declaration (I.ValueDeclaration t qs i))       = CDeclExt $ valueDeclaration t qs i Nothing
-element (I.Declaration (I.FunctionDeclaration t qs i ps)) = undefined qs t i ps
-element (I.Definition (I.ValueDefinition t qs i l))       = CDeclExt $ valueDeclaration t qs (Just i) (Just l)
-element (I.Definition (I.FunctionDefinition t qs i ps s)) = CFDefExt $ functionDefinition t qs i ps s
-element (I.TypeDefinition t i)                            = CDeclExt $ typeDefinition t i
+element (I.Declaration t qs i ds)                           = CDeclExt $ valueDeclaration t qs i ds Nothing
+element (I.Definition (I.ExpressionDefinition t qs i ds l)) = CDeclExt $ valueDeclaration t qs (Just i) ds (Just l)
+element (I.Definition (I.StatementDefinition t qs i ds s))  = CFDefExt $ functionDefinition t qs i ds s
+element (I.TypeDefinition t i)                              = CDeclExt $ typeDefinition t i
 
-valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> Maybe I.Initializer -> CDecl
-valueDeclaration t qs i l =
+valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> [I.Deriver] -> Maybe I.Initializer -> CDecl
+valueDeclaration t qs i ds l =
   CDecl
     ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    [ ( Just $ CDeclr (identifier <$> i) [] Nothing [] undefNode
+    [ ( Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode
       , initializer <$> l
       , Nothing
       )
     ] undefNode
 
-functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [(I.QualifiedType, [I.VariableQualifier], I.Identifier)] -> [I.Statement] -> CFunDef
-functionDefinition t qs i ps ss =
+functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [I.Deriver] -> [I.Statement] -> CFunDef
+functionDefinition t qs i ds ss =
   CFunDef
     ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    (CDeclr (Just $ identifier i) [CFunDeclr (Right (parameter <$> ps, False)) [] undefNode] Nothing [] undefNode)
+    (CDeclr (Just $ identifier i) (deriver <$> ds) Nothing [] undefNode)
     []
     (CCompound [] (statement <$> ss) undefNode)
     undefNode
-    where
-      parameter (t, qs, i) =
-        CDecl
-          ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-          [(Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode, Nothing, Nothing)]
-          undefNode
 
 typeDefinition :: I.QualifiedType -> I.Identifier -> CDecl
 typeDefinition t i =
@@ -143,6 +136,15 @@ structureUnionLiteral t i fs =
           [(Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode, Nothing, Nothing)]
           undefNode
 
+deriver :: I.Deriver -> CDerivedDeclr
+deriver (I.Pointer qs) = CPtrDeclr (variableQualifier <$> qs) undefNode
+deriver (I.Function ps) = CFunDeclr (Right (parameter <$> ps, False)) [] undefNode
+  where
+      parameter (t, qs, i, ds) =
+        CDecl
+          ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
+          [(Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode, Nothing, Nothing)]
+          undefNode
 
 initializer :: I.Initializer -> CInit
 initializer (I.Expression e) = CInitExpr (expression e) undefNode
@@ -168,7 +170,7 @@ literal (I.Integer i b) =
         I.IntDecimal     -> DecRepr
         I.IntHexadecimal -> HexRepr
 literal (I.Fraction s f e b) =
-  CFloatConst (CFloat $ mconcat [hstr, istr, dstr, fstr, kstr, estr] ) undefNode
+  CFloatConst (CFloat $ mconcat [hstr, istr, dstr, fstr, kstr, estr]) undefNode
   where
     hstr, sstr, istr, fstr, dstr, kstr, estr :: String
     hstr = case b of { I.FractionDecimal -> ""; I.FractionHexadecimal -> "0x" }
@@ -182,6 +184,6 @@ literal l                = error $ show l
 statement :: I.Statement -> CBlockItem
 statement (I.Return e) = CBlockStmt $ CReturn (Just $ expression e) undefNode
 statement (I.Block ss) = CBlockStmt $ CCompound [] (statement <$> ss) undefNode
-statement (I.DefinitionStatement (I.ValueDefinition t qs i l)) = CBlockDecl $ valueDeclaration t qs (Just i) (Just l)
-statement (I.DefinitionStatement (I.FunctionDefinition t qs i ps s)) = CNestedFunDef $ functionDefinition t qs i ps s
+statement (I.DefinitionStatement (I.ExpressionDefinition t qs i ds l)) = CBlockDecl $ valueDeclaration t qs (Just i) ds (Just l)
+statement (I.DefinitionStatement (I.StatementDefinition t qs i ds s)) = CNestedFunDef $ functionDefinition t qs i ds s
 statement s = error $ show s
