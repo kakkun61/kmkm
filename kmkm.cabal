@@ -76,8 +76,9 @@ library
 executable kmkm
   import: common
   hs-source-dirs: app
-  main-is: main.hs
+  main-is: kmkm.hs
   build-depends: kmkm,
+                 directory,
                  filepath,
                  optparse-declarative,
                  pretty,
