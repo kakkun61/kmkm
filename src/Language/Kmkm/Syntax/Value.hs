@@ -93,7 +93,8 @@ data instance Application 'Curried l t =
   deriving Generic
 
 data instance Application 'Uncurried l t
-  = Application1 (Term 'Uncurried l t) (Term 'Uncurried l t)
+  = Application0 (Term 'Uncurried l t)
+  | Application1 (Term 'Uncurried l t) (Term 'Uncurried l t)
   | Application2 (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t)
   | Application3 (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t)
   deriving Generic

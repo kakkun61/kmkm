@@ -8,6 +8,7 @@ module Language.Kmkm.Builder.C
 
 import qualified Language.Kmkm.Builder.C.Pass1 as BC1
 import qualified Language.Kmkm.Builder.C.Pass2 as BC2
+import qualified Language.Kmkm.Builder.C.Pass3 as BC3
 import qualified Language.Kmkm.Builder.Pass1   as B1
 import qualified Language.Kmkm.Builder.Pass2   as B2
 import qualified Language.Kmkm.Builder.Pass3   as B3
@@ -44,4 +45,4 @@ build m@(S.Module (ModuleName i) _) = do
     newline = Pretty.char '\n'
 
 buildC :: MonadThrow m => Module -> m CTranslUnit
-buildC m = BC2.convert . BC1.convert . B4.lambdaLifting . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)
+buildC m = BC3.convert . BC2.convert . BC1.convert . B4.lambdaLifting . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)

@@ -30,3 +30,11 @@ int higher1(int (* const a)(int const))
 {
   return a(0);
 }
+int two1()
+{
+  return succ(1);
+}
+int two2()
+{
+  return succ2()(1);
+}

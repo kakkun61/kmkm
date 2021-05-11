@@ -31,6 +31,7 @@ library
                    Language.Kmkm.Builder.C
                    Language.Kmkm.Builder.C.Pass1
                    Language.Kmkm.Builder.C.Pass2
+                   Language.Kmkm.Builder.C.Pass3
                    Language.Kmkm.Builder.C.Syntax
                    Language.Kmkm.Builder.Pass1
                    Language.Kmkm.Builder.Pass2
@@ -45,6 +46,7 @@ library
                    Language.Kmkm.Syntax.Phase3
                    Language.Kmkm.Syntax.Phase4
                    Language.Kmkm.Syntax.Phase5
+                   Language.Kmkm.Syntax.Phase6
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
   build-depends: containers,
@@ -99,7 +101,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test/spec
-  other-modules: Language.Kmkm.Builder.C.Pass1Spec
+  other-modules: Language.Kmkm.Builder.C.Pass2Spec
                  Language.Kmkm.Builder.Pass1Spec
                  Language.Kmkm.Parser.SexpSpec
   build-depends: kmkm,

@@ -43,13 +43,16 @@ termBind (S.TermBindUT i (V.TypedTerm (V.Literal (V.Function (V.Function3 i0 t0 
   pure (S.TermBind3 i i0 t0 i1 t1 i2 t2 v', ms)
 termBind (S.TermBindUT i v) = do
   (v', ms) <- term v
-  pure (S.TermBind0 i v', ms)
+  pure (S.TermBindV i v', ms)
 
 term :: P4.Term -> Pass (P5.Term, [P5.Member])
 term (V.TypedTerm (V.Variable i) t) = pure (V.TypedTerm (V.Variable i) t, [])
 term (V.TypedTerm (V.Literal l) t) = do
   (l, ms) <- literal l
   pure (V.TypedTerm l t, ms)
+term (V.TypedTerm (V.Application (V.Application0 v0)) t) = do
+  (v0', ms0) <- term v0
+  pure (V.TypedTerm (V.Application (V.Application0 v0')) t, ms0)
 term (V.TypedTerm (V.Application (V.Application1 v0 v1)) t) = do
   (v0', ms0) <- term v0
   (v1', ms1) <- term v1

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Pass1Spec where
+module Language.Kmkm.Builder.C.Pass2Spec where
 
-import           Language.Kmkm.Builder.C.Pass1
+import           Language.Kmkm.Builder.C.Pass2
 import qualified Language.Kmkm.Builder.C.Syntax as C
 import qualified Language.Kmkm.Syntax           as S
 import qualified Language.Kmkm.Syntax.Type      as T
