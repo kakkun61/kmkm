@@ -27,10 +27,11 @@ member (S.Bind b)        = S.Bind <$> bind b
 
 bind :: P3.Bind -> Pass P4.Bind
 bind t@S.TypeBind {} = pure t
-bind (S.TermBind (S.TermBindUT i v) ms) = do
-  v' <- term v
-  ms' <- sequence $ member <$> ms
-  pure $ S.TermBind (S.TermBindUT i v') ms'
+bind (S.TermBind (S.TermBindUT i v) ms) =
+  scope $ do
+    v' <- term v
+    ms' <- sequence $ member <$> ms
+    pure $ S.TermBind (S.TermBindUT i v') ms'
 
 term :: P3.Term -> Pass P4.Term
 term v@(V.TypedTerm V.Variable {} _) = pure v
@@ -51,3 +52,10 @@ newIdentifier = do
   n <- S.get
   S.put $ n + 1
   pure $ SystemIdentifier 'a' n
+
+scope :: Pass a -> Pass a
+scope p = do
+  n <- S.get
+  r <- p
+  S.put n
+  pure r
