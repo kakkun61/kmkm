@@ -37,6 +37,7 @@ library
                    Language.Kmkm.Builder.Pass2
                    Language.Kmkm.Builder.Pass3
                    Language.Kmkm.Builder.Pass4
+                   Language.Kmkm.Config
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
@@ -50,6 +51,7 @@ library
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
   build-depends: containers,
+                 data-default-class,
                  exceptions,
                  megaparsec,
                  hashable,
@@ -78,6 +80,7 @@ executable kmkm
   hs-source-dirs: app
   main-is: kmkm.hs
   build-depends: kmkm,
+                 data-default-class,
                  directory,
                  filepath,
                  optparse-declarative,
@@ -105,6 +108,7 @@ test-suite spec
                  Language.Kmkm.Builder.Pass1Spec
                  Language.Kmkm.Parser.SexpSpec
   build-depends: kmkm,
+                 data-default-class,
                  megaparsec,
                  hspec
   ghc-options: -threaded
@@ -119,6 +123,7 @@ test-suite batch
   hs-source-dirs: test/batch
   build-depends: kmkm,
                  ansi-terminal,
+                 data-default-class,
                  directory,
                  language-c,
                  pretty,

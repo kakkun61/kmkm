@@ -3,6 +3,7 @@
 import Language.Kmkm (compile)
 
 import           Control.Monad.IO.Class (MonadIO (liftIO))
+import           Data.Default.Class     (def)
 import qualified Data.List              as L
 import qualified Data.Text.IO.Utf8      as T
 import           Main.Utf8              (withUtf8)
@@ -20,7 +21,7 @@ main'
 main' dest src =
   liftIO $ do
     srcText <- T.readFile $ O.get src
-    destText <- compile (O.get src) srcText
+    destText <- compile def (O.get src) srcText
     case L.splitAt (length (O.get src) - 5) (O.get src) of
       (path, ".s.km") -> do
         let outputFile = O.get dest </> path ++ ".c"

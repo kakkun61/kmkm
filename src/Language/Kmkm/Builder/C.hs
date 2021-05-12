@@ -13,6 +13,7 @@ import qualified Language.Kmkm.Builder.Pass1   as B1
 import qualified Language.Kmkm.Builder.Pass2   as B2
 import qualified Language.Kmkm.Builder.Pass3   as B3
 import qualified Language.Kmkm.Builder.Pass4   as B4
+import           Language.Kmkm.Config          (Config)
 import           Language.Kmkm.Syntax.Phase1   (Module)
 
 import qualified Language.Kmkm.Syntax      as S
@@ -24,9 +25,9 @@ import           Language.C          (CTranslUnit)
 import qualified Language.C.Pretty   as C
 import qualified Text.PrettyPrint    as Pretty
 
-build :: MonadThrow m => Module -> m Pretty.Doc
-build m@(S.Module (ModuleName i) _) = do
-  u <- buildC m
+build :: MonadThrow m => Config -> Module -> m Pretty.Doc
+build config m@(S.Module (ModuleName i) _) = do
+  u <- buildC config m
   pure $
     mconcat
       [ Pretty.text "#ifndef "
@@ -44,5 +45,5 @@ build m@(S.Module (ModuleName i) _) = do
     key = Pretty.text $ Text.unpack $ Text.toUpper i <> "_H"
     newline = Pretty.char '\n'
 
-buildC :: MonadThrow m => Module -> m CTranslUnit
-buildC m = BC3.convert . BC2.convert . BC1.convert . B4.lambdaLifting . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)
+buildC :: MonadThrow m => Config -> Module -> m CTranslUnit
+buildC config m = BC3.convert . BC2.convert config . BC1.convert . B4.lambdaLifting . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)

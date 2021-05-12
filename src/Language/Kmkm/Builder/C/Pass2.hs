@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Builder.C.Pass2
@@ -8,6 +9,8 @@ module Language.Kmkm.Builder.C.Pass2
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
+import           Language.Kmkm.Config           (Config (Config, typeMap))
+import qualified Language.Kmkm.Config           as C
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, Term, Type)
@@ -17,11 +20,11 @@ import qualified Language.Kmkm.Syntax.Value     as V
 import           Data.Text (Text)
 import qualified Data.Text as T
 
-convert :: Module -> I.File
+convert :: Config -> Module -> I.File
 convert = module'
 
-module' :: Module -> I.File
-module' (S.Module n ms) = I.File (moduleName n) $ member =<< ms
+module' :: Config -> Module -> I.File
+module' config (S.Module n ms) = I.File (moduleName n) $ member config =<< ms
 
 -- |
 -- @
@@ -35,8 +38,8 @@ module' (S.Module n ms) = I.File (moduleName n) $ member =<< ms
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-member :: Member -> [I.Element]
-member (S.Definition i cs) =
+member :: Config -> Member -> [I.Element]
+member config (S.Definition i cs) =
   mconcat
     [ tagEnum
     , [structure]
@@ -63,35 +66,35 @@ member (S.Definition i cs) =
                   if hasFields
                     then [I.Field ([], I.Union $ constructor <$> cs) "body"]
                     else []
-        field (i, t) = I.Field (typ t) $ identifier i
+        field (i, t) = I.Field (typ config t) $ identifier i
         constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
     constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (identifier c) [] $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
       I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [statement]
       where
-        parameter (i, t) = (typ t, [I.Constant], Just $ identifier i, [])
+        parameter (i, t) = (typ config t, [I.Constant], Just $ identifier i, [])
         statement = I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
             (1, _:_) -> argument <$> fs
             _        -> I.Expression (I.Variable $ tagEnumIdent c) : (argument <$> fs)
         argument (i, _) = I.Expression $ I.Variable $ identifier i
-member (S.Bind a) = [bind a]
+member config (S.Bind a) = [bind config a]
 
-bind :: Bind -> I.Element
-bind (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ t) [] (identifier i) (deriver t) $ I.Expression $ term v
-bind (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN i [] v ms
-bind (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN i [(i0, t0)] v ms
-bind (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN i [(i0, t0), (i1, t1)] v ms
-bind (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN i [(i0, t0), (i1, t1), (i2, t2)] v ms
-bind a                                                   = error $ show a
+bind :: Config -> Bind -> I.Element
+bind config (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term v
+bind config (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN config i [] v ms
+bind config (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN config i [(i0, t0)] v ms
+bind config (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN config i [(i0, t0), (i1, t1)] v ms
+bind config (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN config i [(i0, t0), (i1, t1), (i2, t2)] v ms
+bind _ a                                                        = error $ show a
 
-bindTermN :: Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
-bindTermN i ps v@(V.TypedTerm _ t) ms =
-  I.Definition $ I.StatementDefinition (typ t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot t) $ (elementStatement <$> (member =<< ms)) ++ [I.Return (term v)]
+bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
+bindTermN config i ps v@(V.TypedTerm _ t) ms =
+  I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.Return (term v)]
   where
-    parameter (i, t) = (typ t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver t)
+    parameter (i, t) = (typ config t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
 elementStatement :: I.Element -> I.Statement
 elementStatement (I.Declaration t qs i ds) = I.DeclarationStatement t qs i ds
@@ -130,24 +133,32 @@ literal (V.Fraction s f e b) =
       _  -> error $ "literal: base " ++ show b
 literal l = error (show l)
 
-typ :: Type -> I.QualifiedType
-typ (T.Variable "int")       = ([], I.Int)
-typ (T.Variable "uint")      = ([I.Unsigned], I.Int)
-typ (T.Variable "frac2")     = ([], I.Double)
-typ (T.Arrow (T.Arrow1 _ t)) = typ t
-typ t                        = error $ show t
+typ :: Config -> Type -> I.QualifiedType
+typ Config { typeMap } (T.Variable n) =
+  get typeMap
+  where
+    get =
+      case n of
+        "int"   -> I.readCType . C.int
+        "uint"  -> I.readCType . C.uint
+        "byte"  -> I.readCType . C.byte
+        "frac"  -> I.readCType . C.frac
+        "frac2" -> I.readCType . C.frac2
+        _       -> const ([], I.Structure $ identifier n)
+typ c (T.Arrow (T.Arrow1 _ t)) = typ c t
+typ _ t = error $ show t
 
-deriverRoot :: Type -> [I.Deriver]
-deriverRoot (T.Arrow (T.Arrow1 t1 _))       = deriverArrow True [t1]
-deriverRoot (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow True [t1, t2]
-deriverRoot (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow True [t1, t2, t3]
-deriverRoot _                               = []
+deriverRoot :: Config -> Type -> [I.Deriver]
+deriverRoot config (T.Arrow (T.Arrow1 t1 _))       = deriverArrow config True [t1]
+deriverRoot config (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow config True [t1, t2]
+deriverRoot config (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow config True [t1, t2, t3]
+deriverRoot _ _                                    = []
 
-deriver :: Type -> [I.Deriver]
-deriver (T.Arrow (T.Arrow1 t1 _))       = deriverArrow False [t1]
-deriver (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow False [t1, t2]
-deriver (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow False [t1, t2, t3]
-deriver _                               = []
+deriver :: Config -> Type -> [I.Deriver]
+deriver config (T.Arrow (T.Arrow1 t1 _))       = deriverArrow config False [t1]
+deriver config (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow config False [t1, t2]
+deriver config (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow config False [t1, t2, t3]
+deriver _ _                                    = []
 
-deriverArrow :: Bool -> [Type] -> [I.Deriver]
-deriverArrow root ts = [I.Pointer if root then [] else [I.Constant], I.Function $ go <$> ts] where go t = (typ t, [I.Constant], Nothing, deriver t)
+deriverArrow :: Config -> Bool -> [Type] -> [I.Deriver]
+deriverArrow config root ts = [I.Pointer if root then [] else [I.Constant], I.Function $ go <$> ts] where go t = (typ config t, [I.Constant], Nothing, deriver config t)

@@ -4,6 +4,7 @@ import           Language.Kmkm.Parser.Sexp (parse)
 import           Control.Exception        (Exception (displayException))
 import           Control.Exception.Safe   (tryIO)
 import           Control.Monad            (unless)
+import           Data.Default.Class       (def)
 import           Data.List                (nub, sort)
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -68,7 +69,7 @@ test source expected =
   case parse (T.unpack source) source of
     Left e -> Fail $ displayException e
     Right m ->
-      case B.buildC m of
+      case B.buildC def m of
         Left e -> Fail $ displayException e
         Right d ->
           let result = C.pretty d
