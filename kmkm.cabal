@@ -81,7 +81,6 @@ executable kmkm
                  directory,
                  filepath,
                  optparse-declarative,
-                 pretty,
                  text,
                  with-utf8
 
@@ -121,7 +120,6 @@ test-suite batch
   build-depends: kmkm,
                  ansi-terminal,
                  directory,
-                 either-result,
                  language-c,
                  pretty,
                  safe-exceptions,
