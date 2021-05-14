@@ -81,6 +81,7 @@ executable kmkm
   main-is: kmkm.hs
   build-depends: kmkm,
                  data-default-class,
+                 dhall,
                  directory,
                  filepath,
                  optparse-declarative,
