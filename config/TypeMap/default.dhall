@@ -1,4 +1,4 @@
-let TypeMap = ./TypeMap.dhall
+let TypeMap = ./Type.dhall
 
 in    { int = "int"
       , uint = "unsigned int"

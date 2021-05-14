@@ -1,1 +1,1 @@
-{ Config = ./Config.dhall, default = ./default.dhall }
+{ Type = ./Type.dhall, default = ./default.dhall }

@@ -1,4 +1,4 @@
-let Config = ./Config.dhall
+let Config = ./Type.dhall
 
 let TypeMap = ../TypeMap/package.dhall
 
