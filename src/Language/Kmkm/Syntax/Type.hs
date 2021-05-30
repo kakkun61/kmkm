@@ -36,7 +36,8 @@ data instance Arrow 'Curried =
   deriving (Show, Read, Eq, Ord, Generic)
 
 data instance Arrow 'Uncurried
-  = Arrow1 (Type 'Uncurried) (Type 'Uncurried)
+  = Arrow0 (Type 'Uncurried)
+  | Arrow1 (Type 'Uncurried) (Type 'Uncurried)
   | Arrow2 (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried)
   | Arrow3 (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried) (Type 'Uncurried)
   deriving (Show, Read, Eq, Ord, Generic)

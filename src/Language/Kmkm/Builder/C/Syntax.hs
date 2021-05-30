@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Builder.C.Syntax
   ( File (..)
@@ -19,6 +20,7 @@ module Language.Kmkm.Builder.C.Syntax
   , ArithmeticExpression (..)
   , Statement (..)
   , Branch (..)
+  , readCType
   ) where
 
 import Data.Hashable (Hashable)
@@ -63,6 +65,12 @@ data Type
   deriving (Show, Read, Eq, Ord, Generic)
 
 type QualifiedType = ([TypeQualifier], Type)
+
+readCType :: Text -> QualifiedType
+readCType "int"          = ([], Int)
+readCType "unsigned int" = ([Unsigned], Int)
+readCType "double"       = ([], Double)
+readCType t              = ([], TypeVariable $ Identifier t)
 
 data Deriver
   = Pointer [VariableQualifier]

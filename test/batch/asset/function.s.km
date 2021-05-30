@@ -30,4 +30,14 @@
       higher1
       (function a (function int int) (apply a 0))
       (function (function int int) int)
+      (list))
+    (bind
+      two1
+      (apply succ 1)
+      int
+      (list))
+    (bind
+      two2
+      (apply succ2 1)
+      int
       (list))))

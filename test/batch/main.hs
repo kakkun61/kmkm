@@ -1,12 +1,10 @@
-{-# LANGUAGE PatternSynonyms #-}
-
 import qualified Language.Kmkm.Builder.C   as B
 import           Language.Kmkm.Parser.Sexp (parse)
 
 import           Control.Exception        (Exception (displayException))
 import           Control.Exception.Safe   (tryIO)
 import           Control.Monad            (unless)
-import           Data.Either.Result       (pattern Error, pattern Success)
+import           Data.Default.Class       (def)
 import           Data.List                (nub, sort)
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -67,11 +65,11 @@ main =
 data Result = Pass | Mismatch P.Doc | Fail String
 
 test :: Text -> P.Doc -> Result
-test source expected = do
+test source expected =
   case parse (T.unpack source) source of
-    Error e -> Fail e
-    Success m ->
-      case B.buildC m of
+    Left e -> Fail $ displayException e
+    Right m ->
+      case B.buildC def m of
         Left e -> Fail $ displayException e
         Right d ->
           let result = C.pretty d

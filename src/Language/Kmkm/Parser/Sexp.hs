@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Parser.Sexp
@@ -13,8 +14,10 @@ module Language.Kmkm.Parser.Sexp
   , integer
   , fraction
   , string
+  , Exception (..)
   ) where
 
+import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term,
@@ -23,7 +26,9 @@ import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
 import           Control.Applicative        (Alternative (many, (<|>)))
+import qualified Control.Exception          as E
 import           Control.Monad              (void)
+import           Control.Monad.Catch        (MonadThrow (throwM))
 import           Data.Bool                  (bool)
 import qualified Data.Char                  as C
 import           Data.Functor               (($>))
@@ -31,7 +36,9 @@ import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
+import qualified Data.Typeable              as Y
 import           Data.Void                  (Void)
+import           GHC.Generics               (Generic)
 import qualified Text.Megaparsec            as M
 import qualified Text.Megaparsec.Char.Lexer as M
 import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
@@ -42,11 +49,17 @@ import qualified Text.Parser.Token          as P
 
 type Parser = ParsecT Void Text Identity
 
-parse :: MonadFail m => String -> Text -> m Module
+parse :: MonadThrow m => String -> Text -> m Module
 parse = parse' (module' <* P.eof)
 
-parse' :: MonadFail m => Parser a -> String -> Text -> m a
+parse' :: MonadThrow m => Parser a -> String -> Text -> m a
 parse' (ParsecT p) n s =
+  case M.parse p n s of
+    Right a -> pure a
+    Left e  -> throwM $ Exception $ M.errorBundlePretty e
+
+parse'' :: MonadFail m => Parser a -> String -> Text -> m a
+parse'' (ParsecT p) n s =
   case M.parse p n s of
     Right a -> pure a
     Left e  -> fail $ M.errorBundlePretty e
@@ -177,11 +190,11 @@ fraction =
       let
         fractionDigits :: Word
         fractionDigits = fromIntegral $ T.length fstr
-      significand <- parse' M.hexadecimal "fraction.hexadecimal.significand" $ istr <> fstr
+      significand <- parse'' M.hexadecimal "fraction.hexadecimal.significand" $ istr <> fstr
       void $ P.text "p"
       epos <- sign
       estr <- digits 16
-      exponent <- if T.null estr then pure 0 else parse' M.decimal "fraction.hexadecimal.exponent" estr
+      exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.hexadecimal.exponent" estr
       pure $ V.Fraction significand fractionDigits (sign' epos exponent) 16
     decimal = do
       istr <- digits 10
@@ -204,8 +217,8 @@ fraction =
       let
         fractionDigits :: Word
         fractionDigits = fromIntegral $ T.length fstr
-      significand <- parse' M.decimal "fraction.decimal.significand" $ istr <> fstr
-      exponent <- if T.null estr then pure 0 else parse' M.decimal "fraction.decimal.exponent" estr
+      significand <- parse'' M.decimal "fraction.decimal.significand" $ istr <> fstr
+      exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.decimal.exponent" estr
       pure $ V.Fraction significand fractionDigits (sign' epos exponent) 10
     sign' :: Num n => Bool -> n -> n
     sign' = bool negate id
@@ -275,3 +288,13 @@ asciiLower = P.choice $ P.char <$> ['a' .. 'z']
 (<!>) :: String -> Parser a -> Parser a
 (<!>) = flip (<?>)
 infix <!>
+
+newtype Exception
+  = Exception String
+  deriving (Show, Read, Eq, Ord, Generic)
+
+instance E.Exception Exception where
+  toException = E.toException . X.Exception
+  fromException e = do
+    X.Exception e <- E.fromException e
+    Y.cast e

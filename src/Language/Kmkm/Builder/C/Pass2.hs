@@ -1,189 +1,164 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Builder.C.Pass2
   ( convert
+  , bind
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
+import           Language.Kmkm.Config           (Config (Config, typeMap))
+import qualified Language.Kmkm.Config           as C
+import qualified Language.Kmkm.Syntax           as S
+import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
+import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, Term, Type)
+import qualified Language.Kmkm.Syntax.Type      as T
+import qualified Language.Kmkm.Syntax.Value     as V
 
-import           Data.Hashable         (Hashable (hash))
-import qualified Data.List             as L
-import           Data.Text             (Text)
-import qualified Data.Text             as T
-import           Language.C            (CBlockItem, CCompoundBlockItem (CBlockDecl, CBlockStmt, CNestedFunDef), CConst,
-                                        CConstant (CFloatConst, CIntConst), CDecl, CDeclaration (CDecl),
-                                        CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
-                                        CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr, CPtrDeclr), CDerivedDeclr,
-                                        CEnumeration (CEnum), CExpr, CExpression (CCall, CCompoundLit, CConst, CVar),
-                                        CExtDecl, CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
-                                        CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
-                                        CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger),
-                                        CStatement (CCompound, CReturn), CStorageSpecifier (CTypedef),
-                                        CStructTag (CStructTag, CUnionTag), CStructureUnion (CStruct), CTranslUnit,
-                                        CTranslationUnit (CTranslUnit), CTypeQual, CTypeQualifier (CConstQual),
-                                        CTypeSpec,
-                                        CTypeSpecifier (CBoolType, CDoubleType, CEnumType, CIntType, CSUType, CTypeDef, CUnsigType),
-                                        Ident, noFlags, undefNode)
-import           Language.C.Data.Ident (Ident (Ident))
-import           Numeric               (showHex)
+import           Data.Text (Text)
+import qualified Data.Text as T
 
-convert :: I.File -> CTranslUnit
-convert = file
+convert :: Config -> Module -> I.File
+convert = module'
 
-file :: I.File -> CTranslUnit
-file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
+module' :: Config -> Module -> I.File
+module' config (S.Module n ms) = I.File (moduleName n) $ member config =<< ms
 
-element :: I.Element -> CExtDecl
-element (I.Declaration t qs i ds)                           = CDeclExt $ valueDeclaration t qs i ds Nothing
-element (I.Definition (I.ExpressionDefinition t qs i ds l)) = CDeclExt $ valueDeclaration t qs (Just i) ds (Just l)
-element (I.Definition (I.StatementDefinition t qs i ds s))  = CFDefExt $ functionDefinition t qs i ds s
-element (I.TypeDefinition t i)                              = CDeclExt $ typeDefinition t i
-
-valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> [I.Deriver] -> Maybe I.Initializer -> CDecl
-valueDeclaration t qs i ds l =
-  CDecl
-    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    [ ( Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode
-      , initializer <$> l
-      , Nothing
-      )
-    ] undefNode
-
-functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [I.Deriver] -> [I.Statement] -> CFunDef
-functionDefinition t qs i ds ss =
-  CFunDef
-    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    (CDeclr (Just $ identifier i) (deriver <$> ds) Nothing [] undefNode)
-    []
-    (CCompound [] (statement <$> ss) undefNode)
-    undefNode
-
-typeDefinition :: I.QualifiedType -> I.Identifier -> CDecl
-typeDefinition t i =
-  CDecl
-    (CStorageSpec (CTypedef undefNode) : (CTypeSpec <$> qualifiedType t))
-    [ ( Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode
-      , Nothing
-      , Nothing
-      )
+-- |
+-- @
+--                  |   the number of constructors
+--                  +---------+-----------+-----------
+--                  |    0    |     1     |    n>1
+-- -----------+-----+---------+-----------+-----------
+--            |  0  | invalid | has a tag | has a tag
+-- the number |     |         | value     | value
+-- of fields  +-----+---------+-----------+-----------
+--            | n>0 | invalid | no tags   | has a tag
+--            |     |         | function  | function
+-- @
+member :: Config -> Member -> [I.Element]
+member config (S.Definition i cs) =
+  mconcat
+    [ tagEnum
+    , [structure]
+    , I.Definition . constructor (length cs) <$> cs
     ]
-    undefNode
-
-identifier :: I.Identifier -> Ident
-identifier (I.Identifier t) = textIdentifier t
-
-textIdentifier :: Text -> Ident
-textIdentifier t = Ident (T.unpack t) (hash t) undefNode
-
-variableQualifier :: I.VariableQualifier -> CTypeQual
-variableQualifier I.Constant = CConstQual undefNode
-
-qualifiedType :: I.QualifiedType -> [CTypeSpec]
-qualifiedType (qs, t) = (typeQualifier <$> qs) ++ [typ t]
-
-typeQualifier :: I.TypeQualifier -> CTypeSpec
-typeQualifier I.Unsigned = CUnsigType undefNode
-
-typ :: I.Type -> CTypeSpec
-typ I.Int = CIntType undefNode
-typ I.Double = CDoubleType undefNode
-typ (I.EnumerableLiteral i is) = enumerableLiteral i is
-typ (I.StructureLiteral i fs) = structureLiteral i fs
-typ (I.Union fs) = union fs
-typ (I.TypeVariable "bool") = CBoolType undefNode
-typ (I.TypeVariable i@(I.Identifier _)) = CTypeDef (identifier i) undefNode
-typ (I.Enumerable i) = CEnumType (CEnum (Just $ identifier i) Nothing [] undefNode) undefNode
-typ (I.Structure i) = CSUType (CStruct CStructTag (Just $ identifier i) Nothing [] undefNode) undefNode
-typ t = error $ show t
-
-enumerableLiteral :: Maybe I.Identifier -> [I.Identifier] -> CTypeSpec
-enumerableLiteral i is =
-  CEnumType
-    (CEnum
-      (identifier <$> i)
-      (Just $ value <$> is)
-      []
-      undefNode
-    )
-    undefNode
   where
-    value i = (identifier i, Nothing)
-
-structureLiteral :: Maybe I.Identifier -> [I.Field] -> CTypeSpec
-structureLiteral = structureUnionLiteral CStructTag
-
-union :: [I.Field] -> CTypeSpec
-union = structureUnionLiteral CUnionTag Nothing
-
-structureUnionLiteral :: CStructTag -> Maybe I.Identifier -> [I.Field] -> CTypeSpec
-structureUnionLiteral t i fs =
-  CSUType (CStruct t (identifier <$> i) fields [] undefNode) undefNode
-    where
-      fields =
-        Just
-          case fs of
-            (_:_) -> field <$> fs
+    tagEnumIdent (UserIdentifier t)     = I.Identifier $ t <> "_tag"
+    tagEnumIdent (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n ++ "_tag"
+    tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
+    tagEnum =
+      case cs of
+        [(_, _:_)] -> []
+        _ -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
+    structType = ([], I.Structure $ identifier i)
+    structure =
+      I.Declaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing []
+      where
+        fields =
+          case cs of
+            [(_, fs@(_:_))] -> field <$> fs
             _ ->
-              [CDecl
-                [CTypeSpec $ CEnumType (CEnum (identifier <$> i) Nothing [] undefNode) undefNode]
-                [(Just $ CDeclr (Just $ textIdentifier "tag") [] Nothing [] undefNode, Nothing, Nothing)]
-                undefNode
-              ]
-      field (I.Field t i) =
-        CDecl
-          (CTypeSpec <$> qualifiedType t)
-          [(Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode, Nothing, Nothing)]
-          undefNode
+              I.Field tagEnumType "tag"
+                :
+                  if hasFields
+                    then [I.Field ([], I.Union $ constructor <$> cs) "body"]
+                    else []
+        field (i, t) = I.Field (typ config t) $ identifier i
+        constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
+        hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
+    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (identifier c) [] $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
+    constructor n (c, fs) =
+      I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [statement]
+      where
+        parameter (i, t) = (typ config t, [I.Constant], Just $ identifier i, [])
+        statement = I.Return $ I.CompoundLiteral structType arguments
+        arguments =
+          case (n, fs) of
+            (1, _:_) -> argument <$> fs
+            _        -> I.Expression (I.Variable $ tagEnumIdent c) : (argument <$> fs)
+        argument (i, _) = I.Expression $ I.Variable $ identifier i
+member config (S.Bind a) = [bind config a]
 
-deriver :: I.Deriver -> CDerivedDeclr
-deriver (I.Pointer qs) = CPtrDeclr (variableQualifier <$> qs) undefNode
-deriver (I.Function ps) = CFunDeclr (Right (parameter <$> ps, False)) [] undefNode
+bind :: Config -> Bind -> I.Element
+bind config (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term v
+bind config (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN config i [] v ms
+bind config (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN config i [(i0, t0)] v ms
+bind config (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN config i [(i0, t0), (i1, t1)] v ms
+bind config (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN config i [(i0, t0), (i1, t1), (i2, t2)] v ms
+bind _ a                                                        = error $ show a
+
+bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
+bindTermN config i ps v@(V.TypedTerm _ t) ms =
+  I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.Return (term v)]
   where
-      parameter (t, qs, i, ds) =
-        CDecl
-          ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-          [(Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode, Nothing, Nothing)]
-          undefNode
+    parameter (i, t) = (typ config t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
-initializer :: I.Initializer -> CInit
-initializer (I.Expression e) = CInitExpr (expression e) undefNode
-initializer (I.List is) =
-  CInitList (go <$> is) undefNode
-  where go i = ([], initializer i)
+elementStatement :: I.Element -> I.Statement
+elementStatement (I.Declaration t qs i ds) = I.DeclarationStatement t qs i ds
+elementStatement (I.Definition d)          = I.DefinitionStatement d
+elementStatement (I.TypeDefinition t i)    = I.TypeDefinitionStatement t i
 
-expression :: I.Expression -> CExpr
-expression (I.Literal l)     = CConst $ literal l
-expression (I.Variable v)    = CVar (identifier v) undefNode
-expression (I.CompoundLiteral t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
-expression (I.Call t as)     = CCall (expression t) (expression <$> as) undefNode
-expression e                 = error $ show e
+identifier :: Identifier -> I.Identifier
+identifier (UserIdentifier t)     = I.Identifier t
+identifier (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n
 
-literal :: I.Literal -> CConst
-literal (I.Integer i b) =
-  CIntConst (CInteger i repr noFlags) undefNode
+moduleName :: ModuleName -> Text
+moduleName (ModuleName n) = n
+
+term :: Term -> I.Expression
+term (V.TypedTerm (V.Variable i) _)                              = I.Variable $ identifier i
+term (V.TypedTerm (V.Literal l) _)                               = I.Literal $ literal l
+term (V.TypedTerm (V.Application (V.Application0 v)) _)          = I.Call (term v) []
+term (V.TypedTerm (V.Application (V.Application1 v v0)) _)       = I.Call (term v) [term v0]
+term (V.TypedTerm (V.Application (V.Application2 v v0 t1)) _)    = I.Call (term v) $ term <$> [v0, t1]
+term (V.TypedTerm (V.Application (V.Application3 v v0 t1 v2)) _) = I.Call (term v) $ term <$> [v0, t1, v2]
+
+literal :: Literal -> I.Literal
+literal (V.Integer i b) =
+  I.Integer i $
+    case b of
+      2  -> I.IntBinary
+      8  -> I.IntOctal
+      10 -> I.IntDecimal
+      16 -> I.IntHexadecimal
+      _  -> error $ "literal: base: " ++ show b
+literal (V.Fraction s f e b) =
+  I.Fraction s f e $
+    case b of
+      10 -> I.FractionDecimal
+      16 -> I.FractionHexadecimal
+      _  -> error $ "literal: base " ++ show b
+literal l = error (show l)
+
+typ :: Config -> Type -> I.QualifiedType
+typ Config { typeMap } (T.Variable n) =
+  get typeMap
   where
-    repr =
-      case b of
-        I.IntBinary      -> HexRepr
-        I.IntOctal       -> OctalRepr
-        I.IntDecimal     -> DecRepr
-        I.IntHexadecimal -> HexRepr
-literal (I.Fraction s f e b) =
-  CFloatConst (CFloat $ mconcat [hstr, istr, dstr, fstr, kstr, estr]) undefNode
-  where
-    hstr, sstr, istr, fstr, dstr, kstr, estr :: String
-    hstr = case b of { I.FractionDecimal -> ""; I.FractionHexadecimal -> "0x" }
-    sstr = (case b of { I.FractionDecimal -> show; I.FractionHexadecimal -> flip showHex "" }) s
-    (istr, fstr) = L.genericSplitAt (L.genericLength sstr - f) sstr
-    dstr = if f == 0 then "" else "."
-    kstr = case b of { I.FractionDecimal -> "e"; I.FractionHexadecimal -> "p" }
-    estr = show e
-literal l                = error $ show l
+    get =
+      case n of
+        "int"   -> I.readCType . C.int
+        "uint"  -> I.readCType . C.uint
+        "byte"  -> I.readCType . C.byte
+        "frac"  -> I.readCType . C.frac
+        "frac2" -> I.readCType . C.frac2
+        _       -> const ([], I.Structure $ identifier n)
+typ c (T.Arrow (T.Arrow1 _ t)) = typ c t
+typ _ t = error $ show t
 
-statement :: I.Statement -> CBlockItem
-statement (I.Return e) = CBlockStmt $ CReturn (Just $ expression e) undefNode
-statement (I.Block ss) = CBlockStmt $ CCompound [] (statement <$> ss) undefNode
-statement (I.DefinitionStatement (I.ExpressionDefinition t qs i ds l)) = CBlockDecl $ valueDeclaration t qs (Just i) ds (Just l)
-statement (I.DefinitionStatement (I.StatementDefinition t qs i ds s)) = CNestedFunDef $ functionDefinition t qs i ds s
-statement s = error $ show s
+deriverRoot :: Config -> Type -> [I.Deriver]
+deriverRoot config (T.Arrow (T.Arrow1 t1 _))       = deriverArrow config True [t1]
+deriverRoot config (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow config True [t1, t2]
+deriverRoot config (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow config True [t1, t2, t3]
+deriverRoot _ _                                    = []
+
+deriver :: Config -> Type -> [I.Deriver]
+deriver config (T.Arrow (T.Arrow1 t1 _))       = deriverArrow config False [t1]
+deriver config (T.Arrow (T.Arrow2 t1 t2 _))    = deriverArrow config False [t1, t2]
+deriver config (T.Arrow (T.Arrow3 t1 t2 t3 _)) = deriverArrow config False [t1, t2, t3]
+deriver _ _                                    = []
+
+deriverArrow :: Config -> Bool -> [Type] -> [I.Deriver]
+deriverArrow config root ts = [I.Pointer if root then [] else [I.Constant], I.Function $ go <$> ts] where go t = (typ config t, [I.Constant], Nothing, deriver config t)

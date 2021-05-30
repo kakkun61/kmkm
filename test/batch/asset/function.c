@@ -16,11 +16,11 @@ int closure1()
 }
 int closure2(int const a)
 {
-  int _l1(int const b)
+  int _l0(int const b)
   {
     return a;
   }
-  return _l1(0);
+  return _l0(0);
 }
 int (* succ2())(int const)
 {
@@ -29,4 +29,12 @@ int (* succ2())(int const)
 int higher1(int (* const a)(int const))
 {
   return a(0);
+}
+int two1()
+{
+  return succ(1);
+}
+int two2()
+{
+  return succ2()(1);
 }
