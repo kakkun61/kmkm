@@ -13,12 +13,13 @@ import           Language.Kmkm.Config           (Config (Config, typeMap))
 import qualified Language.Kmkm.Config           as C
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, Term, Type)
+import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, Procedure, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
 
-import           Data.Text (Text)
-import qualified Data.Text as T
+import qualified Data.List.NonEmpty as N
+import           Data.Text          (Text)
+import qualified Data.Text          as T
 
 convert :: Config -> Module -> I.File
 convert = module'
@@ -71,10 +72,10 @@ member config (S.Definition i cs) =
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
     constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (identifier c) [] $ I.List [I.Expression $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
-      I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [statement]
+      I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [blockItem]
       where
         parameter (i, t) = (typ config t, [I.Constant], Just $ identifier i, [])
-        statement = I.Return $ I.CompoundLiteral structType arguments
+        blockItem = I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
             (1, _:_) -> argument <$> fs
@@ -83,7 +84,7 @@ member config (S.Definition i cs) =
 member config (S.Bind a) = [bind config a]
 
 bind :: Config -> Bind -> I.Element
-bind config (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term v
+bind config (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v
 bind config (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN config i [] v ms
 bind config (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN config i [(i0, t0)] v ms
 bind config (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN config i [(i0, t0), (i1, t1)] v ms
@@ -92,14 +93,14 @@ bind _ a                                                        = error $ show a
 
 bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
 bindTermN config i ps v@(V.TypedTerm _ t) ms =
-  I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.Return (term v)]
+  I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
   where
     parameter (i, t) = (typ config t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
-elementStatement :: I.Element -> I.Statement
-elementStatement (I.Declaration t qs i ds) = I.DeclarationStatement t qs i ds
-elementStatement (I.Definition d)          = I.DefinitionStatement d
-elementStatement (I.TypeDefinition t i)    = I.TypeDefinitionStatement t i
+elementStatement :: I.Element -> I.BlockElement
+elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
+elementStatement (I.Definition d)          = I.BlockDefinition d
+elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
 
 identifier :: Identifier -> I.Identifier
 identifier (UserIdentifier t)     = I.Identifier t
@@ -108,13 +109,14 @@ identifier (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n
 moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = n
 
-term :: Term -> I.Expression
-term (V.TypedTerm (V.Variable i) _)                              = I.Variable $ identifier i
-term (V.TypedTerm (V.Literal l) _)                               = I.Literal $ literal l
-term (V.TypedTerm (V.Application (V.Application0 v)) _)          = I.Call (term v) []
-term (V.TypedTerm (V.Application (V.Application1 v v0)) _)       = I.Call (term v) [term v0]
-term (V.TypedTerm (V.Application (V.Application2 v v0 t1)) _)    = I.Call (term v) $ term <$> [v0, t1]
-term (V.TypedTerm (V.Application (V.Application3 v v0 t1 v2)) _) = I.Call (term v) $ term <$> [v0, t1, v2]
+term :: Config -> Term -> I.Expression
+term _ (V.TypedTerm (V.Variable i) _)                              = I.Variable $ identifier i
+term _ (V.TypedTerm (V.Literal l) _)                               = I.Literal $ literal l
+term config (V.TypedTerm (V.Application (V.Application0 v)) _)          = I.Call (term config v) []
+term config (V.TypedTerm (V.Application (V.Application1 v v0)) _)       = I.Call (term config v) [term config v0]
+term config (V.TypedTerm (V.Application (V.Application2 v v0 t1)) _)    = I.Call (term config v) $ term config <$> [v0, t1]
+term config (V.TypedTerm (V.Application (V.Application3 v v0 t1 v2)) _) = I.Call (term config v) $ term config <$> [v0, t1, v2]
+term config (V.TypedTerm (V.Procedure ps) _) = I.StatementExpression $ I.Block $ procedure config =<< N.toList ps
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =
@@ -132,6 +134,10 @@ literal (V.Fraction s f e b) =
       16 -> I.FractionHexadecimal
       _  -> error $ "literal: base " ++ show b
 literal l = error (show l)
+
+procedure :: Config -> Procedure -> [I.BlockElement ]
+procedure config (V.BindProcedure i v@(V.TypedTerm _ t)) = [I.BlockDeclaration (typ config t) [I.Constant] (Just $ identifier i) [], I.BlockStatement $ I.ExpressionStatement $ I.Assign (identifier i) (term config v)]
+procedure config (V.TermProcedure v) = [I.BlockStatement $ I.ExpressionStatement $ term config v]
 
 typ :: Config -> Type -> I.QualifiedType
 typ Config { typeMap } (T.Variable n) =

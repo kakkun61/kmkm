@@ -8,6 +8,7 @@ module Language.Kmkm.Syntax.Phase1
   , Type
   , Term
   , Term'
+  , Procedure
   , Literal
   , Function
   , Application
@@ -32,6 +33,8 @@ type Type = T.Type 'Curried
 type Term = V.Term 'Curried 'LambdaUnlifted 'Untyped
 
 type Term' = V.Term' 'Curried 'LambdaUnlifted 'Untyped
+
+type Procedure = V.Procedure 'Curried 'LambdaUnlifted 'Untyped
 
 type Literal = V.Literal 'Curried 'LambdaUnlifted 'Untyped
 

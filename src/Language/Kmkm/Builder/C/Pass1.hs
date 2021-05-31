@@ -10,9 +10,10 @@ import qualified Language.Kmkm.Syntax.Phase6 as P6
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
-import           Data.Maybe (mapMaybe)
-import           Data.Set   (Set)
-import qualified Data.Set   as S
+import           Data.List.NonEmpty (NonEmpty ((:|)))
+import           Data.Maybe         (mapMaybe)
+import           Data.Set           (Set)
+import qualified Data.Set           as S
 
 -- XXX: smarter method wanted
 -- It is not necessary to convert all top-level value definitions,
@@ -58,7 +59,19 @@ term tids (V.TypedTerm (V.Application (V.Application3 v v1 v2 v3)) t) =
     v1' = term tids v1
     v2' = term tids v2
     v3' = term tids v3
+term tids (V.TypedTerm (V.Procedure (p:|ps)) t) =
+  let
+    (tids', p') = procedure tids p
+    (_, ps') = foldr go (tids', []) ps
+    go p (tids, ps) =
+      let (tids', p') = procedure tids p
+      in (tids', p':ps)
+  in V.TypedTerm (V.Procedure $ p':|ps') t
 term _ v = v
+
+procedure :: Set Identifier -> P5.Procedure -> (Set Identifier, P6.Procedure)
+procedure tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term tids v)
+procedure tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term tids v)
 
 identifiers :: [P5.Member] -> Set Identifier
 identifiers =

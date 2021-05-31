@@ -21,6 +21,7 @@ data Type c
   = Variable Identifier
   | Application (Type c) (Type c)
   | Arrow (Arrow c)
+  | Procedure (Type c)
   deriving Generic
 
 deriving instance Show (Arrow c) => Show (Type c)

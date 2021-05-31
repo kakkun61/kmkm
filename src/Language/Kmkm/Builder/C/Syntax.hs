@@ -18,6 +18,7 @@ module Language.Kmkm.Builder.C.Syntax
   , IntBase (..)
   , FractionBase (..)
   , ArithmeticExpression (..)
+  , BlockElement (..)
   , Statement (..)
   , Branch (..)
   , readCType
@@ -40,7 +41,7 @@ data Element
 
 data Definition
   = ExpressionDefinition QualifiedType [VariableQualifier] Identifier [Deriver] Initializer
-  | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] [Statement]
+  | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] [BlockElement]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data VariableQualifier
@@ -100,6 +101,8 @@ data Expression
   | CompoundLiteral QualifiedType [Initializer]
   | ArithmeticExpression ArithmeticExpression
   | Call Expression [Expression]
+  | StatementExpression Statement -- ^ GCC extension.
+  | Assign Identifier Expression
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Literal
@@ -120,15 +123,19 @@ data ArithmeticExpression
   | Minus Expression
   deriving (Show, Read, Eq, Ord, Generic)
 
+data BlockElement
+  = BlockStatement Statement
+  | BlockDeclaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
+  | BlockDefinition Definition
+  | BlockTypeDefinition QualifiedType Identifier -- ^ GCC extension.
+  deriving (Show, Read, Eq, Ord, Generic)
+
 data Statement
   = ExpressionStatement Expression
   | Return Expression
   | If Expression Statement (Maybe Statement)
   | Case Expression [Branch]
-  | DeclarationStatement QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
-  | DefinitionStatement Definition
-  | TypeDefinitionStatement QualifiedType Identifier -- ^ GCC extension.
-  | Block [Statement]
+  | Block [BlockElement]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Branch =

@@ -45,7 +45,13 @@ term (V.TypedTerm (V.Application (V.Application2 v0@(V.TypedTerm _ (T.Arrow T.Ar
   pure $ V.TypedTerm (V.Application $ V.Application2 v0 v1 v2) t
 term (V.TypedTerm (V.Application (V.Application3 v0@(V.TypedTerm _ (T.Arrow T.Arrow3 {})) v1 v2 v3)) t) =
   pure $ V.TypedTerm (V.Application $ V.Application3 v0 v1 v2 v3) t
+term (V.TypedTerm (V.Procedure ps) t) =
+  flip V.TypedTerm t . V.Procedure <$> sequence (procedure <$> ps)
 term v = error $ show v
+
+procedure :: P3.Procedure -> Pass P4.Procedure
+procedure (V.BindProcedure i v) = V.BindProcedure i <$> term v
+procedure (V.TermProcedure v)   = V.TermProcedure <$> term v
 
 newIdentifier :: Pass Identifier
 newIdentifier = do

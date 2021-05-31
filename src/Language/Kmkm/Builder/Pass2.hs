@@ -47,6 +47,7 @@ typ :: MonadThrow m => P2.Type -> m P3.Type
 typ (T.Variable i)      = pure $ T.Variable i
 typ (T.Application t s) = T.Application <$> typ t <*> typ s
 typ (T.Arrow a)         = T.Arrow <$> arrow a
+typ (T.Procedure t)     = T.Procedure <$> typ t
 
 term :: MonadThrow m => P2.Term -> m P3.Term
 term (V.TypedTerm (V.Variable i) t) = V.TypedTerm (V.Variable i) <$> typ t
@@ -59,6 +60,8 @@ term (V.TypedTerm (V.Application (V.ApplicationC (V.TypedTerm (V.Application (V.
   V.TypedTerm <$> (V.Application <$> (V.Application2 <$> term i0 <*> term i1 <*> term i2)) <*> typ t
 term (V.TypedTerm (V.Application (V.ApplicationC i0 i1)) t) =
   V.TypedTerm <$> (V.Application <$> (V.Application1 <$> term i0 <*> term i1)) <*> typ t
+term (V.TypedTerm (V.Procedure ps) t) =
+  V.TypedTerm <$> (V.Procedure <$> sequence (procedure <$> ps)) <*> typ t
 
 literal :: MonadThrow m => P2.Literal -> m P3.Literal
 literal (V.Integer v b)      = pure $ V.Integer v b
@@ -71,6 +74,10 @@ arrow (T.ArrowC _ (T.Arrow (T.ArrowC _ (T.Arrow (T.ArrowC _ (T.Arrow T.ArrowC {}
 arrow (T.ArrowC t0 (T.Arrow (T.ArrowC t1 (T.Arrow (T.ArrowC t2 t))))) = T.Arrow3 <$> typ t0 <*> typ t1 <*> typ t2 <*> typ t
 arrow (T.ArrowC t0 (T.Arrow (T.ArrowC t1 t))) = T.Arrow2 <$> typ t0 <*> typ t1 <*> typ t
 arrow (T.ArrowC t0 t) = T.Arrow1 <$> typ t0 <*> typ t
+
+procedure :: MonadThrow m => P2.Procedure -> m P3.Procedure
+procedure (V.BindProcedure i v) = V.BindProcedure i <$> term v
+procedure (V.TermProcedure v)   = V.TermProcedure <$> term v
 
 function :: MonadThrow m => P2.Function -> m P3.Function
 function (V.FunctionC _ _ (V.TypedTerm (V.Literal (V.Function (V.FunctionC _ _ (V.TypedTerm (V.Literal (V.Function (V.FunctionC _ _ (V.TypedTerm (V.Literal V.Function {}) _)))) _)))) _)) =

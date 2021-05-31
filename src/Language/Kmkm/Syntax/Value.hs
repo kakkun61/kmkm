@@ -18,6 +18,7 @@
 module Language.Kmkm.Syntax.Value
   ( Term (..)
   , Term' (..)
+  , Procedure (..)
   , Literal (..)
   , Application (..)
   , Function (..)
@@ -27,9 +28,10 @@ import Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier,
                                   LambdaLifting (LambdaLifted, LambdaUnlifted), Typing (Typed, Untyped))
 import Language.Kmkm.Syntax.Type (Type)
 
-import qualified Data.Kind    as K
-import           Data.Text    (Text)
-import           GHC.Generics (Generic)
+import qualified Data.Kind          as K
+import           Data.List.NonEmpty (NonEmpty)
+import           Data.Text          (Text)
+import           GHC.Generics       (Generic)
 
 type Term :: Currying -> LambdaLifting -> Typing -> K.Type
 data family Term
@@ -66,12 +68,22 @@ data Term' c l t
   = Variable Identifier
   | Literal (Literal c l t)
   | Application (Application c l t)
+  | Procedure (NonEmpty (Procedure c l t))
   deriving Generic
 
-deriving instance (Show (Application c l t), Show (Literal c l t)) => Show (Term' c l t)
-deriving instance (Read (Application c l t), Read (Literal c l t)) => Read (Term' c l t)
-deriving instance (Eq (Application c l t), Eq (Literal c l t)) => Eq (Term' c l t)
-deriving instance (Ord (Application c l t), Ord (Literal c l t)) => Ord (Term' c l t)
+deriving instance (Show (Application c l t), Show (Literal c l t), Show (Procedure c l t)) => Show (Term' c l t)
+deriving instance (Read (Application c l t), Read (Literal c l t), Read (Procedure c l t)) => Read (Term' c l t)
+deriving instance (Eq (Application c l t), Eq (Literal c l t), Eq (Procedure c l t)) => Eq (Term' c l t)
+deriving instance (Ord (Application c l t), Ord (Literal c l t), Ord (Procedure c l t)) => Ord (Term' c l t)
+
+data Procedure c l t
+  = BindProcedure Identifier (Term c l t)
+  | TermProcedure (Term c l t)
+
+deriving instance Show (Term c l t) => Show (Procedure c l t)
+deriving instance Read (Term c l t) => Read (Procedure c l t)
+deriving instance Eq (Term c l t) => Eq (Procedure c l t)
+deriving instance Ord (Term c l t) => Ord (Procedure c l t)
 
 data Literal c l t
   = Integer { value :: Integer, base :: Word }

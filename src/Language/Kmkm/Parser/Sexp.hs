@@ -20,8 +20,8 @@ module Language.Kmkm.Parser.Sexp
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Term,
-                                              TermBind, Type)
+import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Procedure,
+                                              Term, TermBind, Type)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -34,6 +34,8 @@ import qualified Data.Char                  as C
 import           Data.Functor               (($>))
 import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
+import           Data.List.NonEmpty         (NonEmpty)
+import qualified Data.List.NonEmpty         as N
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import qualified Data.Typeable              as Y
@@ -78,6 +80,13 @@ list p =
     P.parens $ do
       void $ P.textSymbol "list"
       P.many p
+
+list1 :: Parser a -> Parser (NonEmpty a)
+list1 p =
+  (<?> "list1") $
+    P.parens $ do
+      void $ P.textSymbol "list"
+      N.fromList <$> P.some p -- never empty list.
 
 member :: Parser Member
 member =
@@ -148,7 +157,8 @@ term =
       P.choice
         [ V.Variable <$> identifier
         , P.try $ V.Literal <$> literal
-        , V.Application <$> application
+        , P.try $ V.Application <$> application
+        , V.Procedure <$> procedures
         ]
 
 literal :: Parser Literal
@@ -167,6 +177,26 @@ application =
     P.parens $ do
       void $ P.textSymbol "apply"
       V.ApplicationC <$> term <*> term
+
+procedures :: Parser (NonEmpty Procedure)
+procedures =
+  (<?> "procedures") $
+    P.parens $ do
+      void $ P.textSymbol "procedure"
+      list1 p
+  where
+    p =
+      (<?> "procedures.p") $
+        P.parens $
+          P.choice
+            [ do
+                void $ P.textSymbol "bind"
+                i <- identifier
+                V.BindProcedure i <$> term
+            , do
+                void $ P.textSymbol "term"
+                V.TermProcedure <$> term
+            ]
 
 integer :: Parser Literal
 integer =
@@ -255,8 +285,9 @@ typ =
   "type" <!> do
     P.choice
       [ T.Variable <$> identifier
-      , T.Arrow <$> arrow
-      , uncurry T.Application <$> typeApplication
+      , P.try $ T.Arrow <$> arrow
+      , P.try $ uncurry T.Application <$> typeApplication
+      , T.Procedure <$> procedure
       ]
 
 arrow :: Parser Arrow
@@ -272,6 +303,13 @@ typeApplication =
     P.parens $ do
       void $ P.textSymbol "apply"
       (,) <$> typ <*> typ
+
+procedure :: Parser Type
+procedure =
+  (<?> "procedure") $
+    P.parens $ do
+      void $ P.textSymbol "procedure"
+      typ
 
 doubleQuotes :: Parser a -> Parser a
 doubleQuotes = (<?> "doubleQuotes") . P.between (void $ P.text "\"") (void $ P.text "\"")
