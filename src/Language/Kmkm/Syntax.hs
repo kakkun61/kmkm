@@ -59,7 +59,7 @@ data instance TermBind c 'LambdaUnlifted 'Typed =
   deriving Generic
 
 data instance TermBind c 'LambdaUnlifted 'Untyped =
-  TermBindUU Identifier (Term c 'LambdaUnlifted 'Untyped) (Type c)
+  TermBindUU Identifier (Term c 'LambdaUnlifted 'Untyped)
   deriving Generic
 
 data instance TermBind c 'LambdaLifted 'Typed

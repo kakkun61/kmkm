@@ -5,12 +5,10 @@
     (bind
       rec0
       rec0
-      (procedure unit)
       (list))
     (bind
       rec1
       (procedure
         (list
           (term rec0)))
-      (procedure unit)
       (list))))

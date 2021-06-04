@@ -1,0 +1,23 @@
+(module
+  dependencies
+  (list
+    (bind
+      a
+      (apply (function x int b) c)
+      (list))
+    (bind
+      b
+      d
+      (list))
+    (bind
+      c
+      (apply (function x int d) e)
+      (list))
+    (bind
+      d
+      0
+      (list))
+    (bind
+      e
+      1
+      (list))))

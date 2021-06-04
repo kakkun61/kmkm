@@ -50,7 +50,8 @@ library
                    Language.Kmkm.Syntax.Phase6
                    Language.Kmkm.Syntax.Type
                    Language.Kmkm.Syntax.Value
-  build-depends: containers,
+  build-depends: algebraic-graphs,
+                 containers,
                  data-default-class,
                  exceptions,
                  megaparsec,
@@ -85,6 +86,7 @@ executable kmkm
                  directory,
                  filepath,
                  optparse-declarative,
+                 safe-exceptions,
                  text,
                  with-utf8
 
