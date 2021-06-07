@@ -71,14 +71,14 @@ term (V.TypedTerm (V.Application (V.Application3 v0 v1 v2 v3)) t) = do
   (v3', ms3) <- term v3
   pure (V.TypedTerm (V.Application (V.Application3 v0' v1' v2' v3')) t, mconcat [ms0, ms1, ms2, ms3])
 term (V.TypedTerm (V.Procedure ps) t) = do
-  (ps', mss) <- N.unzip <$> sequence (procedure <$> ps)
+  (ps', mss) <- N.unzip <$> sequence (procedureStep <$> ps)
   pure (V.TypedTerm (V.Procedure ps') t, mconcat $ N.toList mss)
 
-procedure :: P4.Procedure -> Pass (P5.Procedure, [P5.Member])
-procedure (V.BindProcedure i v) = do
+procedureStep :: P4.ProcedureStep -> Pass (P5.ProcedureStep, [P5.Member])
+procedureStep (V.BindProcedure i v) = do
   (v', ms) <- term v
   pure (V.BindProcedure i v', ms)
-procedure (V.TermProcedure v) = do
+procedureStep (V.TermProcedure v) = do
   (v', ms) <- term v
   pure (V.TermProcedure v', ms)
 

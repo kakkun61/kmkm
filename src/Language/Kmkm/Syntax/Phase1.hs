@@ -8,10 +8,11 @@ module Language.Kmkm.Syntax.Phase1
   , Type
   , Term
   , Term'
-  , Procedure
+  , ProcedureStep
   , Literal
   , Function
   , Application
+  , TypeAnnotation
   , Arrow
   ) where
 
@@ -34,12 +35,14 @@ type Term = V.Term 'Curried 'LambdaUnlifted 'Untyped
 
 type Term' = V.Term' 'Curried 'LambdaUnlifted 'Untyped
 
-type Procedure = V.Procedure 'Curried 'LambdaUnlifted 'Untyped
+type ProcedureStep = V.ProcedureStep 'Curried 'LambdaUnlifted 'Untyped
 
 type Literal = V.Literal 'Curried 'LambdaUnlifted 'Untyped
 
 type Function = V.Function 'Curried 'LambdaUnlifted 'Untyped
 
 type Application = V.Application 'Curried 'LambdaUnlifted 'Untyped
+
+type TypeAnnotation = V.TypeAnnotation 'Curried 'LambdaUnlifted 'Untyped
 
 type Arrow = T.Arrow 'Curried

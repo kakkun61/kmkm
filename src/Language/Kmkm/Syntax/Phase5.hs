@@ -8,7 +8,7 @@ module Language.Kmkm.Syntax.Phase5
   , Type
   , Term
   , Term'
-  , Procedure
+  , ProcedureStep
   , Literal
   , Function
   , Application
@@ -34,7 +34,7 @@ type Term = V.Term 'Uncurried 'LambdaLifted 'Typed
 
 type Term' = V.Term' 'Uncurried 'LambdaLifted 'Typed
 
-type Procedure = V.Procedure 'Uncurried 'LambdaLifted 'Typed
+type ProcedureStep = V.ProcedureStep 'Uncurried 'LambdaLifted 'Typed
 
 type Literal = V.Literal 'Uncurried 'LambdaLifted 'Typed
 

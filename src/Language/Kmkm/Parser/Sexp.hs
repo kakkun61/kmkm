@@ -20,8 +20,8 @@ module Language.Kmkm.Parser.Sexp
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module, Procedure,
-                                              Term, TermBind, Type)
+import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module,
+                                              ProcedureStep, Term, TermBind, Type, TypeAnnotation)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -71,8 +71,7 @@ module' =
   (<?> "module") $
     P.parens $ do
       void $ P.textSymbol "module"
-      n <- moduleName
-      S.Module n <$> list member
+      S.Module <$> moduleName <*> list member
 
 list :: Parser a -> Parser [a]
 list p =
@@ -101,20 +100,14 @@ definition =
   (<?> "definition") $
     P.parens $ do
       void $ P.textSymbol "define"
-      i <- identifier
-      S.Definition i <$> list valueConstructor
+      S.Definition <$> identifier <*> list valueConstructor
 
 valueConstructor :: Parser (Identifier, [(Identifier, Type)])
 valueConstructor =
   "valueConstructor" <!>
     P.choice
-      [ do
-          i <- identifier
-          pure (i, [])
-      , P.parens $ do
-          i <- identifier
-          fs <- list field
-          pure (i, fs)
+      [ flip (,) [] <$> identifier
+      , P.parens $ (,) <$> identifier <*> list field
       ]
 
 field :: Parser (Identifier, Type)
@@ -158,7 +151,8 @@ term =
         [ V.Variable <$> identifier
         , P.try $ V.Literal <$> literal
         , P.try $ V.Application <$> application
-        , V.Procedure <$> procedures
+        , P.try $ V.Procedure <$> procedure
+        , V.TypeAnnotation <$> typeAnnotation
         ]
 
 literal :: Parser Literal
@@ -178,9 +172,9 @@ application =
       void $ P.textSymbol "apply"
       V.ApplicationC <$> term <*> term
 
-procedures :: Parser (NonEmpty Procedure)
-procedures =
-  (<?> "procedures") $
+procedure :: Parser (NonEmpty ProcedureStep)
+procedure =
+  (<?> "procedure") $
     P.parens $ do
       void $ P.textSymbol "procedure"
       list1 p
@@ -191,12 +185,18 @@ procedures =
           P.choice
             [ do
                 void $ P.textSymbol "bind"
-                i <- identifier
-                V.BindProcedure i <$> term
+                V.BindProcedure <$> identifier <*> term
             , do
                 void $ P.textSymbol "term"
                 V.TermProcedure <$> term
             ]
+
+typeAnnotation :: Parser TypeAnnotation
+typeAnnotation =
+  (<?> "typeAnnotation") $
+    P.parens $ do
+      void $ P.textSymbol "type"
+      V.TypeAnnotation' <$> term <*> typ
 
 integer :: Parser Literal
 integer =
@@ -236,13 +236,11 @@ fraction =
               (epos, estr) <-
                 P.option (True, "0") $ do
                   void $ P.text "e"
-                  epos <- sign
-                  (,) epos <$> digits 10
+                  (,) <$> sign <*> digits 10
               pure (fstr, epos, estr)
           , do
               void $ P.text "e"
-              epos <- sign
-              (,,) "" epos <$> digits 10
+              (,,) ""  <$> sign <*> digits 10
           ]
       let
         fractionDigits :: Word
@@ -287,7 +285,7 @@ typ =
       [ T.Variable <$> identifier
       , P.try $ T.Arrow <$> arrow
       , P.try $ uncurry T.Application <$> typeApplication
-      , T.Procedure <$> procedure
+      , T.Procedure <$> procedureStep
       ]
 
 arrow :: Parser Arrow
@@ -304,9 +302,9 @@ typeApplication =
       void $ P.textSymbol "apply"
       (,) <$> typ <*> typ
 
-procedure :: Parser Type
-procedure =
-  (<?> "procedure") $
+procedureStep :: Parser Type
+procedureStep =
+  (<?> "procedureStep") $
     P.parens $ do
       void $ P.textSymbol "procedure"
       typ

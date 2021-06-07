@@ -3,7 +3,7 @@
   (list
     (bind
       a
-      (apply (function x int b) c)
+      (type (apply (function x int b) c) int)
       (list))
     (bind
       b

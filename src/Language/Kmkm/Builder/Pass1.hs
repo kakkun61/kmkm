@@ -34,6 +34,7 @@ import qualified Algebra.Graph.ToGraph                as G
 import qualified Control.Exception                    as E
 import           Control.Monad.Catch                  (MonadThrow (throwM))
 import           Data.Either                          (fromRight)
+import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
@@ -112,7 +113,12 @@ dependency siblings v ms =
     dep siblings (V.UntypedTerm (V.Literal (V.Function (V.FunctionC i _ v)))) = dep (S.delete i siblings) v
     dep _ (V.UntypedTerm (V.Literal _)) = []
     dep siblings (V.UntypedTerm (V.Application (V.ApplicationC v1 v2))) = mconcat $ dep siblings <$> [v1, v2]
-    dep _ (V.UntypedTerm (V.Procedure _)) = undefined
+    dep siblings (V.UntypedTerm (V.Procedure ps)) =
+      fst $ foldl' go ([], siblings) ps
+      where
+        go (is, ss) (V.BindProcedure i v) = (dep ss v ++ is, S.delete i ss)
+        go (is, ss) (V.TermProcedure v)   = (dep ss v ++ is, ss)
+    dep siblings (V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' v _))) = dep siblings v
 
 -- context :: MonadThrow m => [P1.Member] -> m (Map Identifier P1.Type)
 -- context =
@@ -175,8 +181,13 @@ typeOfTerm ctx (V.Procedure (p:|ps)) = do
       (ctx, ps) <- acc
       (ctx', p') <- typeOfProcedure ctx p
       pure (ctx', p':ps)
+typeOfTerm ctx (V.TypeAnnotation (V.TypeAnnotation' (V.UntypedTerm v) t)) = do
+  v'@(V.TypedTerm _ t') <- typeOfTerm ctx v
+  if t == t'
+    then pure v'
+    else throwM $ MismatchException (show t) (show t')
 
-typeOfProcedure :: MonadThrow m => Map Identifier P1.Type -> P1.Procedure -> m (Map Identifier P1.Type, P2.Procedure)
+typeOfProcedure :: MonadThrow m => Map Identifier P1.Type -> P1.ProcedureStep -> m (Map Identifier P1.Type, P2.ProcedureStep)
 typeOfProcedure ctx (V.BindProcedure i (V.UntypedTerm v)) = do
   v'@(V.TypedTerm _ t) <- typeOfTerm ctx v
   let ctx' = M.insert i t ctx

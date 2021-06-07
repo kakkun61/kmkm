@@ -13,7 +13,7 @@ import           Language.Kmkm.Config           (Config (Config, typeMap))
 import qualified Language.Kmkm.Config           as C
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, Procedure, Term, Type)
+import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, ProcedureStep, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
 
@@ -89,7 +89,6 @@ bind config (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN conf
 bind config (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN config i [(i0, t0)] v ms
 bind config (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN config i [(i0, t0), (i1, t1)] v ms
 bind config (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN config i [(i0, t0), (i1, t1), (i2, t2)] v ms
-bind _ a                                                        = error $ show a
 
 bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
 bindTermN config i ps v@(V.TypedTerm _ t) ms =
@@ -116,7 +115,7 @@ term config (V.TypedTerm (V.Application (V.Application0 v)) _)          = I.Call
 term config (V.TypedTerm (V.Application (V.Application1 v v0)) _)       = I.Call (term config v) [term config v0]
 term config (V.TypedTerm (V.Application (V.Application2 v v0 t1)) _)    = I.Call (term config v) $ term config <$> [v0, t1]
 term config (V.TypedTerm (V.Application (V.Application3 v v0 t1 v2)) _) = I.Call (term config v) $ term config <$> [v0, t1, v2]
-term config (V.TypedTerm (V.Procedure ps) _) = I.StatementExpression $ I.Block $ procedure config =<< N.toList ps
+term config (V.TypedTerm (V.Procedure ps) _) = I.StatementExpression $ I.Block $ procedureStep config =<< N.toList ps
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =
@@ -135,9 +134,9 @@ literal (V.Fraction s f e b) =
       _  -> error $ "literal: base " ++ show b
 literal l = error (show l)
 
-procedure :: Config -> Procedure -> [I.BlockElement ]
-procedure config (V.BindProcedure i v@(V.TypedTerm _ t)) = [I.BlockDeclaration (typ config t) [I.Constant] (Just $ identifier i) [], I.BlockStatement $ I.ExpressionStatement $ I.Assign (identifier i) (term config v)]
-procedure config (V.TermProcedure v) = [I.BlockStatement $ I.ExpressionStatement $ term config v]
+procedureStep :: Config -> ProcedureStep -> [I.BlockElement ]
+procedureStep config (V.BindProcedure i v@(V.TypedTerm _ t)) = [I.BlockDeclaration (typ config t) [I.Constant] (Just $ identifier i) [], I.BlockStatement $ I.ExpressionStatement $ I.Assign (identifier i) (term config v)]
+procedureStep config (V.TermProcedure v) = [I.BlockStatement $ I.ExpressionStatement $ term config v]
 
 typ :: Config -> Type -> I.QualifiedType
 typ Config { typeMap } (T.Variable n) =

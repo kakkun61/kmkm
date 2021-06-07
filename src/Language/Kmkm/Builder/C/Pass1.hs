@@ -61,17 +61,17 @@ term tids (V.TypedTerm (V.Application (V.Application3 v v1 v2 v3)) t) =
     v3' = term tids v3
 term tids (V.TypedTerm (V.Procedure (p:|ps)) t) =
   let
-    (tids', p') = procedure tids p
+    (tids', p') = procedureStep tids p
     (_, ps') = foldr go (tids', []) ps
     go p (tids, ps) =
-      let (tids', p') = procedure tids p
+      let (tids', p') = procedureStep tids p
       in (tids', p':ps)
   in V.TypedTerm (V.Procedure $ p':|ps') t
 term _ v = v
 
-procedure :: Set Identifier -> P5.Procedure -> (Set Identifier, P6.Procedure)
-procedure tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term tids v)
-procedure tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term tids v)
+procedureStep :: Set Identifier -> P5.ProcedureStep -> (Set Identifier, P6.ProcedureStep)
+procedureStep tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term tids v)
+procedureStep tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term tids v)
 
 identifiers :: [P5.Member] -> Set Identifier
 identifiers =

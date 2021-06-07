@@ -18,15 +18,16 @@
 module Language.Kmkm.Syntax.Value
   ( Term (..)
   , Term' (..)
-  , Procedure (..)
+  , ProcedureStep (..)
   , Literal (..)
   , Application (..)
   , Function (..)
+  , TypeAnnotation (..)
   ) where
 
 import Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier,
                                   LambdaLifting (LambdaLifted, LambdaUnlifted), Typing (Typed, Untyped))
-import Language.Kmkm.Syntax.Type (Type)
+import Language.Kmkm.Syntax.Type (Arrow, Type)
 
 import qualified Data.Kind          as K
 import           Data.List.NonEmpty (NonEmpty)
@@ -44,20 +45,20 @@ newtype instance Term c l 'Untyped =
   UntypedTerm (Term' c l 'Untyped)
   deriving Generic
 
-deriving instance Show (Function 'Curried l 'Typed) => Show (Term 'Curried l 'Typed)
-deriving instance Read (Function 'Curried l 'Typed) => Read (Term 'Curried l 'Typed)
-deriving instance Eq (Function 'Curried l 'Typed) => Eq (Term 'Curried l 'Typed)
-deriving instance Ord (Function 'Curried l 'Typed) => Ord (Term 'Curried l 'Typed)
+deriving instance (Show (Function 'Curried l 'Typed), Show (TypeAnnotation 'Curried l 'Typed)) => Show (Term 'Curried l 'Typed)
+deriving instance (Read (Function 'Curried l 'Typed), Read (TypeAnnotation 'Curried l 'Typed)) => Read (Term 'Curried l 'Typed)
+deriving instance (Eq (Function 'Curried l 'Typed), Eq (TypeAnnotation 'Curried l 'Typed)) => Eq (Term 'Curried l 'Typed)
+deriving instance (Ord (Function 'Curried l 'Typed), Ord (TypeAnnotation 'Curried l 'Typed)) => Ord (Term 'Curried l 'Typed)
 
 deriving instance Show (Function 'Curried l 'Untyped) => Show (Term 'Curried l 'Untyped)
 deriving instance Read (Function 'Curried l 'Untyped) => Read (Term 'Curried l 'Untyped)
 deriving instance Eq (Function 'Curried l 'Untyped) => Eq (Term 'Curried l 'Untyped)
 deriving instance Ord (Function 'Curried l 'Untyped) => Ord (Term 'Curried l 'Untyped)
 
-deriving instance Show (Function 'Uncurried l 'Typed) => Show (Term 'Uncurried l 'Typed)
-deriving instance Read (Function 'Uncurried l 'Typed) => Read (Term 'Uncurried l 'Typed)
-deriving instance Eq (Function 'Uncurried l 'Typed) => Eq (Term 'Uncurried l 'Typed)
-deriving instance Ord (Function 'Uncurried l 'Typed) => Ord (Term 'Uncurried l 'Typed)
+deriving instance (Show (Function 'Uncurried l 'Typed), Show (TypeAnnotation 'Uncurried l 'Typed)) => Show (Term 'Uncurried l 'Typed)
+deriving instance (Read (Function 'Uncurried l 'Typed), Read (TypeAnnotation 'Uncurried l 'Typed)) => Read (Term 'Uncurried l 'Typed)
+deriving instance (Eq (Function 'Uncurried l 'Typed), Eq (TypeAnnotation 'Uncurried l 'Typed)) => Eq (Term 'Uncurried l 'Typed)
+deriving instance (Ord (Function 'Uncurried l 'Typed), Ord (TypeAnnotation 'Uncurried l 'Typed)) => Ord (Term 'Uncurried l 'Typed)
 
 deriving instance Show (Function 'Uncurried l 'Untyped) => Show (Term 'Uncurried l 'Untyped)
 deriving instance Read (Function 'Uncurried l 'Untyped) => Read (Term 'Uncurried l 'Untyped)
@@ -68,22 +69,36 @@ data Term' c l t
   = Variable Identifier
   | Literal (Literal c l t)
   | Application (Application c l t)
-  | Procedure (NonEmpty (Procedure c l t))
+  | Procedure (NonEmpty (ProcedureStep c l t))
+  | TypeAnnotation (TypeAnnotation c l t)
   deriving Generic
 
-deriving instance (Show (Application c l t), Show (Literal c l t), Show (Procedure c l t)) => Show (Term' c l t)
-deriving instance (Read (Application c l t), Read (Literal c l t), Read (Procedure c l t)) => Read (Term' c l t)
-deriving instance (Eq (Application c l t), Eq (Literal c l t), Eq (Procedure c l t)) => Eq (Term' c l t)
-deriving instance (Ord (Application c l t), Ord (Literal c l t), Ord (Procedure c l t)) => Ord (Term' c l t)
+deriving instance (Show (Application c l t), Show (Literal c l t), Show (ProcedureStep c l t), Show (TypeAnnotation c l t)) => Show (Term' c l t)
+deriving instance (Read (Application c l t), Read (Literal c l t), Read (ProcedureStep c l t), Read (TypeAnnotation c l t)) => Read (Term' c l t)
+deriving instance (Eq (Application c l t), Eq (Literal c l t), Eq (ProcedureStep c l t), Eq (TypeAnnotation c l t)) => Eq (Term' c l t)
+deriving instance (Ord (Application c l t), Ord (Literal c l t), Ord (ProcedureStep c l t), Ord (TypeAnnotation c l t)) => Ord (Term' c l t)
 
-data Procedure c l t
+type TypeAnnotation :: Currying -> LambdaLifting -> Typing -> K.Type
+data family TypeAnnotation c l t
+
+data instance TypeAnnotation c l 'Untyped =
+  TypeAnnotation' (Term c l 'Untyped) (Type c)
+
+data instance TypeAnnotation c l 'Typed
+
+deriving instance (Show (Arrow c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Untyped)
+deriving instance (Read (Arrow c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Untyped)
+deriving instance (Eq (Arrow c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Untyped)
+deriving instance (Ord (Arrow c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Untyped)
+
+data ProcedureStep c l t
   = BindProcedure Identifier (Term c l t)
   | TermProcedure (Term c l t)
 
-deriving instance Show (Term c l t) => Show (Procedure c l t)
-deriving instance Read (Term c l t) => Read (Procedure c l t)
-deriving instance Eq (Term c l t) => Eq (Procedure c l t)
-deriving instance Ord (Term c l t) => Ord (Procedure c l t)
+deriving instance Show (Term c l t) => Show (ProcedureStep c l t)
+deriving instance Read (Term c l t) => Read (ProcedureStep c l t)
+deriving instance Eq (Term c l t) => Eq (ProcedureStep c l t)
+deriving instance Ord (Term c l t) => Ord (ProcedureStep c l t)
 
 data Literal c l t
   = Integer { value :: Integer, base :: Word }
