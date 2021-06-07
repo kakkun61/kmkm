@@ -4,7 +4,7 @@
     (define unit (list unit))
     (bind
       rec0
-      rec0
+      (type rec0 unit)
       (list))
     (bind
       rec1

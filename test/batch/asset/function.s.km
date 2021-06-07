@@ -3,7 +3,7 @@
   (list
     (bind
       add
-      (function a int (function b int (apply (apply add a) b)))
+      (type (function a int (function b int (apply (apply add a) b))) (function int (function int int)))
       (list))
     (bind
       succ

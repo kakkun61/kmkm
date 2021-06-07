@@ -66,11 +66,16 @@ typeCheck (S.Module i ms) = do
           [k] ->
             case M.lookup k siblings of
               Nothing -> X.unreachable
-              Just (V.UntypedTerm v) -> do
+              Just v -> do
                 acc' <- acc
-                t <- typeOfTerm (typ <$> acc') v
+                let
+                  ctx =
+                    case v of
+                      V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' _ t)) -> M.insert k t $ typ <$> acc'
+                      _                                                        -> typ <$> acc'
+                t <- typeOfTerm ctx v
                 pure $ M.insert k t acc'
-          _ -> error "recursion found. not yet implemented."
+          _ -> error "mutual recursion found. not yet implemented." -- TODO ここやる ↑ 上とマージ
       typ :: P2.Term -> P2.Type
       typ (V.TypedTerm _ t) = t
     in foldr go (pure M.empty) orderedIdentifiers
@@ -82,9 +87,6 @@ typeCheck (S.Module i ms) = do
             S.Definition i cs -> S.Definition i cs
             S.Bind (S.TypeBind i t) -> S.Bind $ S.TypeBind i t
             S.Bind (S.TermBind (S.TermBindUU i _) []) -> S.Bind $ S.TermBind (S.TermBindUT i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) []
-  -- ctx <- context ms
-  -- ms' <- typeCheck' ctx ms
-  -- pure $ S.Module i ms'
 
 rootIdentifiers :: [P1.Member] -> Map Identifier P1.Term
 rootIdentifiers ms =
@@ -150,18 +152,18 @@ dependency siblings v ms =
 --         then pure $ S.Bind $ S.TermBind (S.TermBindUT i v') ms'
 --         else throwM $ MismatchException (show t) $ show t'
 
-typeOfTerm :: MonadThrow m => Map Identifier P1.Type -> P1.Term' -> m P2.Term
-typeOfTerm ctx (V.Variable i) =
+typeOfTerm :: MonadThrow m => Map Identifier P1.Type -> P1.Term -> m P2.Term
+typeOfTerm ctx (V.UntypedTerm (V.Variable i)) =
   case M.lookup i ctx of
     Nothing -> throwM $ NotFoundException $ show i
     Just t  -> pure $ V.TypedTerm (V.Variable i) t
-typeOfTerm _ (V.Literal (V.Integer v b)) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
-typeOfTerm _ (V.Literal (V.Fraction s d e b)) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
-typeOfTerm _ (V.Literal (V.String t)) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
-typeOfTerm ctx (V.Literal (V.Function (V.FunctionC i t (V.UntypedTerm v)))) = do
+typeOfTerm _ (V.UntypedTerm (V.Literal (V.Integer v b))) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
+typeOfTerm _ (V.UntypedTerm (V.Literal (V.Fraction s d e b))) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
+typeOfTerm _ (V.UntypedTerm (V.Literal (V.String t))) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
+typeOfTerm ctx (V.UntypedTerm (V.Literal (V.Function (V.FunctionC i t v)))) = do
   v'@(V.TypedTerm _ t') <- typeOfTerm (M.insert i t ctx) v
   pure $ V.TypedTerm (V.Literal (V.Function (V.FunctionC i t v'))) (T.Arrow $ T.ArrowC t t')
-typeOfTerm ctx (V.Application (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm v1))) = do
+typeOfTerm ctx (V.UntypedTerm (V.Application (V.ApplicationC v0 v1))) = do
   v0'@(V.TypedTerm _ t0) <- typeOfTerm ctx v0
   v1'@(V.TypedTerm _ t1) <- typeOfTerm ctx v1
   case t0 of
@@ -169,7 +171,7 @@ typeOfTerm ctx (V.Application (V.ApplicationC (V.UntypedTerm v0) (V.UntypedTerm 
       | t1 == t00 -> pure $ V.TypedTerm (V.Application (V.ApplicationC v0' v1')) t01
       | otherwise -> throwM $ MismatchException (show t00) $ show t1
     _ -> throwM $ MismatchException "arrow" $ show t0
-typeOfTerm ctx (V.Procedure (p:|ps)) = do
+typeOfTerm ctx (V.UntypedTerm (V.Procedure (p:|ps))) = do
   (ctx', p') <- typeOfProcedure ctx p
   (_, ps') <- foldr go (pure (ctx', [])) ps
   let ps'' = p':|ps'
@@ -181,18 +183,18 @@ typeOfTerm ctx (V.Procedure (p:|ps)) = do
       (ctx, ps) <- acc
       (ctx', p') <- typeOfProcedure ctx p
       pure (ctx', p':ps)
-typeOfTerm ctx (V.TypeAnnotation (V.TypeAnnotation' (V.UntypedTerm v) t)) = do
+typeOfTerm ctx (V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' v t))) = do
   v'@(V.TypedTerm _ t') <- typeOfTerm ctx v
   if t == t'
     then pure v'
     else throwM $ MismatchException (show t) (show t')
 
 typeOfProcedure :: MonadThrow m => Map Identifier P1.Type -> P1.ProcedureStep -> m (Map Identifier P1.Type, P2.ProcedureStep)
-typeOfProcedure ctx (V.BindProcedure i (V.UntypedTerm v)) = do
+typeOfProcedure ctx (V.BindProcedure i v) = do
   v'@(V.TypedTerm _ t) <- typeOfTerm ctx v
   let ctx' = M.insert i t ctx
   pure (ctx', V.BindProcedure i v')
-typeOfProcedure ctx (V.TermProcedure (V.UntypedTerm v)) = do
+typeOfProcedure ctx (V.TermProcedure v) = do
   v' <- typeOfTerm ctx v
   pure (ctx, V.TermProcedure v')
 
