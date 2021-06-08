@@ -15,7 +15,7 @@ module Language.Kmkm.Syntax
   ) where
 
 import Language.Kmkm.Syntax.Base  (Currying, Identifier, LambdaLifting (LambdaLifted, LambdaUnlifted), ModuleName,
-                                   Typing (Typed, Untyped))
+                                   Typing)
 import Language.Kmkm.Syntax.Type  (Type)
 import Language.Kmkm.Syntax.Value (Term)
 
@@ -54,32 +54,23 @@ deriving instance (Ord (Term c l t), Ord (Type c), Ord (TermBind c l t)) => Ord 
 type TermBind :: Currying -> LambdaLifting -> Typing -> K.Type
 data family TermBind
 
-data instance TermBind c 'LambdaUnlifted 'Typed =
-  TermBindUT Identifier (Term c 'LambdaUnlifted 'Typed)
+data instance TermBind c 'LambdaUnlifted t =
+  TermBindU Identifier (Term c 'LambdaUnlifted t)
   deriving Generic
 
-data instance TermBind c 'LambdaUnlifted 'Untyped =
-  TermBindUU Identifier (Term c 'LambdaUnlifted 'Untyped)
-  deriving Generic
+data instance TermBind c 'LambdaLifted t
+  = TermBindV Identifier (Term c 'LambdaLifted t)
+  | TermBind0 Identifier (Term c 'LambdaLifted t)
+  | TermBind1 Identifier Identifier (Type c) (Term c 'LambdaLifted t)
+  | TermBind2 Identifier Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted t)
+  | TermBind3 Identifier Identifier (Type c) Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted t)
 
-data instance TermBind c 'LambdaLifted 'Typed
-  = TermBindV Identifier (Term c 'LambdaLifted 'Typed)
-  | TermBind0 Identifier (Term c 'LambdaLifted 'Typed)
-  | TermBind1 Identifier Identifier (Type c) (Term c 'LambdaLifted 'Typed)
-  | TermBind2 Identifier Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted 'Typed)
-  | TermBind3 Identifier Identifier (Type c) Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted 'Typed)
+deriving instance (Show (Term c 'LambdaUnlifted t), Show (Type c)) => Show (TermBind c 'LambdaUnlifted t)
+deriving instance (Read (Term c 'LambdaUnlifted t), Read (Type c)) => Read (TermBind c 'LambdaUnlifted t)
+deriving instance (Eq (Term c 'LambdaUnlifted t), Eq (Type c)) => Eq (TermBind c 'LambdaUnlifted t)
+deriving instance (Ord (Term c 'LambdaUnlifted t), Ord (Type c)) => Ord (TermBind c 'LambdaUnlifted t)
 
-deriving instance (Show (Term c 'LambdaUnlifted 'Typed), Show (Type c)) => Show (TermBind c 'LambdaUnlifted 'Typed)
-deriving instance (Read (Term c 'LambdaUnlifted 'Typed), Read (Type c)) => Read (TermBind c 'LambdaUnlifted 'Typed)
-deriving instance (Eq (Term c 'LambdaUnlifted 'Typed), Eq (Type c)) => Eq (TermBind c 'LambdaUnlifted 'Typed)
-deriving instance (Ord (Term c 'LambdaUnlifted 'Typed), Ord (Type c)) => Ord (TermBind c 'LambdaUnlifted 'Typed)
-
-deriving instance (Show (Term c 'LambdaUnlifted 'Untyped), Show (Type c)) => Show (TermBind c 'LambdaUnlifted 'Untyped)
-deriving instance (Read (Term c 'LambdaUnlifted 'Untyped), Read (Type c)) => Read (TermBind c 'LambdaUnlifted 'Untyped)
-deriving instance (Eq (Term c 'LambdaUnlifted 'Untyped), Eq (Type c)) => Eq (TermBind c 'LambdaUnlifted 'Untyped)
-deriving instance (Ord (Term c 'LambdaUnlifted 'Untyped), Ord (Type c)) => Ord (TermBind c 'LambdaUnlifted 'Untyped)
-
-deriving instance (Show (Term c 'LambdaLifted 'Typed), Show (Type c)) => Show (TermBind c 'LambdaLifted 'Typed)
-deriving instance (Read (Term c 'LambdaLifted 'Typed), Read (Type c)) => Read (TermBind c 'LambdaLifted 'Typed)
-deriving instance (Eq (Term c 'LambdaLifted 'Typed), Eq (Type c)) => Eq (TermBind c 'LambdaLifted 'Typed)
-deriving instance (Ord (Term c 'LambdaLifted 'Typed), Ord (Type c)) => Ord (TermBind c 'LambdaLifted 'Typed)
+deriving instance (Show (Term c 'LambdaLifted t), Show (Type c)) => Show (TermBind c 'LambdaLifted t)
+deriving instance (Read (Term c 'LambdaLifted t), Read (Type c)) => Read (TermBind c 'LambdaLifted t)
+deriving instance (Eq (Term c 'LambdaLifted t), Eq (Type c)) => Eq (TermBind c 'LambdaLifted t)
+deriving instance (Ord (Term c 'LambdaLifted t), Ord (Type c)) => Ord (TermBind c 'LambdaLifted t)

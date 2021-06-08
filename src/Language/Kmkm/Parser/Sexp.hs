@@ -125,7 +125,7 @@ bind =
         ]
 
 termBind :: Identifier -> Parser TermBind
-termBind i = (S.TermBindUU i <$> term) <?> "termBind"
+termBind i = (S.TermBindU i <$> term) <?> "termBind"
 
 identifier :: Parser Identifier
 identifier =

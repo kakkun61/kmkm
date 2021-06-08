@@ -27,11 +27,11 @@ member (S.Bind b)        = S.Bind <$> bind b
 
 bind :: P3.Bind -> Pass P4.Bind
 bind t@S.TypeBind {} = pure t
-bind (S.TermBind (S.TermBindUT i v) ms) =
+bind (S.TermBind (S.TermBindU i v) ms) =
   scope $ do
     v' <- term v
     ms' <- sequence $ member <$> ms
-    pure $ S.TermBind (S.TermBindUT i v') ms'
+    pure $ S.TermBind (S.TermBindU i v') ms'
 
 term :: P3.Term -> Pass P4.Term
 -- 1-apply, 2-function → 1-closure

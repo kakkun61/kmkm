@@ -35,16 +35,16 @@ bind (S.TermBind b ms) =
     pure $ S.TermBind b (ms' ++ ms'')
 
 termBind :: P4.TermBind -> Pass (P5.TermBind, [P5.Member])
-termBind (S.TermBindUT i (V.TypedTerm (V.Literal (V.Function (V.Function1 i0 t0 v))) _)) = do
+termBind (S.TermBindU i (V.TypedTerm (V.Literal (V.Function (V.Function1 i0 t0 v))) _)) = do
   (v', ms) <- term v
   pure (S.TermBind1 i i0 t0 v', ms)
-termBind (S.TermBindUT i (V.TypedTerm (V.Literal (V.Function (V.Function2 i0 t0 i1 t1 v))) _)) = do
+termBind (S.TermBindU i (V.TypedTerm (V.Literal (V.Function (V.Function2 i0 t0 i1 t1 v))) _)) = do
   (v', ms) <- term v
   pure (S.TermBind2 i i0 t0 i1 t1 v', ms)
-termBind (S.TermBindUT i (V.TypedTerm (V.Literal (V.Function (V.Function3 i0 t0 i1 t1 i2 t2 v))) _)) = do
+termBind (S.TermBindU i (V.TypedTerm (V.Literal (V.Function (V.Function3 i0 t0 i1 t1 i2 t2 v))) _)) = do
   (v', ms) <- term v
   pure (S.TermBind3 i i0 t0 i1 t1 i2 t2 v', ms)
-termBind (S.TermBindUT i v) = do
+termBind (S.TermBindU i v) = do
   (v', ms) <- term v
   pure (S.TermBindV i v', ms)
 

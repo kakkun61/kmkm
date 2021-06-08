@@ -15,14 +15,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck (Module "" [Bind $ TermBind (TermBindUU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
+          typeCheck (Module "" [Bind $ TermBind (TermBindU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
             `shouldReturn`
-              Module "" [Bind $ TermBind (TermBindUT "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
+              Module "" [Bind $ TermBind (TermBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
 
         it "0x10" $ do
-          typeCheck (Module "" [Bind $ TermBind (TermBindUU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
+          typeCheck (Module "" [Bind $ TermBind (TermBindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
             `shouldReturn`
-              Module "" [Bind $ TermBind (TermBindUT "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
+              Module "" [Bind $ TermBind (TermBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
 
     describe "application" $ do
       describe "succ" $ do
@@ -33,7 +33,7 @@ spec = do
                 ""
                 [ Bind $
                     TermBind
-                      ( TermBindUU
+                      ( TermBindU
                           "succ"
                           $ UntypedTerm $
                               TypeAnnotation $
@@ -59,7 +59,7 @@ spec = do
                 ""
                 [ Bind $
                     TermBind
-                      ( TermBindUT "succ" $
+                      ( TermBindU "succ" $
                           TypedTerm
                             ( Literal $
                                 Function $
@@ -87,7 +87,7 @@ spec = do
                 ""
                 [ Bind $
                     TermBind
-                      ( TermBindUU
+                      ( TermBindU
                           "succ"
                           $ UntypedTerm $
                               TypeAnnotation $

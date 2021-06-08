@@ -40,8 +40,8 @@ member (S.Definition i cs) =
 member (S.Bind b) = S.Bind <$> bind b
 
 bind :: MonadThrow m => P2.Bind -> m P3.Bind
-bind (S.TypeBind i t)                   = S.TypeBind i <$> typ t
-bind (S.TermBind (S.TermBindUT i v) ms) = S.TermBind <$> (S.TermBindUT i <$> term v) <*> sequence (member <$> ms)
+bind (S.TypeBind i t)                  = S.TypeBind i <$> typ t
+bind (S.TermBind (S.TermBindU i v) ms) = S.TermBind <$> (S.TermBindU i <$> term v) <*> sequence (member <$> ms)
 
 typ :: MonadThrow m => P2.Type -> m P3.Type
 typ (T.Variable i)      = pure $ T.Variable i
