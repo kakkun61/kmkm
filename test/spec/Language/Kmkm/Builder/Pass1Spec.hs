@@ -15,12 +15,12 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck (Module "" [Bind $ TermBind (TermBindUU "ten" (UntypedTerm $ Literal $ Integer 10 10) (T.Variable "int")) []])
+          typeCheck (Module "" [Bind $ TermBind (TermBindUU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
             `shouldReturn`
               Module "" [Bind $ TermBind (TermBindUT "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
 
         it "0x10" $ do
-          typeCheck (Module "" [Bind $ TermBind (TermBindUU "sixteen" (UntypedTerm $ Literal $ Integer 16 16) (T.Variable "int")) []])
+          typeCheck (Module "" [Bind $ TermBind (TermBindUU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
             `shouldReturn`
               Module "" [Bind $ TermBind (TermBindUT "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
 
@@ -35,20 +35,22 @@ spec = do
                     TermBind
                       ( TermBindUU
                           "succ"
-                          ( UntypedTerm $
-                              Literal $
-                                Function $
-                                  FunctionC
-                                    "a"
-                                    (T.Variable "int")
-                                    ( UntypedTerm $
-                                        Application $
-                                          ApplicationC
-                                            (UntypedTerm $ Variable "succ")
-                                            (UntypedTerm $ Variable "a")
-                                    )
-                          )
-                          (T.Arrow $ T.ArrowC (T.Variable "int") (T.Variable "int"))
+                          $ UntypedTerm $
+                              TypeAnnotation $
+                                TypeAnnotation'
+                                  ( UntypedTerm $
+                                      Literal $
+                                          Function $
+                                            FunctionC
+                                              "a"
+                                              (T.Variable "int")
+                                              $ UntypedTerm $
+                                                  Application $
+                                                    ApplicationC
+                                                      (UntypedTerm $ Variable "succ")
+                                                      (UntypedTerm $ Variable "a")
+                                  )
+                                  $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]
@@ -57,24 +59,22 @@ spec = do
                 ""
                 [ Bind $
                     TermBind
-                      (
-                        TermBindUT "succ" $
+                      ( TermBindUT "succ" $
                           TypedTerm
                             ( Literal $
                                 Function $
                                   FunctionC
                                     "a"
                                     (T.Variable "int")
-                                    ( TypedTerm
+                                    $ TypedTerm
                                         (Application $
                                           ApplicationC
                                             (TypedTerm (Variable "succ") (T.Arrow $ T.ArrowC (T.Variable "int") (T.Variable "int")))
                                             (TypedTerm (Variable "a") (T.Variable "int"))
                                         )
-                                        (T.Variable "int")
-                                    )
+                                        $ T.Variable "int"
                             )
-                            (T.Arrow $ T.ArrowC (T.Variable "int") (T.Variable "int"))
+                            $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]
@@ -89,15 +89,18 @@ spec = do
                     TermBind
                       ( TermBindUU
                           "succ"
-                          (UntypedTerm $
-                            Literal $
-                              Function $
-                                FunctionC
-                                  "a"
-                                  (T.Variable "int")
-                                  (UntypedTerm $ Variable "succ")
-                          )
-                          (T.Arrow $ T.ArrowC (T.Variable "int") (T.Variable "int"))
+                          $ UntypedTerm $
+                              TypeAnnotation $
+                                TypeAnnotation'
+                                  ( UntypedTerm $
+                                      Literal $
+                                        Function $
+                                          FunctionC
+                                            "a"
+                                            (T.Variable "int")
+                                            (UntypedTerm $ Variable "succ")
+                                  )
+                                  $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]
