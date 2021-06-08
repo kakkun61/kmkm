@@ -91,6 +91,11 @@ deriving instance (Read (Arrow c), Read (Term c l 'Untyped)) => Read (TypeAnnota
 deriving instance (Eq (Arrow c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Untyped)
 deriving instance (Ord (Arrow c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Untyped)
 
+deriving instance (Show (Arrow c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Typed)
+deriving instance (Read (Arrow c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Typed)
+deriving instance (Eq (Arrow c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Typed)
+deriving instance (Ord (Arrow c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Typed)
+
 data ProcedureStep c l t
   = BindProcedure Identifier (Term c l t)
   | TermProcedure (Term c l t)

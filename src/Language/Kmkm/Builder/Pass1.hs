@@ -48,7 +48,10 @@ import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
 typeCheck :: (MonadThrow m, MonadCatch m) => P1.Module -> m P2.Module
-typeCheck (S.Module i ms) = do
+typeCheck (S.Module i ms) = S.Module i <$> members ms
+
+members :: (MonadThrow m, MonadCatch m) => [P1.Member] -> m [P2.Member]
+members ms = do
   let
     siblings = rootIdentifiers ms
     dependencies =
@@ -85,14 +88,11 @@ typeCheck (S.Module i ms) = do
       typ :: P2.Term -> P2.Type
       typ (V.TypedTerm _ t) = t
     in foldr go (pure M.empty) orderedIdentifiers
-  pure $
-    S.Module
-      i
-      $ (<$> ms) $ \m ->
-          case m of
-            S.Definition i cs -> S.Definition i cs
-            S.Bind (S.TypeBind i t) -> S.Bind $ S.TypeBind i t
-            S.Bind (S.TermBind (S.TermBindUU i _) []) -> S.Bind $ S.TermBind (S.TermBindUT i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) []
+  let
+    go (S.Definition i cs)                         = pure $ S.Definition i cs
+    go (S.Bind (S.TypeBind i t))                   = pure $ S.Bind $ S.TypeBind i t
+    go (S.Bind (S.TermBind (S.TermBindUU i _) ms)) = S.Bind . S.TermBind (S.TermBindUT i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) <$> members ms
+  sequence $ go <$> ms
 
 rootIdentifiers :: [P1.Member] -> Map Identifier P1.Term
 rootIdentifiers ms =

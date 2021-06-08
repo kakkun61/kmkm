@@ -62,6 +62,7 @@ term (V.TypedTerm (V.Application (V.ApplicationC i0 i1)) t) =
   V.TypedTerm <$> (V.Application <$> (V.Application1 <$> term i0 <*> term i1)) <*> typ t
 term (V.TypedTerm (V.Procedure ps) t) =
   V.TypedTerm <$> (V.Procedure <$> sequence (procedureStep <$> ps)) <*> typ t
+term (V.TypedTerm (V.TypeAnnotation _) _) = X.unreachable
 
 literal :: MonadThrow m => P2.Literal -> m P3.Literal
 literal (V.Integer v b)      = pure $ V.Integer v b

@@ -3,6 +3,7 @@ module Language.Kmkm.Builder.Pass4
   ( lambdaLifting
   ) where
 
+import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (SystemIdentifier))
 import qualified Language.Kmkm.Syntax.Phase4 as P4
@@ -73,6 +74,7 @@ term (V.TypedTerm (V.Application (V.Application3 v0 v1 v2 v3)) t) = do
 term (V.TypedTerm (V.Procedure ps) t) = do
   (ps', mss) <- N.unzip <$> sequence (procedureStep <$> ps)
   pure (V.TypedTerm (V.Procedure ps') t, mconcat $ N.toList mss)
+term (V.TypedTerm V.TypeAnnotation {} _) = X.unreachable
 
 procedureStep :: P4.ProcedureStep -> Pass (P5.ProcedureStep, [P5.Member])
 procedureStep (V.BindProcedure i v) = do

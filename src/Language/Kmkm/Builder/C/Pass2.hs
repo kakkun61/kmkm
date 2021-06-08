@@ -11,6 +11,7 @@ module Language.Kmkm.Builder.C.Pass2
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import           Language.Kmkm.Config           (Config (Config, typeMap))
 import qualified Language.Kmkm.Config           as C
+import qualified Language.Kmkm.Exception        as X
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, ProcedureStep, Term, Type)
@@ -89,6 +90,7 @@ bind config (S.TermBind (S.TermBind0 i v) ms)                   = bindTermN conf
 bind config (S.TermBind (S.TermBind1 i i0 t0 v) ms)             = bindTermN config i [(i0, t0)] v ms
 bind config (S.TermBind (S.TermBind2 i i0 t0 i1 t1 v) ms)       = bindTermN config i [(i0, t0), (i1, t1)] v ms
 bind config (S.TermBind (S.TermBind3 i i0 t0 i1 t1 i2 t2 v) ms) = bindTermN config i [(i0, t0), (i1, t1), (i2, t2)] v ms
+bind config (S.TypeBind i t)                                    = I.TypeDefinition (typ config t) $ identifier i
 
 bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
 bindTermN config i ps v@(V.TypedTerm _ t) ms =
@@ -109,13 +111,14 @@ moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = n
 
 term :: Config -> Term -> I.Expression
-term _ (V.TypedTerm (V.Variable i) _)                              = I.Variable $ identifier i
-term _ (V.TypedTerm (V.Literal l) _)                               = I.Literal $ literal l
+term _ (V.TypedTerm (V.Variable i) _)                                   = I.Variable $ identifier i
+term _ (V.TypedTerm (V.Literal l) _)                                    = I.Literal $ literal l
 term config (V.TypedTerm (V.Application (V.Application0 v)) _)          = I.Call (term config v) []
 term config (V.TypedTerm (V.Application (V.Application1 v v0)) _)       = I.Call (term config v) [term config v0]
 term config (V.TypedTerm (V.Application (V.Application2 v v0 t1)) _)    = I.Call (term config v) $ term config <$> [v0, t1]
 term config (V.TypedTerm (V.Application (V.Application3 v v0 t1 v2)) _) = I.Call (term config v) $ term config <$> [v0, t1, v2]
-term config (V.TypedTerm (V.Procedure ps) _) = I.StatementExpression $ I.Block $ procedureStep config =<< N.toList ps
+term config (V.TypedTerm (V.Procedure ps) _)                            = I.StatementExpression $ I.Block $ procedureStep config =<< N.toList ps
+term _ (V.TypedTerm (V.TypeAnnotation _) _)                             = X.unreachable
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =

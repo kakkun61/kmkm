@@ -34,19 +34,32 @@ bind (S.TermBind (S.TermBindUT i v) ms) =
     pure $ S.TermBind (S.TermBindUT i v') ms'
 
 term :: P3.Term -> Pass P4.Term
-term v@(V.TypedTerm V.Variable {} _) = pure v
-term v@(V.TypedTerm V.Literal {} _) = pure v
-term (V.TypedTerm (V.Application (V.Application1 v0@(V.TypedTerm _ (T.Arrow T.Arrow1 {})) v1)) t) =
-  pure $ V.TypedTerm (V.Application $ V.Application1 v0 v1) t
+-- 1-apply, 2-function → 1-closure
 term (V.TypedTerm (V.Application (V.Application1 v0@(V.TypedTerm _ (T.Arrow (T.Arrow2 _ t01 t02))) v1)) t) = do
   a <- newIdentifier
   pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t01 (V.TypedTerm (V.Application $ V.Application2 v0 v1 $ V.TypedTerm (V.Variable a) t01) t02)) t
-term (V.TypedTerm (V.Application (V.Application2 v0@(V.TypedTerm _ (T.Arrow T.Arrow2 {})) v1 v2)) t) =
+-- 1-apply, 3-function → 2-closure
+term (V.TypedTerm (V.Application (V.Application1 v0@(V.TypedTerm _ (T.Arrow (T.Arrow3 _ t01 t02 t03))) v1)) t) = do
+  a <- newIdentifier
+  b <- newIdentifier
+  pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t01 (V.TypedTerm (V.Application $ V.Application3 v0 v1 (V.TypedTerm (V.Variable a) t01) $ V.TypedTerm (V.Variable b) t02) t03)) t
+-- 1-apply, others → no closures
+term (V.TypedTerm (V.Application (V.Application1 v0 v1)) t) =
+  pure $ V.TypedTerm (V.Application $ V.Application1 v0 v1) t
+-- 2-apply, 3-function → 1-closure
+term (V.TypedTerm (V.Application (V.Application2 v0@(V.TypedTerm _ (T.Arrow (T.Arrow3 _ _ t02 t03))) v1 v2)) t) = do
+  a <- newIdentifier
+  pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t02 (V.TypedTerm (V.Application $ V.Application3 v0 v1 v2 (V.TypedTerm (V.Variable a) t02)) t03)) t
+-- 2-apply, others → no closures
+term (V.TypedTerm (V.Application (V.Application2 v0 v1 v2)) t) =
   pure $ V.TypedTerm (V.Application $ V.Application2 v0 v1 v2) t
+-- 3-apply, なんでも → no closures
 term (V.TypedTerm (V.Application (V.Application3 v0@(V.TypedTerm _ (T.Arrow T.Arrow3 {})) v1 v2 v3)) t) =
   pure $ V.TypedTerm (V.Application $ V.Application3 v0 v1 v2 v3) t
+-- 手続き
 term (V.TypedTerm (V.Procedure ps) t) =
   flip V.TypedTerm t . V.Procedure <$> sequence (procedureStep <$> ps)
+term v = pure v
 
 procedureStep :: P3.ProcedureStep -> Pass P4.ProcedureStep
 procedureStep (V.BindProcedure i v) = V.BindProcedure i <$> term v
