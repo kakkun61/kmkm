@@ -7,7 +7,7 @@
       (list))
     (bind
       b
-      d
+      (type d int)
       (list))
     (bind
       c
@@ -15,7 +15,7 @@
       (list))
     (bind
       d
-      0
+      (type b int)
       (list))
     (bind
       e

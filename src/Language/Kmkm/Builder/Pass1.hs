@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
 
 #if __GLASGOW_HASKELL__ >= 902
@@ -32,7 +33,8 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
 import qualified Control.Exception                    as E
-import           Control.Monad.Catch                  (MonadThrow (throwM))
+import           Control.Exception.Safe               (MonadCatch)
+import           Control.Monad.Catch                  (MonadThrow (throwM), catchJust)
 import           Data.Either                          (fromRight)
 import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
@@ -45,7 +47,7 @@ import qualified Data.Set                             as S
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-typeCheck :: MonadThrow m => P1.Module -> m P2.Module
+typeCheck :: (MonadThrow m, MonadCatch m) => P1.Module -> m P2.Module
 typeCheck (S.Module i ms) = do
   let
     siblings = rootIdentifiers ms
@@ -59,23 +61,27 @@ typeCheck (S.Module i ms) = do
     orderedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencies
   typedSiblings <-
     let
-      go :: MonadThrow m => GN.AdjacencyMap Identifier -> m (Map Identifier P2.Term) -> m (Map Identifier P2.Term)
-      go k acc =
-        case G.vertexList k of
+      go :: (MonadThrow m, MonadCatch m) => GN.AdjacencyMap Identifier -> m (Map Identifier P2.Term) -> m (Map Identifier P2.Term)
+      go ks acc =
+        case G.vertexList ks of
           [] -> X.unreachable
-          [k] ->
-            case M.lookup k siblings of
+          ks ->
+            case sequence $ (\k -> (k,) <$> M.lookup k siblings) <$> ks of
               Nothing -> X.unreachable
-              Just v -> do
+              Just bs -> do
                 acc' <- acc
                 let
+                  ks = fst <$> bs
                   ctx =
-                    case v of
-                      V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' _ t)) -> M.insert k t $ typ <$> acc'
-                      _                                                        -> typ <$> acc'
-                t <- typeOfTerm ctx v
-                pure $ M.insert k t acc'
-          _ -> error "mutual recursion found. not yet implemented." -- TODO ここやる ↑ 上とマージ
+                    foldr go (typ <$> acc') bs
+                    where
+                      go (k, V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' _ t))) c = M.insert k t c
+                      go _ c                                                             = c
+                  go (k, v) acc = M.insert k <$> typeOfTerm ctx v <*> acc
+                catchJust
+                  (\e -> case e of { NotFoundException i -> if i `elem` ks then Just i else Nothing; _ -> Nothing })
+                  (foldr go acc bs)
+                  $ const $ throwM $ RecursionException $ S.fromList ks
       typ :: P2.Term -> P2.Type
       typ (V.TypedTerm _ t) = t
     in foldr go (pure M.empty) orderedIdentifiers
@@ -122,40 +128,10 @@ dependency siblings v ms =
         go (is, ss) (V.TermProcedure v)   = (dep ss v ++ is, ss)
     dep siblings (V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' v _))) = dep siblings v
 
--- context :: MonadThrow m => [P1.Member] -> m (Map Identifier P1.Type)
--- context =
---   foldr member $ pure M.empty
---   where
---     member :: MonadThrow m => P1.Member -> m (Map Identifier P1.Type) -> m (Map Identifier P1.Type)
---     member (S.Definition i cs) =
---       flip (foldr constructor) cs
---       where
---         constructor (c, fs) =
---           (M.insert c (foldr field (T.Variable i) fs) <$>)
---           where
---             field (_, t) t' = T.Arrow $ T.ArrowC t t'
---     member (S.Bind S.TypeBind {}) = id
---     member (S.Bind (S.TermBind (S.TermBindUU i _) _)) = (M.insert i t <$>)
-
--- typeCheck' :: MonadThrow m => Map Identifier P1.Type -> [P1.Member] -> m [P2.Member]
--- typeCheck' ctx =
---   sequence . (member <$>)
---   where
---     member :: MonadThrow m => P1.Member -> m P2.Member
---     member (S.Definition i cs) = pure $ S.Definition i cs
---     member (S.Bind (S.TypeBind i t)) = pure $ S.Bind $ S.TypeBind i t
---     member (S.Bind (S.TermBind (S.TermBindUU i (V.UntypedTerm v)) ms)) = do
---       ctx' <- M.union ctx <$> context ms
---       v'@(V.TypedTerm _ t') <- typeOfTerm ctx' v
---       ms' <- typeCheck' ctx' ms
---       if t == t'
---         then pure $ S.Bind $ S.TermBind (S.TermBindUT i v') ms'
---         else throwM $ MismatchException (show t) $ show t'
-
 typeOfTerm :: MonadThrow m => Map Identifier P1.Type -> P1.Term -> m P2.Term
 typeOfTerm ctx (V.UntypedTerm (V.Variable i)) =
   case M.lookup i ctx of
-    Nothing -> throwM $ NotFoundException $ show i
+    Nothing -> throwM $ NotFoundException i
     Just t  -> pure $ V.TypedTerm (V.Variable i) t
 typeOfTerm _ (V.UntypedTerm (V.Literal (V.Integer v b))) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
 typeOfTerm _ (V.UntypedTerm (V.Literal (V.Fraction s d e b))) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
@@ -199,9 +175,10 @@ typeOfProcedure ctx (V.TermProcedure v) = do
   pure (ctx, V.TermProcedure v')
 
 data Exception
-  = NotFoundException String
+  = NotFoundException Identifier
   | MismatchException { expected :: String, actual :: String}
   | BindProcedureEndException
+  | RecursionException (Set Identifier)
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where

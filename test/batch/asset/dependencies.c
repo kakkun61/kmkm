@@ -20,7 +20,7 @@ int c()
 }
 int d()
 {
-  return 0;
+  return b();
 }
 int e()
 {

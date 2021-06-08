@@ -61,6 +61,7 @@ library
                  parsers,
                  parsers-megaparsec,
                  pretty,
+                 safe-exceptions,
                  text
   ghc-options: -Wincomplete-uni-patterns
                -Wincomplete-record-updates
