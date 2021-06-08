@@ -54,7 +54,7 @@ member config (S.Definition i cs) =
     tagEnum =
       case cs of
         [(_, _:_)] -> []
-        _ -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
+        _          -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
     structType = ([], I.Structure $ identifier i)
     structure =
       I.Declaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing []

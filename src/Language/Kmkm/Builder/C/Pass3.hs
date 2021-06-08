@@ -87,16 +87,16 @@ typeQualifier :: I.TypeQualifier -> CTypeSpec
 typeQualifier I.Unsigned = CUnsigType undefNode
 
 typ :: I.Type -> CTypeSpec
-typ I.Int = CIntType undefNode
-typ I.Double = CDoubleType undefNode
-typ (I.EnumerableLiteral i is) = enumerableLiteral i is
-typ (I.StructureLiteral i fs) = structureLiteral i fs
-typ (I.Union fs) = union fs
-typ (I.TypeVariable "bool") = CBoolType undefNode
+typ I.Int                               = CIntType undefNode
+typ I.Double                            = CDoubleType undefNode
+typ (I.EnumerableLiteral i is)          = enumerableLiteral i is
+typ (I.StructureLiteral i fs)           = structureLiteral i fs
+typ (I.Union fs)                        = union fs
+typ (I.TypeVariable "bool")             = CBoolType undefNode
 typ (I.TypeVariable i@(I.Identifier _)) = CTypeDef (identifier i) undefNode
-typ (I.Enumerable i) = CEnumType (CEnum (Just $ identifier i) Nothing [] undefNode) undefNode
-typ (I.Structure i) = CSUType (CStruct CStructTag (Just $ identifier i) Nothing [] undefNode) undefNode
-typ t = error $ show t
+typ (I.Enumerable i)                    = CEnumType (CEnum (Just $ identifier i) Nothing [] undefNode) undefNode
+typ (I.Structure i)                     = CSUType (CStruct CStructTag (Just $ identifier i) Nothing [] undefNode) undefNode
+typ t                                   = error $ show t
 
 enumerableLiteral :: Maybe I.Identifier -> [I.Identifier] -> CTypeSpec
 enumerableLiteral i is =
@@ -139,13 +139,14 @@ structureUnionLiteral t i fs =
 
 deriver :: I.Deriver -> CDerivedDeclr
 deriver (I.Pointer qs) = CPtrDeclr (variableQualifier <$> qs) undefNode
-deriver (I.Function ps) = CFunDeclr (Right (parameter <$> ps, False)) [] undefNode
+deriver (I.Function ps) =
+  CFunDeclr (Right (parameter <$> ps, False)) [] undefNode
   where
-      parameter (t, qs, i, ds) =
-        CDecl
-          ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-          [(Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode, Nothing, Nothing)]
-          undefNode
+    parameter (t, qs, i, ds) =
+      CDecl
+        ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
+        [(Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode, Nothing, Nothing)]
+        undefNode
 
 initializer :: I.Initializer -> CInit
 initializer (I.Expression e) = CInitExpr (expression e) undefNode
@@ -154,12 +155,12 @@ initializer (I.List is) =
   where go i = ([], initializer i)
 
 expression :: I.Expression -> CExpr
-expression (I.Literal l)     = CConst $ literal l
-expression (I.Variable v)    = CVar (identifier v) undefNode
-expression (I.CompoundLiteral t is) = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
-expression (I.Call t as)     = CCall (expression t) (expression <$> as) undefNode
+expression (I.Literal l)             = CConst $ literal l
+expression (I.Variable v)            = CVar (identifier v) undefNode
+expression (I.CompoundLiteral t is)  = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
+expression (I.Call t as)             = CCall (expression t) (expression <$> as) undefNode
 expression (I.StatementExpression s) = CStatExpr (statement s) undefNode
-expression e                 = error $ show e
+expression e                         = error $ show e
 
 literal :: I.Literal -> CConst
 literal (I.Integer i b) =
@@ -181,13 +182,13 @@ literal (I.Fraction s f e b) =
     dstr = if f == 0 then "" else "."
     kstr = case b of { I.FractionDecimal -> "e"; I.FractionHexadecimal -> "p" }
     estr = show e
-literal l                = error $ show l
+literal l = error $ show l
 
 blockItem :: I.BlockElement -> CBlockItem
-blockItem (I.BlockStatement s) = CBlockStmt $ statement s
+blockItem (I.BlockStatement s)                                     = CBlockStmt $ statement s
 blockItem (I.BlockDefinition (I.ExpressionDefinition t qs i ds l)) = CBlockDecl $ valueDeclaration t qs (Just i) ds (Just l)
-blockItem (I.BlockDefinition (I.StatementDefinition t qs i ds s)) = CNestedFunDef $ functionDefinition t qs i ds s
-blockItem e = error $ show e
+blockItem (I.BlockDefinition (I.StatementDefinition t qs i ds s))  = CNestedFunDef $ functionDefinition t qs i ds s
+blockItem e                                                        = error $ show e
 
 statement :: I.Statement -> CStat
 statement (I.Return e)              = CReturn (Just $ expression e) undefNode
