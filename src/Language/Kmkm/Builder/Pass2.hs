@@ -1,5 +1,4 @@
 {-# LANGUAGE ApplicativeDo         #-}
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -8,7 +7,6 @@
 -- | \"Uncurry\" pass.
 module Language.Kmkm.Builder.Pass2
   ( uncurry
-  , Exception (..)
   ) where
 
 import qualified Language.Kmkm.Exception     as X
@@ -18,13 +16,9 @@ import qualified Language.Kmkm.Syntax.Phase3 as P3
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
-import qualified Control.Exception  as E
 import           Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as N
-import qualified Data.Typeable      as Y
-import           GHC.Generics       (Generic)
-import           Prelude            (Applicative (pure, (<*>)), Eq, Ord, Read, Show, Traversable (sequenceA), ($), (.),
-                                     (<$>))
+import           Prelude            (Applicative (pure, (<*>)), Traversable (sequenceA), ($), (<$>))
 
 uncurry :: Applicative m => P2.Module -> m P3.Module
 uncurry = module'
@@ -93,13 +87,3 @@ function (V.FunctionC i t v) = do
   t' <- typ t
   v' <- term v
   pure $ V.FunctionN [(i, t')] v'
-
-data Exception
-  = TooLargeArityException
-  deriving (Show, Read, Eq, Ord, Generic)
-
-instance E.Exception Exception where
-  toException = E.toException . X.Exception
-  fromException e = do
-    X.Exception e <- E.fromException e
-    Y.cast e
