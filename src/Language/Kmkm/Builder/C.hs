@@ -55,4 +55,4 @@ build config@Config { headers } m@(S.Module (ModuleName i) _) = do
     include h = Pretty.text $ "#include <" <> h <> ">\n"
 
 buildC :: (MonadThrow m, MonadCatch m) => Config -> Module -> m CTranslUnit
-buildC config m = BC3.convert . BC2.convert config . BC1.convert . B4.lambdaLifting . B3.partialApplication <$> (B2.uncurry =<< B1.typeCheck m)
+buildC config m = BC3.convert . BC2.convert config . BC1.convert . B4.lambdaLifting . B3.partialApplication . B2.uncurry <$> B1.typeCheck m
