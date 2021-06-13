@@ -36,7 +36,7 @@ bind (S.TermBind (S.TermBindU i v) ms) =
     pure $ S.TermBind (S.TermBindU i v') ms'
 
 term :: P3.Term -> Pass P4.Term
-term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Arrow (T.ArrowN t0s t0))) vs)) t) = do
+term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Function (T.FunctionN t0s t0))) vs)) t) = do
   let
     nApp = length vs
     nFun = length t0s

@@ -49,7 +49,7 @@ bind (S.TermBind (S.TermBindU i v) ms) = S.TermBind <$> (S.TermBindU i <$> term 
 typ :: Applicative m => P2.Type -> m P3.Type
 typ (T.Variable i)      = pure $ T.Variable i
 typ (T.Application t s) = T.Application <$> typ t <*> typ s
-typ (T.Arrow a)         = T.Arrow <$> arrow a
+typ (T.Function a)      = T.Function <$> arrow a
 typ (T.Procedure t)     = T.Procedure <$> typ t
 
 term :: Applicative m => P2.Term -> m P3.Term
@@ -65,12 +65,12 @@ literal (V.Fraction s f e b) = pure $ V.Fraction s f e b
 literal (V.String t)         = pure $ V.String t
 literal (V.Function f)       = V.Function <$> function f
 
-arrow :: Applicative m => P2.Arrow -> m P3.Arrow
-arrow (T.ArrowC t0 (T.Arrow a)) = do
-  ~(T.ArrowN ts t) <- arrow a
+arrow :: Applicative m => P2.TFunction -> m P3.TFunction
+arrow (T.FunctionC t0 (T.Function a)) = do
+  ~(T.FunctionN ts t) <- arrow a
   t0' <- typ t0
-  pure $ T.ArrowN (t0' : ts) t
-arrow (T.ArrowC t0 t) = T.ArrowN <$> ((:[]) <$> typ t0) <*> typ t
+  pure $ T.FunctionN (t0' : ts) t
+arrow (T.FunctionC t0 t) = T.FunctionN <$> ((:[]) <$> typ t0) <*> typ t
 
 application :: Applicative m => P2.Application -> m P3.Application
 application a = do

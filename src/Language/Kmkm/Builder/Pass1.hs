@@ -138,12 +138,12 @@ typeOfTerm _ (V.UntypedTerm (V.Literal (V.Fraction s d e b))) = pure $ V.TypedTe
 typeOfTerm _ (V.UntypedTerm (V.Literal (V.String t))) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
 typeOfTerm ctx (V.UntypedTerm (V.Literal (V.Function (V.FunctionC i t v)))) = do
   v'@(V.TypedTerm _ t') <- typeOfTerm (M.insert i t ctx) v
-  pure $ V.TypedTerm (V.Literal (V.Function (V.FunctionC i t v'))) (T.Arrow $ T.ArrowC t t')
+  pure $ V.TypedTerm (V.Literal (V.Function (V.FunctionC i t v'))) (T.Function $ T.FunctionC t t')
 typeOfTerm ctx (V.UntypedTerm (V.Application (V.ApplicationC v0 v1))) = do
   v0'@(V.TypedTerm _ t0) <- typeOfTerm ctx v0
   v1'@(V.TypedTerm _ t1) <- typeOfTerm ctx v1
   case t0 of
-    T.Arrow (T.ArrowC t00 t01)
+    T.Function (T.FunctionC t00 t01)
       | t1 == t00 -> pure $ V.TypedTerm (V.Application (V.ApplicationC v0' v1')) t01
       | otherwise -> throwM $ MismatchException (show t00) $ show t1
     _ -> throwM $ MismatchException "arrow" $ show t0

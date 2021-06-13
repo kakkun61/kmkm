@@ -20,8 +20,8 @@ module Language.Kmkm.Parser.Sexp
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase1 (Application, Arrow, Bind, Function, Literal, Member, Module,
-                                              ProcedureStep, Term, TermBind, Type, TypeAnnotation)
+import           Language.Kmkm.Syntax.Phase1 (Application, Bind, Function, Literal, Member, Module, ProcedureStep,
+                                              TFunction, Term, TermBind, Type, TypeAnnotation)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -283,17 +283,17 @@ typ =
   "type" <!> do
     P.choice
       [ T.Variable <$> identifier
-      , P.try $ T.Arrow <$> arrow
+      , P.try $ T.Function <$> arrow
       , P.try $ uncurry T.Application <$> typeApplication
       , T.Procedure <$> procedureStep
       ]
 
-arrow :: Parser Arrow
+arrow :: Parser TFunction
 arrow =
   (<?> "arrow") $
     P.parens $ do
       void $ P.textSymbol "function"
-      T.ArrowC <$> typ <*> typ
+      T.FunctionC <$> typ <*> typ
 
 typeApplication :: Parser (Type, Type)
 typeApplication =

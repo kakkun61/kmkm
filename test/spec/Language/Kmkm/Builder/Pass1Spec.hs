@@ -50,7 +50,7 @@ spec = do
                                                       (UntypedTerm $ Variable "succ")
                                                       (UntypedTerm $ Variable "a")
                                   )
-                                  $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
+                                  $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]
@@ -69,12 +69,12 @@ spec = do
                                     $ TypedTerm
                                         (Application $
                                           ApplicationC
-                                            (TypedTerm (Variable "succ") (T.Arrow $ T.ArrowC (T.Variable "int") (T.Variable "int")))
+                                            (TypedTerm (Variable "succ") (T.Function $ T.FunctionC (T.Variable "int") (T.Variable "int")))
                                             (TypedTerm (Variable "a") (T.Variable "int"))
                                         )
                                         $ T.Variable "int"
                             )
-                            $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
+                            $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]
@@ -100,7 +100,7 @@ spec = do
                                             (T.Variable "int")
                                             (UntypedTerm $ Variable "succ")
                                   )
-                                  $ T.Arrow $ T.ArrowC (T.Variable "int") $ T.Variable "int"
+                                  $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
                       )
                       []
                 ]

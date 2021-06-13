@@ -8,7 +8,7 @@
 
 module Language.Kmkm.Syntax.Type
   ( Type (..)
-  , Arrow (..)
+  , Function (..)
   ) where
 
 import Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier)
@@ -20,22 +20,22 @@ type Type :: Currying -> K.Type
 data Type c
   = Variable Identifier
   | Application (Type c) (Type c)
-  | Arrow (Arrow c)
+  | Function (Function c)
   | Procedure (Type c)
   deriving Generic
 
-deriving instance Show (Arrow c) => Show (Type c)
-deriving instance Read (Arrow c) => Read (Type c)
-deriving instance Eq (Arrow c) => Eq (Type c)
-deriving instance Ord (Arrow c) => Ord (Type c)
+deriving instance Show (Function c) => Show (Type c)
+deriving instance Read (Function c) => Read (Type c)
+deriving instance Eq (Function c) => Eq (Type c)
+deriving instance Ord (Function c) => Ord (Type c)
 
-type Arrow :: Currying -> K.Type
-data family Arrow c
+type Function :: Currying -> K.Type
+data family Function c
 
-data instance Arrow 'Curried =
-  ArrowC (Type 'Curried) (Type 'Curried)
+data instance Function 'Curried =
+  FunctionC (Type 'Curried) (Type 'Curried)
   deriving (Show, Read, Eq, Ord, Generic)
 
-data instance Arrow 'Uncurried =
-  ArrowN [Type 'Uncurried] (Type 'Uncurried)
+data instance Function 'Uncurried =
+  FunctionN [Type 'Uncurried] (Type 'Uncurried)
   deriving (Show, Read, Eq, Ord, Generic)

@@ -93,7 +93,7 @@ bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] ->
 bindTermN config i ps v@(V.TypedTerm _ t) ms =
   I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
   where
-    parameter (i, t) = (typ config t, case t of { T.Arrow {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
+    parameter (i, t) = (typ config t, case t of { T.Function {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
 elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
@@ -151,19 +151,19 @@ typ Config { typeMap } (T.Variable n) =
         "frac"  -> I.readCType . C.frac
         "frac2" -> I.readCType . C.frac2
         _       -> const ([], I.Structure $ identifier n)
-typ c (T.Arrow (T.ArrowN _ t)) = typ c t
+typ c (T.Function (T.FunctionN _ t)) = typ c t
 typ _ t = error $ show t
 
 deriverRoot :: Config -> Type -> [I.Deriver]
-deriverRoot config (T.Arrow (T.ArrowN ts _)) = deriverArrow config True ts
-deriverRoot _ _                              = []
+deriverRoot config (T.Function (T.FunctionN ts _)) = deriverFunction config True ts
+deriverRoot _ _                                    = []
 
 deriver :: Config -> Type -> [I.Deriver]
-deriver config (T.Arrow (T.ArrowN ts _)) = deriverArrow config False ts
-deriver _ _                              = []
+deriver config (T.Function (T.FunctionN ts _)) = deriverFunction config False ts
+deriver _ _                                    = []
 
-deriverArrow :: Config -> Bool -> [Type] -> [I.Deriver]
-deriverArrow config root ts =
+deriverFunction :: Config -> Bool -> [Type] -> [I.Deriver]
+deriverFunction config root ts =
   [ I.Pointer if root then [] else [I.Constant]
   , I.Function $ go <$> ts
   ]

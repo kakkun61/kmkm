@@ -25,9 +25,10 @@ module Language.Kmkm.Syntax.Value
   , TypeAnnotation (..)
   ) where
 
-import Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier,
-                                  LambdaLifting (LambdaLifted, LambdaUnlifted), Typing (Typed, Untyped))
-import Language.Kmkm.Syntax.Type (Arrow, Type)
+import           Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier,
+                                            LambdaLifting (LambdaLifted, LambdaUnlifted), Typing (Typed, Untyped))
+import           Language.Kmkm.Syntax.Type (Type)
+import qualified Language.Kmkm.Syntax.Type as T
 
 import qualified Data.Kind          as K
 import           Data.List.NonEmpty (NonEmpty)
@@ -86,15 +87,15 @@ data instance TypeAnnotation c l 'Untyped =
 
 data instance TypeAnnotation c l 'Typed
 
-deriving instance (Show (Arrow c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Untyped)
-deriving instance (Read (Arrow c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Untyped)
-deriving instance (Eq (Arrow c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Untyped)
-deriving instance (Ord (Arrow c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Untyped)
+deriving instance (Show (T.Function c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Untyped)
+deriving instance (Read (T.Function c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Untyped)
+deriving instance (Eq (T.Function c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Untyped)
+deriving instance (Ord (T.Function c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Untyped)
 
-deriving instance (Show (Arrow c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Typed)
-deriving instance (Read (Arrow c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Typed)
-deriving instance (Eq (Arrow c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Typed)
-deriving instance (Ord (Arrow c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Typed)
+deriving instance (Show (T.Function c), Show (Term c l 'Untyped)) => Show (TypeAnnotation c l 'Typed)
+deriving instance (Read (T.Function c), Read (Term c l 'Untyped)) => Read (TypeAnnotation c l 'Typed)
+deriving instance (Eq (T.Function c), Eq (Term c l 'Untyped)) => Eq (TypeAnnotation c l 'Typed)
+deriving instance (Ord (T.Function c), Ord (Term c l 'Untyped)) => Ord (TypeAnnotation c l 'Typed)
 
 data ProcedureStep c l t
   = BindProcedure Identifier (Term c l t)

@@ -35,7 +35,7 @@ member _ m = m
 
 term :: Set Identifier -> P5.Term -> P6.Term
 term tids v@(V.TypedTerm (V.Variable i) t)
-  | i `S.member` tids = V.TypedTerm (V.Application $ V.ApplicationN (V.TypedTerm (V.Variable i) (T.Arrow $ T.ArrowN [] t)) []) t
+  | i `S.member` tids = V.TypedTerm (V.Application $ V.ApplicationN (V.TypedTerm (V.Variable i) (T.Function $ T.FunctionN [] t)) []) t
   | otherwise = v
 term tids (V.TypedTerm (V.Application (V.ApplicationN v vs)) t) =
   V.TypedTerm (V.Application $ V.ApplicationN v' vs') t

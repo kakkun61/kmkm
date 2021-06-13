@@ -13,7 +13,7 @@ module Language.Kmkm.Syntax.Phase1
   , Function
   , Application
   , TypeAnnotation
-  , Arrow
+  , TFunction
   ) where
 
 import qualified Language.Kmkm.Syntax       as S
@@ -45,4 +45,4 @@ type Application = V.Application 'Curried 'LambdaUnlifted 'Untyped
 
 type TypeAnnotation = V.TypeAnnotation 'Curried 'LambdaUnlifted 'Untyped
 
-type Arrow = T.Arrow 'Curried
+type TFunction = T.Function 'Curried
