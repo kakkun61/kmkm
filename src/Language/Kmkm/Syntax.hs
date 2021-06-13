@@ -60,10 +60,7 @@ data instance TermBind c 'LambdaUnlifted t =
 
 data instance TermBind c 'LambdaLifted t
   = TermBindV Identifier (Term c 'LambdaLifted t)
-  | TermBind0 Identifier (Term c 'LambdaLifted t)
-  | TermBind1 Identifier Identifier (Type c) (Term c 'LambdaLifted t)
-  | TermBind2 Identifier Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted t)
-  | TermBind3 Identifier Identifier (Type c) Identifier (Type c) Identifier (Type c) (Term c 'LambdaLifted t)
+  | TermBindN Identifier [(Identifier, Type c)] (Term c 'LambdaLifted t)
 
 deriving instance (Show (Term c 'LambdaUnlifted t), Show (Type c)) => Show (TermBind c 'LambdaUnlifted t)
 deriving instance (Read (Term c 'LambdaUnlifted t), Read (Type c)) => Read (TermBind c 'LambdaUnlifted t)

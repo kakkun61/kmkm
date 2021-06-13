@@ -124,11 +124,8 @@ data instance Application 'Curried l t =
   ApplicationC (Term 'Curried l t) (Term 'Curried l t)
   deriving Generic
 
-data instance Application 'Uncurried l t
-  = Application0 (Term 'Uncurried l t)
-  | Application1 (Term 'Uncurried l t) (Term 'Uncurried l t)
-  | Application2 (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t)
-  | Application3 (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t) (Term 'Uncurried l t)
+data instance Application 'Uncurried l t =
+  ApplicationN (Term 'Uncurried l t) [Term 'Uncurried l t]
   deriving Generic
 
 deriving instance Show (Term 'Curried l t) => Show (Application 'Curried l t)
@@ -148,10 +145,8 @@ data instance Function 'Curried 'LambdaUnlifted t =
   FunctionC Identifier (Type 'Curried) (Term 'Curried 'LambdaUnlifted t)
   deriving Generic
 
-data instance Function 'Uncurried 'LambdaUnlifted t
-  = Function1 Identifier (Type 'Uncurried) (Term 'Uncurried 'LambdaUnlifted t)
-  | Function2 Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) (Term 'Uncurried 'LambdaUnlifted t)
-  | Function3 Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) Identifier (Type 'Uncurried) (Term 'Uncurried 'LambdaUnlifted t)
+data instance Function 'Uncurried 'LambdaUnlifted t =
+  FunctionN [(Identifier, Type 'Uncurried)] (Term 'Uncurried 'LambdaUnlifted t)
   deriving Generic
 
 deriving instance Show (Term 'Curried 'LambdaUnlifted t) => Show (Function 'Curried 'LambdaUnlifted t)

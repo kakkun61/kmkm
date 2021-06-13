@@ -22,28 +22,28 @@ spec = do
               C.Definition (C.ExpressionDefinition ([], C.Int) [] "foo" [] (C.Expression $ C.Literal $ C.Integer 10 C.IntDecimal))
 
         it "foo :: int → int ⇒ int (*foo)(int)" $ do
-          bind def (S.TermBind (S.TermBindV "foo" $ V.TypedTerm (V.Variable "bar") $ T.Arrow $ T.Arrow1 (T.Variable "int") $ T.Variable "int") [])
+          bind def (S.TermBind (S.TermBindV "foo" $ V.TypedTerm (V.Variable "bar") $ T.Arrow $ T.ArrowN [T.Variable "int"] $ T.Variable "int") [])
             `shouldBe`
               C.Definition (C.ExpressionDefinition ([], C.Int) [] "foo" [C.Pointer [C.Constant], C.Function [(([], C.Int), [C.Constant], Nothing, [])]] (C.Expression $ C.Variable "bar"))
 
       describe "0" $ do
         it "foo :: () → int ⇒ int foo()" $ do
-          bind def (S.TermBind (S.TermBind0 "foo" $ V.TypedTerm (V.Literal $ V.Integer 10 10) $ T.Variable "int") [])
+          bind def (S.TermBind (S.TermBindN "foo" [] $ V.TypedTerm (V.Literal $ V.Integer 10 10) $ T.Variable "int") [])
             `shouldBe`
               C.Definition (C.StatementDefinition ([], C.Int) [] "foo" [C.Function []] [C.BlockStatement $ C.Return $ C.Literal $ C.Integer 10 C.IntDecimal])
 
         it "foo :: () → (int → int) ⇒ int (*foo())(int)" $ do
-          bind def (S.TermBind (S.TermBind0 "foo" $ V.TypedTerm (V.Variable "bar") $ T.Arrow $ T.Arrow1 (T.Variable "int") $ T.Variable "int") [])
+          bind def (S.TermBind (S.TermBindN "foo" [] $ V.TypedTerm (V.Variable "bar") $ T.Arrow $ T.ArrowN [T.Variable "int"] $ T.Variable "int") [])
             `shouldBe`
               C.Definition (C.StatementDefinition ([], C.Int) [] "foo" [C.Function [], C.Pointer [], C.Function [(([], C.Int), [C.Constant], Nothing, [])]] [C.BlockStatement $ C.Return $ C.Variable "bar"])
 
       describe "1" $ do
         it "foo :: int → int ⇒ int foo(int a)" $ do
-          bind def (S.TermBind (S.TermBind1 "foo" "a" (T.Variable "int") $ V.TypedTerm (V.Literal $ V.Integer 10 10) $ T.Variable "int") [])
+          bind def (S.TermBind (S.TermBindN "foo" [("a", T.Variable "int")] $ V.TypedTerm (V.Literal $ V.Integer 10 10) $ T.Variable "int") [])
             `shouldBe`
               C.Definition (C.StatementDefinition ([], C.Int) [] "foo" [C.Function [(([], C.Int), [C.Constant], Just "a", [])]] [C.BlockStatement $ C.Return $ C.Literal $ C.Integer 10 C.IntDecimal])
 
         it "foo :: (int → int) → int ⇒ int foo(int (*a)(int))" $ do
-          bind def (S.TermBind (S.TermBind1 "foo" "a" (T.Arrow $ T.Arrow1 (T.Variable "int") $ T.Variable "int") $ V.TypedTerm (V.Variable "bar") $ T.Variable "int") [])
+          bind def (S.TermBind (S.TermBindN "foo" [("a", T.Arrow $ T.ArrowN [T.Variable "int"] $ T.Variable "int")] $ V.TypedTerm (V.Variable "bar") $ T.Variable "int") [])
             `shouldBe`
               C.Definition (C.StatementDefinition ([], C.Int) [] "foo" [C.Function [(([], C.Int), [], Just "a", [C.Pointer [C.Constant], C.Function [(([], C.Int), [C.Constant], Nothing, [])]])]] [C.BlockStatement $ C.Return $ C.Variable "bar"])

@@ -3,6 +3,7 @@ module Language.Kmkm.Builder.Pass3
   ( partialApplication
   ) where
 
+import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (SystemIdentifier))
 import qualified Language.Kmkm.Syntax.Phase3 as P3
@@ -10,6 +11,7 @@ import qualified Language.Kmkm.Syntax.Phase4 as P4
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
+import           Control.Monad              (replicateM)
 import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
 
@@ -34,29 +36,25 @@ bind (S.TermBind (S.TermBindU i v) ms) =
     pure $ S.TermBind (S.TermBindU i v') ms'
 
 term :: P3.Term -> Pass P4.Term
--- 1-apply, 2-function → 1-closure
-term (V.TypedTerm (V.Application (V.Application1 v0@(V.TypedTerm _ (T.Arrow (T.Arrow2 _ t01 t02))) v1)) t) = do
-  a <- newIdentifier
-  pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t01 (V.TypedTerm (V.Application $ V.Application2 v0 v1 $ V.TypedTerm (V.Variable a) t01) t02)) t
--- 1-apply, 3-function → 2-closure
-term (V.TypedTerm (V.Application (V.Application1 v0@(V.TypedTerm _ (T.Arrow (T.Arrow3 _ t01 t02 t03))) v1)) t) = do
-  a <- newIdentifier
-  b <- newIdentifier
-  pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t01 (V.TypedTerm (V.Application $ V.Application3 v0 v1 (V.TypedTerm (V.Variable a) t01) $ V.TypedTerm (V.Variable b) t02) t03)) t
--- 1-apply, others → no closures
-term (V.TypedTerm (V.Application (V.Application1 v0 v1)) t) =
-  pure $ V.TypedTerm (V.Application $ V.Application1 v0 v1) t
--- 2-apply, 3-function → 1-closure
-term (V.TypedTerm (V.Application (V.Application2 v0@(V.TypedTerm _ (T.Arrow (T.Arrow3 _ _ t02 t03))) v1 v2)) t) = do
-  a <- newIdentifier
-  pure $ V.TypedTerm (V.Literal $ V.Function $ V.Function1 a t02 (V.TypedTerm (V.Application $ V.Application3 v0 v1 v2 (V.TypedTerm (V.Variable a) t02)) t03)) t
--- 2-apply, others → no closures
-term (V.TypedTerm (V.Application (V.Application2 v0 v1 v2)) t) =
-  pure $ V.TypedTerm (V.Application $ V.Application2 v0 v1 v2) t
--- 3-apply, なんでも → no closures
-term (V.TypedTerm (V.Application (V.Application3 v0@(V.TypedTerm _ (T.Arrow T.Arrow3 {})) v1 v2 v3)) t) =
-  pure $ V.TypedTerm (V.Application $ V.Application3 v0 v1 v2 v3) t
--- 手続き
+term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Arrow (T.ArrowN t0s t0))) vs)) t) = do
+  let
+    nApp = length vs
+    nFun = length t0s
+  if nFun < nApp
+    then X.unreachable
+    else do
+      v' <- term v
+      vs' <- sequence $ term <$> vs
+      if nApp == nFun
+        then
+          pure $ V.TypedTerm (V.Application (V.ApplicationN v' vs')) t
+        else do -- nApp < nFun
+          let nCls = nFun - nApp
+          is <- replicateM nCls newIdentifier
+          let
+            t0s' = drop nApp t0s
+            vs'' = vs' ++ (V.TypedTerm . V.Variable <$> is <*> t0s')
+          pure $ V.TypedTerm (V.Literal $ V.Function $ V.FunctionN (zip is t0s') (V.TypedTerm (V.Application (V.ApplicationN v' vs'')) t0)) t
 term (V.TypedTerm (V.Procedure ps) t) =
   flip V.TypedTerm t . V.Procedure <$> sequence (procedureStep <$> ps)
 term v = pure v
