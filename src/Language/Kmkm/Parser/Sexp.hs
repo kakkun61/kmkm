@@ -14,6 +14,7 @@ module Language.Kmkm.Parser.Sexp
   , integer
   , fraction
   , string
+  , Parser
   , Exception (..)
   ) where
 
