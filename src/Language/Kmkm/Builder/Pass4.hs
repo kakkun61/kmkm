@@ -28,19 +28,19 @@ member (S.Bind b)          = S.Bind <$> bind b
 
 bind :: P4.Bind -> Pass P5.Bind
 bind (S.TypeBind i t) = pure $ S.TypeBind i t
-bind (S.TermBind b ms) =
+bind (S.ValueBind b ms) =
   scope $ do
     ms' <- sequence $ member <$> ms
-    (b, ms'') <- termBind b
-    pure $ S.TermBind b (ms' ++ ms'')
+    (b, ms'') <- valueBind b
+    pure $ S.ValueBind b (ms' ++ ms'')
 
-termBind :: P4.TermBind -> Pass (P5.TermBind, [P5.Member])
-termBind (S.TermBindU i (V.TypedTerm (V.Literal (V.Function (V.FunctionN is v))) _)) = do
+valueBind :: P4.ValueBind -> Pass (P5.ValueBind, [P5.Member])
+valueBind (S.ValueBindU i (V.TypedTerm (V.Literal (V.Function (V.FunctionN is v))) _)) = do
   (v', ms) <- term v
-  pure (S.TermBindN i is v', ms)
-termBind (S.TermBindU i v) = do
+  pure (S.ValueBindN i is v', ms)
+valueBind (S.ValueBindU i v) = do
   (v', ms) <- term v
-  pure (S.TermBindV i v', ms)
+  pure (S.ValueBindV i v', ms)
 
 term :: P4.Term -> Pass (P5.Term, [P5.Member])
 term (V.TypedTerm (V.Variable i) t) = pure (V.TypedTerm (V.Variable i) t, [])
@@ -71,7 +71,7 @@ literal (V.String t) = pure (V.Literal $ V.String t, [])
 literal (V.Function (V.FunctionN is v)) = do
   i <- newIdentifier
   (v', ms) <- term v
-  let m = S.Bind $ S.TermBind (S.TermBindN i is v') ms
+  let m = S.Bind $ S.ValueBind (S.ValueBindN i is v') ms
   pure (V.Variable i, [m])
 
 newIdentifier :: Pass Identifier

@@ -29,11 +29,11 @@ member (S.Bind b)        = S.Bind <$> bind b
 
 bind :: P3.Bind -> Pass P4.Bind
 bind t@S.TypeBind {} = pure t
-bind (S.TermBind (S.TermBindU i v) ms) =
+bind (S.ValueBind (S.ValueBindU i v) ms) =
   scope $ do
     v' <- term v
     ms' <- sequence $ member <$> ms
-    pure $ S.TermBind (S.TermBindU i v') ms'
+    pure $ S.ValueBind (S.ValueBindU i v') ms'
 
 term :: P3.Term -> Pass P4.Term
 term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Function (T.FunctionN t0s t0))) vs)) t) = do

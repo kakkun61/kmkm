@@ -85,8 +85,8 @@ member config (S.Definition i cs) =
 member config (S.Bind a) = [bind config a]
 
 bind :: Config -> Bind -> I.Element
-bind config (S.TermBind (S.TermBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v
-bind config (S.TermBind (S.TermBindN i is v) ms)                = bindTermN config i is v ms
+bind config (S.ValueBind (S.ValueBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v
+bind config (S.ValueBind (S.ValueBindN i is v) ms)                = bindTermN config i is v ms
 bind config (S.TypeBind i t)                                    = I.TypeDefinition (typ config t) $ identifier i
 
 bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element

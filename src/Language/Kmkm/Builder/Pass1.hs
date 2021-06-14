@@ -57,7 +57,7 @@ members ms = do
     dependencies =
       gsum $ go <$> ms
       where
-        go (S.Bind (S.TermBind (S.TermBindU i v) ms)) = G.vertex i `G.connect` gsum (G.vertex <$> dependency (M.keysSet siblings) v ms)
+        go (S.Bind (S.ValueBind (S.ValueBindU i v) ms)) = G.vertex i `G.connect` gsum (G.vertex <$> dependency (M.keysSet siblings) v ms)
         go _                                          = G.empty
         gsum :: (Foldable f, Ord a) => f (G.AdjacencyMap a) -> G.AdjacencyMap a
         gsum = foldr G.overlay G.empty
@@ -91,15 +91,15 @@ members ms = do
   let
     go (S.Definition i cs)                        = pure $ S.Definition i cs
     go (S.Bind (S.TypeBind i t))                  = pure $ S.Bind $ S.TypeBind i t
-    go (S.Bind (S.TermBind (S.TermBindU i _) ms)) = S.Bind . S.TermBind (S.TermBindU i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) <$> members ms
+    go (S.Bind (S.ValueBind (S.ValueBindU i _) ms)) = S.Bind . S.ValueBind (S.ValueBindU i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) <$> members ms
   sequence $ go <$> ms
 
 rootIdentifiers :: [P1.Member] -> Map Identifier P1.Term
 rootIdentifiers ms =
   M.fromList $ mapMaybe go ms
   where
-    go (S.Bind (S.TermBind (S.TermBindU i v) _)) = Just (i, v)
-    go _                                         = Nothing
+    go (S.Bind (S.ValueBind (S.ValueBindU i v) _)) = Just (i, v)
+    go _                                           = Nothing
 
 dependency :: Set Identifier -> P1.Term -> [P1.Member] -> [Identifier]
 dependency siblings v ms =
@@ -109,7 +109,7 @@ dependency siblings v ms =
       [ dep siblings v
       , ms >>= \m ->
           case m of
-            S.Bind (S.TermBind (S.TermBindU _ v) ms) ->
+            S.Bind (S.ValueBind (S.ValueBindU _ v) ms) ->
               dependency (siblings `S.difference` subSiblings) v ms
             _ -> []
       ]

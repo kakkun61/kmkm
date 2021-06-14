@@ -5,4 +5,4 @@ module Language.Kmkm.Syntax.Phase4
   ) where
 
 import Language.Kmkm.Syntax.Phase3 (Application, Bind, Function, Literal, Member, Module, ProcedureStep, TFunction,
-                                    Term, Term', TermBind, Type)
+                                    Term, Term', Type, ValueBind)

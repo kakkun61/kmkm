@@ -4,7 +4,7 @@ module Language.Kmkm.Syntax.Phase1
   ( Module
   , Member
   , Bind
-  , TermBind
+  , ValueBind
   , Type
   , Term
   , Term'
@@ -27,7 +27,7 @@ type Member = S.Member 'Curried 'LambdaUnlifted 'Untyped
 
 type Bind = S.Bind 'Curried 'LambdaUnlifted 'Untyped
 
-type TermBind = S.TermBind 'Curried 'LambdaUnlifted 'Untyped
+type ValueBind = S.ValueBind 'Curried 'LambdaUnlifted 'Untyped
 
 type Type = T.Type 'Curried
 

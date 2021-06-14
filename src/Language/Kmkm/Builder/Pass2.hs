@@ -36,8 +36,8 @@ member (S.Definition i cs) =
 member (S.Bind b) = S.Bind $ bind b
 
 bind :: P2.Bind -> P3.Bind
-bind (S.TypeBind i t)                  = S.TypeBind i $ typ t
-bind (S.TermBind (S.TermBindU i v) ms) = S.TermBind (S.TermBindU i $ term v) $ member <$> ms
+bind (S.TypeBind i t)                    = S.TypeBind i $ typ t
+bind (S.ValueBind (S.ValueBindU i v) ms) = S.ValueBind (S.ValueBindU i $ term v) $ member <$> ms
 
 typ :: P2.Type -> P3.Type
 typ (T.Variable i)      = T.Variable i

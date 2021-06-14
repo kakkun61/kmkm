@@ -22,7 +22,7 @@ import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
 import           Language.Kmkm.Syntax.Phase1 (Application, Bind, Function, Literal, Member, Module, ProcedureStep,
-                                              TFunction, Term, TermBind, Type, TypeAnnotation)
+                                              TFunction, Term, Type, TypeAnnotation, ValueBind)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -121,12 +121,12 @@ bind =
       void $ P.textSymbol "bind"
       i <- identifier
       P.choice
-        [ S.TermBind <$> termBind i <*> list member
+        [ S.ValueBind <$> valueBind i <*> list member
         , S.TypeBind i <$> undefined
         ]
 
-termBind :: Identifier -> Parser TermBind
-termBind i = (S.TermBindU i <$> term) <?> "termBind"
+valueBind :: Identifier -> Parser ValueBind
+valueBind i = (S.ValueBindU i <$> term) <?> "valueBind"
 
 identifier :: Parser Identifier
 identifier =
