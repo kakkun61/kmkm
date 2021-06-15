@@ -25,12 +25,12 @@ convert :: P5.Module -> P6.Module
 convert (S.Module i ms) = S.Module i $ member (thunkIdentifiers ms) <$> ms
 
 member :: Set Identifier -> P5.Member -> P6.Member
-member tids (S.Bind (S.ValueBind (S.ValueBindV i v) ms)) =
+member tids (S.ValueBind (S.ValueBindV i v) ms) =
   let
     tids' = (tids `S.difference` identifiers ms) `S.union` thunkIdentifiers ms
     v' = term tids' v
   in
-    S.Bind $ S.ValueBind (S.ValueBindN i [] v') (member tids' <$> ms)
+    S.ValueBind (S.ValueBindN i [] v') (member tids' <$> ms)
 member _ m = m
 
 term :: Set Identifier -> P5.Term -> P6.Term
@@ -60,15 +60,13 @@ identifiers :: [P5.Member] -> Set Identifier
 identifiers =
   S.fromList . mapMaybe go
   where
-    go (S.Bind (S.ValueBind (S.ValueBindN i _ _) _)) = Just i
-    go S.Bind {}                                     = Nothing
-    go _                                             = Nothing
+    go (S.ValueBind (S.ValueBindN i _ _) _) = Just i
+    go _                                    = Nothing
 
 thunkIdentifiers :: [P5.Member] -> Set Identifier
 thunkIdentifiers =
   S.fromList . mapMaybe go
   where
-    go (S.Bind (S.ValueBind (S.ValueBindV i _) _)) = Just i
-    go (S.Bind S.ValueBind {})                     = Nothing
-    go S.Bind {}                                   = Nothing
-    go _                                           = Nothing
+    go (S.ValueBind (S.ValueBindV i _) _) = Just i
+    go S.ValueBind {}                     = Nothing
+    go _                                  = Nothing

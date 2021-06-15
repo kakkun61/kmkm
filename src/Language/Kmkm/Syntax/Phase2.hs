@@ -3,7 +3,6 @@
 module Language.Kmkm.Syntax.Phase2
   ( Module
   , Member
-  , Bind
   , Type
   , Term
   , Term'
@@ -22,8 +21,6 @@ import qualified Language.Kmkm.Syntax.Value as V
 type Module = S.Module 'Curried 'LambdaUnlifted 'Typed
 
 type Member = S.Member 'Curried 'LambdaUnlifted 'Typed
-
-type Bind = S.Bind 'Curried 'LambdaUnlifted 'Typed
 
 type Type = T.Type 'Curried
 

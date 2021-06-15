@@ -21,28 +21,34 @@ module Language.Kmkm.Builder.C.Syntax
   , BlockElement (..)
   , Statement (..)
   , Branch (..)
+  , C (..)
   , readCType
   ) where
 
-import Data.Hashable (Hashable)
-import Data.String   (IsString (fromString))
-import Data.Text     (Text)
-import GHC.Generics  (Generic)
+import           Data.Function         (on)
+import           Data.Hashable         (Hashable)
+import           Data.String           (IsString (fromString))
+import           Data.Text             (Text)
+import           GHC.Generics          (Generic)
+import qualified Language.C.Pretty     as C
+import           Language.C.Syntax.AST (CExtDecl)
+import qualified Text.PrettyPrint      as P
 
 data File =
   File Text [Element]
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data Element
   = Declaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | Definition Definition
   | TypeDefinition QualifiedType Identifier
-  deriving (Show, Read, Eq, Ord, Generic)
+  | Embed C
+  deriving (Show, Eq, Ord, Generic)
 
 data Definition
   = ExpressionDefinition QualifiedType [VariableQualifier] Identifier [Deriver] Initializer
   | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] [BlockElement]
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data VariableQualifier
   = Constant
@@ -93,7 +99,7 @@ instance IsString Identifier where
 data Initializer
   = Expression Expression
   | List [Initializer]
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data Expression
   = Variable Identifier
@@ -103,7 +109,7 @@ data Expression
   | Call Expression [Expression]
   | StatementExpression Statement -- ^ GCC extension.
   | Assign Identifier Expression
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data Literal
   = Integer Integer IntBase
@@ -121,14 +127,15 @@ data ArithmeticExpression
   | Multiple Expression Expression
   | Divide Expression Expression
   | Minus Expression
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data BlockElement
   = BlockStatement Statement
   | BlockDeclaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | BlockDefinition Definition
   | BlockTypeDefinition QualifiedType Identifier -- ^ GCC extension.
-  deriving (Show, Read, Eq, Ord, Generic)
+  | BlockEmbed C
+  deriving (Show, Eq, Ord, Generic)
 
 data Statement
   = ExpressionStatement Expression
@@ -136,8 +143,16 @@ data Statement
   | If Expression Statement (Maybe Statement)
   | Case Expression [Branch]
   | Block [BlockElement]
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 data Branch =
   Branch Expression Statement
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic)
+
+newtype C = C CExtDecl deriving (Show, Generic)
+
+instance Eq C where
+  (==) = (==) `on` (\(C c) -> P.render $ C.pretty c)
+
+instance Ord C where
+  compare = compare `on` (\(C c) -> P.render $ C.pretty c)

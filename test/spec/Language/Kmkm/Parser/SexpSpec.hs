@@ -58,9 +58,9 @@ spec = do
       it "\"\\\"\"" $ do
         parse' (string <* M.eof) "spec" "\"\\\"\"" `shouldReturn` "\""
 
-    describe "bind" $ do
-      it "(bind foo 123 (list))" $ do
-        parse' (bind <* M.eof) "spec" "(bind foo 123 (list))"
+    describe "member" $ do
+      it "(bind-value foo 123 (list))" $ do
+        parse' (member <* M.eof) "spec" "(bind-value foo 123 (list))"
           `shouldReturn`
             ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []
 
@@ -76,10 +76,10 @@ spec = do
             Definition "book" [("book", [("title", T.Variable "string"), ("author", T.Variable "string")])]
 
     describe "module" $ do
-      it "(module math (list (bind foo 123 (list))" $ do
-        parse' (module' <* M.eof) "spec" "(module math (list (bind foo 123 (list))))"
+      it "(module math (list (bind-value foo 123 (list))" $ do
+        parse' (module' <* M.eof) "spec" "(module math (list (bind-value foo 123 (list))))"
           `shouldReturn`
-            Module "math" [Bind $ ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []]
+            Module "math" [ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []]
 
       it "(module math (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"

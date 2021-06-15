@@ -1,12 +1,12 @@
 (module
   math
   (list
-    (bind pi_int_decimal 3 (list))
-    (bind pi_int_binary 0b11 (list))
-    (bind pi_int_octal 0o3 (list))
-    (bind pi_int_hexadecimal 0x3 (list))
-    (bind pi_double_decimal 3.1415926535 (list))
-    (bind pi_double_hexadecimal 0x3.243f6a8822e87c199acbp0 (list))
-    (bind test1_double_hexadecimal 0x1p1 (list))
-    (bind test2_double_hexadecimal 0x1p-1 (list))
-    (bind test3_double_hexadecimal 0x1.1p1 (list))))
+    (bind-value pi_int_decimal 3 (list))
+    (bind-value pi_int_binary 0b11 (list))
+    (bind-value pi_int_octal 0o3 (list))
+    (bind-value pi_int_hexadecimal 0x3 (list))
+    (bind-value pi_double_decimal 3.1415926535 (list))
+    (bind-value pi_double_hexadecimal 0x3.243f6a8822e87c199acbp0 (list))
+    (bind-value test1_double_hexadecimal 0x1p1 (list))
+    (bind-value test2_double_hexadecimal 0x1p-1 (list))
+    (bind-value test3_double_hexadecimal 0x1.1p1 (list))))

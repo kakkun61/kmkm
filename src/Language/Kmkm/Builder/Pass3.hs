@@ -3,7 +3,7 @@ module Language.Kmkm.Builder.Pass3
   ( partialApplication
   ) where
 
-import qualified Language.Kmkm.Exception     as X
+import           Language.Kmkm.Exception     (unreachable)
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (SystemIdentifier))
 import qualified Language.Kmkm.Syntax.Phase3 as P3
@@ -25,15 +25,13 @@ module' (S.Module i ms) = S.Module i <$> sequence (member <$> ms)
 
 member :: P3.Member -> Pass P4.Member
 member d@S.Definition {} = pure d
-member (S.Bind b)        = S.Bind <$> bind b
-
-bind :: P3.Bind -> Pass P4.Bind
-bind t@S.TypeBind {} = pure t
-bind (S.ValueBind (S.ValueBindU i v) ms) =
+member t@S.TypeBind {} = pure t
+member (S.ValueBind (S.ValueBindU i v) ms) =
   scope $ do
     v' <- term v
     ms' <- sequence $ member <$> ms
     pure $ S.ValueBind (S.ValueBindU i v') ms'
+member b@S.ForeignValueBind {} = pure b
 
 term :: P3.Term -> Pass P4.Term
 term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Function (T.FunctionN t0s t0))) vs)) t) = do
@@ -41,7 +39,7 @@ term (V.TypedTerm (V.Application (V.ApplicationN v@(V.TypedTerm _ (T.Function (T
     nApp = length vs
     nFun = length t0s
   if nFun < nApp
-    then X.unreachable
+    then unreachable
     else do
       v' <- term v
       vs' <- sequence $ term <$> vs

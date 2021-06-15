@@ -1,9 +1,12 @@
 import qualified Language.Kmkm.Builder.C   as B
 import           Language.Kmkm.Parser.Sexp (parse)
+import qualified Language.Kmkm.Parser.Sexp as P
 
 import           Control.Exception        (Exception (displayException))
+import qualified Control.Exception        as E
 import           Control.Exception.Safe   (tryIO)
 import           Control.Monad            (unless)
+import qualified Data.ByteString.Char8    as B
 import           Data.Default.Class       (def)
 import           Data.List                (nub, sort)
 import           Data.Text                (Text)
@@ -33,7 +36,7 @@ main =
           tryIO $ do
             let path = dir <> "/" <> file
             source <- T.readFile $ path <> ".s.km"
-            expected <- readFile $ path <> ".c"
+            expected <- B.readFile $ path <> ".c"
             case parseC expected $ C.position 0 file 0 0 Nothing of
               Left e -> do
                 putStrLnRed $ "ERROR " ++ file
@@ -49,7 +52,7 @@ main =
                     putStrLn "result:"
                     putStrLn $ P.render r
                     putStrLn "expected:"
-                    putStrLn expected
+                    B.putStrLn expected
                     pure False
                   Fail m -> do
                     putStrLnRed $ "FAIL " ++ file
@@ -67,11 +70,14 @@ data Result = Pass | Mismatch P.Doc | Fail String
 test :: Text -> P.Doc -> Result
 test source expected =
   case parse (T.unpack source) source of
-    Left e -> Fail $ displayException e
+    Left e ->
+      case E.fromException e of
+        Just (P.Exception m) -> Fail m
+        Nothing              -> Fail $ displayException e
     Right m ->
       case B.buildC def m of
         Left e -> Fail $ displayException e
-        Right d ->
+        Right (_, d) ->
           let result = C.pretty d
           in
             if result == expected

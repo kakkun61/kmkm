@@ -3,7 +3,6 @@
 module Language.Kmkm.Syntax.Phase3
   ( Module
   , Member
-  , Bind
   , ValueBind
   , Type
   , Term
@@ -23,8 +22,6 @@ import qualified Language.Kmkm.Syntax.Value as V
 type Module = S.Module 'Uncurried 'LambdaUnlifted 'Typed
 
 type Member = S.Member 'Uncurried 'LambdaUnlifted 'Typed
-
-type Bind = S.Bind 'Uncurried 'LambdaUnlifted 'Typed
 
 type ValueBind = S.ValueBind 'Uncurried 'LambdaUnlifted 'Typed
 

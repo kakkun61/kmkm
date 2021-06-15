@@ -8,7 +8,7 @@ module Language.Kmkm.Builder.Pass2
   ( uncurry
   ) where
 
-import qualified Language.Kmkm.Exception     as X
+import           Language.Kmkm.Exception     (unreachable)
 import qualified Language.Kmkm.Syntax        as S
 import qualified Language.Kmkm.Syntax.Phase2 as P2
 import qualified Language.Kmkm.Syntax.Phase3 as P3
@@ -33,11 +33,9 @@ member (S.Definition i cs) =
       (i, go <$> fs)
       where
         go (i, t) = (i, typ t)
-member (S.Bind b) = S.Bind $ bind b
-
-bind :: P2.Bind -> P3.Bind
-bind (S.TypeBind i t)                    = S.TypeBind i $ typ t
-bind (S.ValueBind (S.ValueBindU i v) ms) = S.ValueBind (S.ValueBindU i $ term v) $ member <$> ms
+member (S.TypeBind i t) = S.TypeBind i $ typ t
+member (S.ValueBind (S.ValueBindU i v) ms) = S.ValueBind (S.ValueBindU i $ term v) $ member <$> ms
+member (S.ForeignValueBind i hs c t) = S.ForeignValueBind i hs c $ typ t
 
 typ :: P2.Type -> P3.Type
 typ (T.Variable i)      = T.Variable i
@@ -50,7 +48,7 @@ term (V.TypedTerm (V.Variable i) t)       = V.TypedTerm (V.Variable i) $ typ t
 term (V.TypedTerm (V.Literal l) t)        = V.TypedTerm (V.Literal $ literal l) $ typ t
 term (V.TypedTerm (V.Application a) t)    = V.TypedTerm (V.Application $ application a) $ typ t
 term (V.TypedTerm (V.Procedure ps) t)     = V.TypedTerm (V.Procedure $ procedureStep <$> ps) $ typ t
-term (V.TypedTerm (V.TypeAnnotation _) _) = X.unreachable
+term (V.TypedTerm (V.TypeAnnotation _) _) = unreachable
 
 literal :: P2.Literal -> P3.Literal
 literal (V.Integer v b)      = V.Integer v b

@@ -6,8 +6,8 @@ module Language.Kmkm.Parser.Sexp
   ( parse
   , parse'
   , module'
+  , member
   , definition
-  , bind
   , identifier
   , term
   , literal
@@ -21,8 +21,8 @@ module Language.Kmkm.Parser.Sexp
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
 import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase1 (Application, Bind, Function, Literal, Member, Module, ProcedureStep,
-                                              TFunction, Term, Type, TypeAnnotation, ValueBind)
+import           Language.Kmkm.Syntax.Phase1 (Application, Function, Literal, Member, Module, ProcedureStep, TFunction,
+                                              Term, Type, TypeAnnotation)
 import qualified Language.Kmkm.Syntax.Type   as T
 import qualified Language.Kmkm.Syntax.Value  as V
 
@@ -39,9 +39,12 @@ import           Data.List.NonEmpty         (NonEmpty)
 import qualified Data.List.NonEmpty         as N
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
 import qualified Data.Typeable              as Y
 import           Data.Void                  (Void)
 import           GHC.Generics               (Generic)
+import qualified Language.C.Data.Position   as C
+import qualified Language.C.Parser          as C
 import qualified Text.Megaparsec            as M
 import qualified Text.Megaparsec.Char.Lexer as M
 import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
@@ -69,21 +72,21 @@ parse'' (ParsecT p) n s =
 
 module' :: Parser Module
 module' =
-  (<?> "module") $
+  M.label "module" $
     P.parens $ do
       void $ P.textSymbol "module"
       S.Module <$> moduleName <*> list member
 
 list :: Parser a -> Parser [a]
 list p =
-  (<?> "list") $
+  M.label "list" $
     P.parens $ do
       void $ P.textSymbol "list"
       P.many p
 
 list1 :: Parser a -> Parser (NonEmpty a)
 list1 p =
-  (<?> "list1") $
+  M.label "list1" $
     P.parens $ do
       void $ P.textSymbol "list"
       N.fromList <$> P.some p -- never empty list.
@@ -93,12 +96,13 @@ member =
   "member" <!>
     P.choice
       [ P.try definition
-      , S.Bind <$> bind
+      , P.try valueBind
+      , P.try foreignValueBind
       ]
 
 definition :: Parser Member
 definition =
-  (<?> "definition") $
+  M.label "definition" $
     P.parens $ do
       void $ P.textSymbol "define"
       S.Definition <$> identifier <*> list valueConstructor
@@ -112,25 +116,25 @@ valueConstructor =
       ]
 
 field :: Parser (Identifier, Type)
-field = (<?> "field") $ P.parens $ (,) <$> identifier <*> typ
+field = M.label "field" $ P.parens $ (,) <$> identifier <*> typ
 
-bind :: Parser Bind
-bind =
-  (<?> "bind") $
+valueBind :: Parser Member
+valueBind =
+  M.label "valueBind" $
     P.parens $ do
-      void $ P.textSymbol "bind"
-      i <- identifier
-      P.choice
-        [ S.ValueBind <$> valueBind i <*> list member
-        , S.TypeBind i <$> undefined
-        ]
+      void $ P.textSymbol "bind-value"
+      S.ValueBind <$> (S.ValueBindU <$> identifier <*> term) <*> list member
 
-valueBind :: Identifier -> Parser ValueBind
-valueBind i = (S.ValueBindU i <$> term) <?> "valueBind"
+foreignValueBind :: Parser Member
+foreignValueBind =
+  M.label "foreignValueBind" $
+    P.parens $ do
+      void $ P.textSymbol "bind-value-foreign"
+      S.ForeignValueBind <$> identifier <*> list string <*> c <*> typ
 
 identifier :: Parser Identifier
 identifier =
-  (<?> "identifier") $
+  M.label "identifier" $
     P.token $ do
       a <- asciiAlphabet
       b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
@@ -138,7 +142,7 @@ identifier =
 
 moduleName :: Parser ModuleName
 moduleName =
-  (<?> "moduleName") $
+  M.label "moduleName" $
     P.token $ do
       a <- asciiAlphabet
       b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
@@ -146,7 +150,7 @@ moduleName =
 
 term :: Parser Term
 term =
-  (<?> "term'") $
+  M.label "term'" $
     V.UntypedTerm <$>
       P.choice
         [ V.Variable <$> identifier
@@ -168,20 +172,20 @@ literal =
 
 application :: Parser Application
 application =
-  (<?> "application") $
+  M.label "application" $
     P.parens $ do
       void $ P.textSymbol "apply"
       V.ApplicationC <$> term <*> term
 
 procedure :: Parser (NonEmpty ProcedureStep)
 procedure =
-  (<?> "procedure") $
+  M.label "procedure" $
     P.parens $ do
       void $ P.textSymbol "procedure"
       list1 p
   where
     p =
-      (<?> "procedures.p") $
+      M.label "procedures.p" $
         P.parens $
           P.choice
             [ do
@@ -194,7 +198,7 @@ procedure =
 
 typeAnnotation :: Parser TypeAnnotation
 typeAnnotation =
-  (<?> "typeAnnotation") $
+  M.label "typeAnnotation" $
     P.parens $ do
       void $ P.textSymbol "type"
       V.TypeAnnotation' <$> term <*> typ
@@ -263,18 +267,35 @@ sign =  P.option True $ P.text "-" $> False <|> P.text "+" $> True
 string :: Parser Text
 string =
   "string" <!> do
-    mconcat <$> do
-      P.token $
-        doubleQuotes $
-          many $
-            P.choice
-              [ P.text "\\\"" >> pure "\""
-              , T.singleton <$> P.notChar '"'
-              ]
+    P.token $
+      P.choice
+        [ do
+            void $ P.text "\"\"\""
+            let
+              go n = do
+                c <- P.anyChar
+                case c of
+                  '"' ->
+                    if n == 2
+                      then pure T.empty
+                      else go (n + 1)
+                  _ ->
+                    if n == 0
+                      then (T.singleton c <>) <$> go n
+                      else ((T.replicate n "\"" <> T.singleton c) <>) <$> go 0
+            go 0
+        , doubleQuote $
+            fmap mconcat $
+              many $
+                P.choice
+                  [ P.text "\\\"" $> "\""
+                  , T.singleton <$> P.notChar '"'
+                  ]
+        ]
 
 function :: Parser Function
 function =
-  (<?> "function") $
+  M.label "function" $
     P.parens $ do
       void $ P.textSymbol "function"
       V.FunctionC <$> identifier <*> typ <*> term
@@ -291,27 +312,34 @@ typ =
 
 arrow :: Parser TFunction
 arrow =
-  (<?> "arrow") $
+  M.label "arrow" $
     P.parens $ do
       void $ P.textSymbol "function"
       T.FunctionC <$> typ <*> typ
 
 typeApplication :: Parser (Type, Type)
 typeApplication =
-  (<?> "typeApplication") $
+  M.label "typeApplication" $
     P.parens $ do
       void $ P.textSymbol "apply"
       (,) <$> typ <*> typ
 
 procedureStep :: Parser Type
 procedureStep =
-  (<?> "procedureStep") $
+  M.label "procedureStep" $
     P.parens $ do
       void $ P.textSymbol "procedure"
       typ
 
-doubleQuotes :: Parser a -> Parser a
-doubleQuotes = (<?> "doubleQuotes") . P.between (void $ P.text "\"") (void $ P.text "\"")
+c :: Parser S.C
+c = do
+  s <- T.encodeUtf8 <$> string
+  case C.execParser_ C.extDeclP s C.nopos of
+    Left (C.ParseError (m, _)) -> fail $ unlines m
+    Right c                    -> pure $ S.C c
+
+doubleQuote :: Parser a -> Parser a
+doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")
 
 asciiAlphabet :: Parser Char
 asciiAlphabet = P.choice [asciiUpper, asciiLower]

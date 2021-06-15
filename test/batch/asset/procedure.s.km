@@ -2,11 +2,11 @@
   procedures
   (list
     (define unit (list unit))
-    (bind
+    (bind-value
       rec0
       (type rec0 unit)
       (list))
-    (bind
+    (bind-value
       rec1
       (procedure
         (list

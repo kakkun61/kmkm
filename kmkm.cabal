@@ -127,6 +127,7 @@ test-suite batch
   hs-source-dirs: test/batch
   build-depends: kmkm,
                  ansi-terminal,
+                 bytestring,
                  data-default-class,
                  directory,
                  language-c,

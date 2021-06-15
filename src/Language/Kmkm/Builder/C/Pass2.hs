@@ -5,16 +5,16 @@
 
 module Language.Kmkm.Builder.C.Pass2
   ( convert
-  , bind
+  , member
   ) where
 
 import qualified Language.Kmkm.Builder.C.Syntax as I
 import           Language.Kmkm.Config           (Config (Config, typeMap))
 import qualified Language.Kmkm.Config           as C
-import qualified Language.Kmkm.Exception        as X
+import           Language.Kmkm.Exception        (unreachable)
 import qualified Language.Kmkm.Syntax           as S
 import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
-import           Language.Kmkm.Syntax.Phase6    (Bind, Literal, Member, Module, ProcedureStep, Term, Type)
+import           Language.Kmkm.Syntax.Phase6    (Literal, Member, Module, ProcedureStep, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
 
@@ -22,11 +22,15 @@ import qualified Data.List.NonEmpty as N
 import           Data.Text          (Text)
 import qualified Data.Text          as T
 
-convert :: Config -> Module -> I.File
+convert :: Config -> Module -> ([Text], I.File)
 convert = module'
 
-module' :: Config -> Module -> I.File
-module' config (S.Module n ms) = I.File (moduleName n) $ member config =<< ms
+module' :: Config -> Module -> ([Text], I.File)
+module' config (S.Module n ms) = (header =<< ms, I.File (moduleName n) $ member config =<< ms)
+
+header :: Member -> [Text]
+header (S.ForeignValueBind _ hs _ _) = hs
+header _                             = []
 
 -- |
 -- @
@@ -82,12 +86,14 @@ member config (S.Definition i cs) =
             (1, _:_) -> argument <$> fs
             _        -> I.Expression (I.Variable $ tagEnumIdent c) : (argument <$> fs)
         argument (i, _) = I.Expression $ I.Variable $ identifier i
-member config (S.Bind a) = [bind config a]
-
-bind :: Config -> Bind -> I.Element
-bind config (S.ValueBind (S.ValueBindV i v@(V.TypedTerm _ t)) _)  = I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v
-bind config (S.ValueBind (S.ValueBindN i is v) ms)                = bindTermN config i is v ms
-bind config (S.TypeBind i t)                                    = I.TypeDefinition (typ config t) $ identifier i
+member config (S.ValueBind (S.ValueBindV i v@(V.TypedTerm _ t)) _) =
+  [I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v]
+member config (S.ValueBind (S.ValueBindN i is v) ms) =
+  [bindTermN config i is v ms]
+member _ (S.ForeignValueBind _ _ (S.C c) _) =
+  [I.Embed $ I.C c]
+member config (S.TypeBind i t) =
+  [I.TypeDefinition (typ config t) $ identifier i]
 
 bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
 bindTermN config i ps v@(V.TypedTerm _ t) ms =
@@ -99,6 +105,7 @@ elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
 elementStatement (I.Definition d)          = I.BlockDefinition d
 elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
+elementStatement (I.Embed c)               = I.BlockEmbed c
 
 identifier :: Identifier -> I.Identifier
 identifier (UserIdentifier t)     = I.Identifier t
@@ -112,7 +119,7 @@ term _ (V.TypedTerm (V.Variable i) _)                             = I.Variable $
 term _ (V.TypedTerm (V.Literal l) _)                              = I.Literal $ literal l
 term config (V.TypedTerm (V.Application (V.ApplicationN v vs)) _) = I.Call (term config v) $ term config <$> vs
 term config (V.TypedTerm (V.Procedure ps) _)                      = I.StatementExpression $ I.Block $ procedureStep config =<< N.toList ps
-term _ (V.TypedTerm (V.TypeAnnotation _) _)                       = X.unreachable
+term _ (V.TypedTerm (V.TypeAnnotation _) _)                       = unreachable
 
 literal :: Literal -> I.Literal
 literal (V.Integer i b) =

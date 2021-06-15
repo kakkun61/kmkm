@@ -1,0 +1,12 @@
+(module ffi
+  (list
+    (define unit (list unit))
+    (bind-value-foreign
+      hello
+      (list "stdio.h")
+      """
+        void hello(void) {
+          printf("hello\n");
+        }
+      """
+      (procedure unit))))

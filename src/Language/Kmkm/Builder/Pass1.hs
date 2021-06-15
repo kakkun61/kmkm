@@ -57,7 +57,8 @@ members ms = do
     dependencies =
       gsum $ go <$> ms
       where
-        go (S.Bind (S.ValueBind (S.ValueBindU i v) ms)) = G.vertex i `G.connect` gsum (G.vertex <$> dependency (M.keysSet siblings) v ms)
+        go (S.ValueBind (S.ValueBindU i v) ms) = G.vertex i `G.connect` gsum (G.vertex <$> dependency (M.keysSet siblings) v ms)
+        go (S.ForeignValueBind i _ _ _) = G.vertex i
         go _                                          = G.empty
         gsum :: (Foldable f, Ord a) => f (G.AdjacencyMap a) -> G.AdjacencyMap a
         gsum = foldr G.overlay G.empty
@@ -67,10 +68,10 @@ members ms = do
       go :: (MonadThrow m, MonadCatch m) => GN.AdjacencyMap Identifier -> m (Map Identifier P2.Term) -> m (Map Identifier P2.Term)
       go ks acc =
         case G.vertexList ks of
-          [] -> X.unreachable
+          [] -> unreachable
           ks ->
             case sequence $ (\k -> (k,) <$> M.lookup k siblings) <$> ks of
-              Nothing -> X.unreachable
+              Nothing -> acc
               Just bs -> do
                 acc' <- acc
                 let
@@ -90,16 +91,17 @@ members ms = do
     in foldr go (pure M.empty) orderedIdentifiers
   let
     go (S.Definition i cs)                        = pure $ S.Definition i cs
-    go (S.Bind (S.TypeBind i t))                  = pure $ S.Bind $ S.TypeBind i t
-    go (S.Bind (S.ValueBind (S.ValueBindU i _) ms)) = S.Bind . S.ValueBind (S.ValueBindU i $ fromMaybe X.unreachable $ M.lookup i typedSiblings) <$> members ms
+    go (S.TypeBind i t)                  = pure $ S.TypeBind i t
+    go (S.ValueBind (S.ValueBindU i _) ms) = S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup i typedSiblings) <$> members ms
+    go (S.ForeignValueBind i hs c t) = pure $ S.ForeignValueBind i hs c t
   sequence $ go <$> ms
 
 rootIdentifiers :: [P1.Member] -> Map Identifier P1.Term
 rootIdentifiers ms =
   M.fromList $ mapMaybe go ms
   where
-    go (S.Bind (S.ValueBind (S.ValueBindU i v) _)) = Just (i, v)
-    go _                                           = Nothing
+    go (S.ValueBind (S.ValueBindU i v) _) = Just (i, v)
+    go _                                  = Nothing
 
 dependency :: Set Identifier -> P1.Term -> [P1.Member] -> [Identifier]
 dependency siblings v ms =
@@ -109,7 +111,7 @@ dependency siblings v ms =
       [ dep siblings v
       , ms >>= \m ->
           case m of
-            S.Bind (S.ValueBind (S.ValueBindU _ v) ms) ->
+            S.ValueBind (S.ValueBindU _ v) ms ->
               dependency (siblings `S.difference` subSiblings) v ms
             _ -> []
       ]
