@@ -24,19 +24,34 @@ common common
   default-language: Haskell2010
   default-extensions: NoStarIsType
 
+common warnings
+  ghc-options: -Wincomplete-uni-patterns
+               -Wincomplete-record-updates
+               -Wmonomorphism-restriction
+               -Wmissing-exported-signatures
+               -Wmissing-export-lists
+               -Wmissing-home-modules
+               -Wmissing-import-lists
+               -Widentities
+               -Wpartial-fields
+               -Wredundant-constraints
+               -Wno-name-shadowing
+
 library
-  import: common
+  import: common,
+          warnings
   hs-source-dirs: src
   exposed-modules: Language.Kmkm
-                   Language.Kmkm.Builder.C
                    Language.Kmkm.Builder.C.Pass1
                    Language.Kmkm.Builder.C.Pass2
                    Language.Kmkm.Builder.C.Pass3
+                   Language.Kmkm.Builder.C.Pass4
                    Language.Kmkm.Builder.C.Syntax
                    Language.Kmkm.Builder.Pass1
                    Language.Kmkm.Builder.Pass2
                    Language.Kmkm.Builder.Pass3
                    Language.Kmkm.Builder.Pass4
+                   Language.Kmkm.Compiler
                    Language.Kmkm.Config
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
@@ -54,6 +69,7 @@ library
                  containers,
                  data-default-class,
                  exceptions,
+                 filepath,
                  megaparsec,
                  hashable,
                  language-c,
@@ -63,22 +79,12 @@ library
                  pretty,
                  safe-exceptions,
                  text
-  ghc-options: -Wincomplete-uni-patterns
-               -Wincomplete-record-updates
-               -Wmonomorphism-restriction
-               -Wmissing-exported-signatures
-               -Wmissing-export-lists
-               -Wmissing-home-modules
-               -Wmissing-import-lists
-               -Widentities
-               -Wpartial-fields
-               -Wredundant-constraints
-               -Wno-name-shadowing
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
 
 executable kmkm
-  import: common
+  import: common,
+          warnings
   hs-source-dirs: app
   main-is: kmkm.hs
   build-depends: kmkm,

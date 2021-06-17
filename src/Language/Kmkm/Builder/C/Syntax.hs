@@ -26,7 +26,6 @@ module Language.Kmkm.Builder.C.Syntax
   ) where
 
 import           Data.Function         (on)
-import           Data.Hashable         (Hashable)
 import           Data.String           (IsString (fromString))
 import           Data.Text             (Text)
 import           GHC.Generics          (Generic)
@@ -90,8 +89,6 @@ data Field =
 
 newtype Identifier = Identifier Text
   deriving (Show, Read, Eq, Ord, Generic)
-
-instance Hashable Identifier
 
 instance IsString Identifier where
   fromString = Identifier . fromString

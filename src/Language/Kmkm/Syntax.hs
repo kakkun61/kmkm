@@ -11,7 +11,8 @@ module Language.Kmkm.Syntax
   ( Module (..)
   , Member (..)
   , ValueBind (..)
-  , C (..)
+  , CDefinition (..)
+  , CHeader (..)
   ) where
 
 import Language.Kmkm.Syntax.Base  (Currying, Identifier, LambdaLifting (LambdaLifted, LambdaUnlifted), ModuleName,
@@ -28,7 +29,7 @@ import           Language.C.Syntax.AST (CExtDecl)
 import qualified Text.PrettyPrint      as P
 
 data Module c l t =
-  Module ModuleName [Member c l t]
+  Module ModuleName [ModuleName] [Member c l t]
   deriving Generic
 
 deriving instance Show (Member c l t) => Show (Module c l t)
@@ -40,7 +41,7 @@ data Member c l t
   = Definition Identifier [(Identifier, [(Identifier, Type c)])]
   | TypeBind Identifier (Type c)
   | ValueBind (ValueBind c l t) [Member c l t]
-  | ForeignValueBind Identifier [Text] C (Type c)
+  | ForeignValueBind Identifier [CHeader] CDefinition (Type c)
   deriving Generic
 
 deriving instance (Show (Term c l t), Show (Type c), Show (ValueBind c l t)) => Show (Member c l t)
@@ -68,10 +69,15 @@ deriving instance (Read (Term c 'LambdaLifted t), Read (Type c)) => Read (ValueB
 deriving instance (Eq (Term c 'LambdaLifted t), Eq (Type c)) => Eq (ValueBind c 'LambdaLifted t)
 deriving instance (Ord (Term c 'LambdaLifted t), Ord (Type c)) => Ord (ValueBind c 'LambdaLifted t)
 
-newtype C = C CExtDecl deriving (Show, Generic)
+newtype CDefinition = CDefinition CExtDecl deriving (Show, Generic)
 
-instance Eq C where
-  (==) = (==) `on` (\(C c) -> P.render $ C.pretty c)
+instance Eq CDefinition where
+  (==) = (==) `on` (\(CDefinition c) -> P.render $ C.pretty c)
 
-instance Ord C where
-  compare = compare `on` (\(C c) -> P.render $ C.pretty c)
+instance Ord CDefinition where
+  compare = compare `on` (\(CDefinition c) -> P.render $ C.pretty c)
+
+data CHeader
+  = SystemHeader Text
+  | LocalHeader Text
+  deriving (Show, Read, Eq, Ord, Generic)

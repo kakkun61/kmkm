@@ -4,6 +4,7 @@ module Language.Kmkm.Parser.SexpSpec where
 
 import           Language.Kmkm.Parser.Sexp
 import           Language.Kmkm.Syntax
+import           Language.Kmkm.Syntax.Base
 import qualified Language.Kmkm.Syntax.Type  as T
 import           Language.Kmkm.Syntax.Value
 
@@ -58,6 +59,10 @@ spec = do
       it "\"\\\"\"" $ do
         parse' (string <* M.eof) "spec" "\"\\\"\"" `shouldReturn` "\""
 
+    describe "identifier" $ do
+      it "foo" $ do
+        parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` UserIdentifier "foo"
+
     describe "member" $ do
       it "(bind-value foo 123 (list))" $ do
         parse' (member <* M.eof) "spec" "(bind-value foo 123 (list))"
@@ -76,12 +81,12 @@ spec = do
             Definition "book" [("book", [("title", T.Variable "string"), ("author", T.Variable "string")])]
 
     describe "module" $ do
-      it "(module math (list (bind-value foo 123 (list))" $ do
-        parse' (module' <* M.eof) "spec" "(module math (list (bind-value foo 123 (list))))"
+      it "(module math (list) (list (bind-value foo 123 (list))" $ do
+        parse' (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123 (list))))"
           `shouldReturn`
-            Module "math" [ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []]
+            Module "math" [] [ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []]
 
-      it "(module math (list (define bool (false true)))" $ do
-        parse' (module' <* M.eof) "spec" "(module math (list (define bool (list false true))))"
+      it "(module math (list) (list (define bool (false true)))" $ do
+        parse' (module' <* M.eof) "spec" "(module math (list) (list (define bool (list false true))))"
           `shouldReturn`
-            Module "math" [Definition "bool" [("false", []), ("true", [])]]
+            Module "math" [] [Definition "bool" [("false", []), ("true", [])]]

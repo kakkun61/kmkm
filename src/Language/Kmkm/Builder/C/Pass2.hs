@@ -13,7 +13,8 @@ import           Language.Kmkm.Config           (Config (Config, typeMap))
 import qualified Language.Kmkm.Config           as C
 import           Language.Kmkm.Exception        (unreachable)
 import qualified Language.Kmkm.Syntax           as S
-import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName))
+import           Language.Kmkm.Syntax.Base      (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
+                                                 QualifiedIdentifier (QualifiedIdentifier))
 import           Language.Kmkm.Syntax.Phase6    (Literal, Member, Module, ProcedureStep, Term, Type)
 import qualified Language.Kmkm.Syntax.Type      as T
 import qualified Language.Kmkm.Syntax.Value     as V
@@ -22,13 +23,13 @@ import qualified Data.List.NonEmpty as N
 import           Data.Text          (Text)
 import qualified Data.Text          as T
 
-convert :: Config -> Module -> ([Text], I.File)
+convert :: Config -> Module -> ([S.CHeader], I.File)
 convert = module'
 
-module' :: Config -> Module -> ([Text], I.File)
-module' config (S.Module n ms) = (header =<< ms, I.File (moduleName n) $ member config =<< ms)
+module' :: Config -> Module -> ([S.CHeader ], I.File)
+module' config (S.Module n _ ms) = (header =<< ms, I.File (moduleName n) $ member config n =<< ms)
 
-header :: Member -> [Text]
+header :: Member -> [S.CHeader]
 header (S.ForeignValueBind _ hs _ _) = hs
 header _                             = []
 
@@ -44,8 +45,8 @@ header _                             = []
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-member :: Config -> Member -> [I.Element]
-member config (S.Definition i cs) =
+member :: Config -> ModuleName -> Member -> [I.Element]
+member config _ (S.Definition i cs) =
   mconcat
     [ tagEnum
     , [structure]
@@ -86,18 +87,18 @@ member config (S.Definition i cs) =
             (1, _:_) -> argument <$> fs
             _        -> I.Expression (I.Variable $ tagEnumIdent c) : (argument <$> fs)
         argument (i, _) = I.Expression $ I.Variable $ identifier i
-member config (S.ValueBind (S.ValueBindV i v@(V.TypedTerm _ t)) _) =
-  [I.Definition $ I.ExpressionDefinition (typ config t) [] (identifier i) (deriver config t) $ I.Expression $ term config v]
-member config (S.ValueBind (S.ValueBindN i is v) ms) =
-  [bindTermN config i is v ms]
-member _ (S.ForeignValueBind _ _ (S.C c) _) =
+member config n (S.ValueBind (S.ValueBindV i v@(V.TypedTerm _ t)) _) =
+  [I.Definition $ I.ExpressionDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (Just n) i) (deriver config t) $ I.Expression $ term config v]
+member config n (S.ValueBind (S.ValueBindN i is v) ms) =
+  [bindTermN config n i is v ms]
+member _ _ (S.ForeignValueBind _ _ (S.CDefinition c) _) =
   [I.Embed $ I.C c]
-member config (S.TypeBind i t) =
+member config _ (S.TypeBind i t) =
   [I.TypeDefinition (typ config t) $ identifier i]
 
-bindTermN :: Config -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
-bindTermN config i ps v@(V.TypedTerm _ t) ms =
-  I.Definition $ I.StatementDefinition (typ config t) [] (identifier i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
+bindTermN :: Config -> ModuleName -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
+bindTermN config n i ps v@(V.TypedTerm _ t) ms =
+  I.Definition $ I.StatementDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (Just n) i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config n =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
   where
     parameter (i, t) = (typ config t, case t of { T.Function {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
@@ -111,11 +112,16 @@ identifier :: Identifier -> I.Identifier
 identifier (UserIdentifier t)     = I.Identifier t
 identifier (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n
 
+qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
+qualifiedIdentifier (QualifiedIdentifier (Just (ModuleName m)) (UserIdentifier t)) = I.Identifier $ T.intercalate "_" (N.toList m) <> "_" <> t
+qualifiedIdentifier (QualifiedIdentifier Nothing (UserIdentifier t)) = I.Identifier t
+qualifiedIdentifier (QualifiedIdentifier _ (SystemIdentifier t n)) = I.Identifier $ T.pack $ '_' : t : show n
+
 moduleName :: ModuleName -> Text
-moduleName (ModuleName n) = n
+moduleName (ModuleName n) = T.intercalate "_" $ N.toList n
 
 term :: Config -> Term -> I.Expression
-term _ (V.TypedTerm (V.Variable i) _)                             = I.Variable $ identifier i
+term _ (V.TypedTerm (V.Variable i) _)                             = I.Variable $ qualifiedIdentifier i
 term _ (V.TypedTerm (V.Literal l) _)                              = I.Literal $ literal l
 term config (V.TypedTerm (V.Application (V.ApplicationN v vs)) _) = I.Call (term config v) $ term config <$> vs
 term config (V.TypedTerm (V.Procedure ps) _)                      = I.StatementExpression $ I.Block $ procedureStep config =<< N.toList ps

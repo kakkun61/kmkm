@@ -20,7 +20,8 @@ module Language.Kmkm.Parser.Sexp
 
 import qualified Language.Kmkm.Exception     as X
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName))
+import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName),
+                                              QualifiedIdentifier (QualifiedIdentifier))
 import           Language.Kmkm.Syntax.Phase1 (Application, Function, Literal, Member, Module, ProcedureStep, TFunction,
                                               Term, Type, TypeAnnotation)
 import qualified Language.Kmkm.Syntax.Type   as T
@@ -75,7 +76,7 @@ module' =
   M.label "module" $
     P.parens $ do
       void $ P.textSymbol "module"
-      S.Module <$> moduleName <*> list member
+      S.Module <$> moduleName <*> list moduleName <*> list member
 
 list :: Parser a -> Parser [a]
 list p =
@@ -130,30 +131,45 @@ foreignValueBind =
   M.label "foreignValueBind" $
     P.parens $ do
       void $ P.textSymbol "bind-value-foreign"
-      S.ForeignValueBind <$> identifier <*> list string <*> c <*> typ
+      S.ForeignValueBind <$> identifier <*> list cHeader <*> cDefinition <*> typ
 
 identifier :: Parser Identifier
 identifier =
   M.label "identifier" $
     P.token $ do
       a <- asciiAlphabet
-      b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
-      pure $ UserIdentifier $ T.pack $ a:b
+      b <- many $ P.choice [asciiAlphabet, P.digit]
+      pure $ UserIdentifier $ T.pack $ a : b
+
+qualifiedIdentifier :: Parser QualifiedIdentifier
+qualifiedIdentifier =
+  M.label "qualifiedIdentifier" $
+    P.token $ do
+      is <- dotSeparatedIdentifier
+      let
+        m = ModuleName <$> N.nonEmpty (N.init is)
+        n = UserIdentifier $ N.last is
+      pure $ QualifiedIdentifier m n
 
 moduleName :: Parser ModuleName
-moduleName =
-  M.label "moduleName" $
-    P.token $ do
-      a <- asciiAlphabet
-      b <- many $ P.choice [asciiAlphabet, P.digit, P.char '_']
-      pure $ ModuleName $ T.pack $ a:b
+moduleName = M.label "moduleName" $ ModuleName <$> P.token dotSeparatedIdentifier
+
+dotSeparatedIdentifier :: Parser (N.NonEmpty Text)
+dotSeparatedIdentifier =
+  M.label "dotSeparatedIdentifier" $ P.sepByNonEmpty identifierSegment (P.char '.')
+
+identifierSegment :: Parser Text
+identifierSegment = do
+  a <- asciiAlphabet
+  b <- many $ P.choice [asciiAlphabet, P.digit]
+  pure $ T.pack $ a : b
 
 term :: Parser Term
 term =
   M.label "term'" $
     V.UntypedTerm <$>
       P.choice
-        [ V.Variable <$> identifier
+        [ V.Variable <$> qualifiedIdentifier
         , P.try $ V.Literal <$> literal
         , P.try $ V.Application <$> application
         , P.try $ V.Procedure <$> procedure
@@ -331,12 +347,24 @@ procedureStep =
       void $ P.textSymbol "procedure"
       typ
 
-c :: Parser S.C
-c = do
+cDefinition :: Parser S.CDefinition
+cDefinition = do
   s <- T.encodeUtf8 <$> string
   case C.execParser_ C.extDeclP s C.nopos of
     Left (C.ParseError (m, _)) -> fail $ unlines m
-    Right c                    -> pure $ S.C c
+    Right c                    -> pure $ S.CDefinition c
+
+cHeader :: Parser S.CHeader
+cHeader =
+  P.parens $
+    P.choice
+      [ do
+          void $ P.textSymbol "system-header"
+          S.SystemHeader <$> string
+      , do
+          void $ P.textSymbol "local-header"
+          S.LocalHeader <$> string
+      ]
 
 doubleQuote :: Parser a -> Parser a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")

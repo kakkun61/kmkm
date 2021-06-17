@@ -5,6 +5,6 @@ struct unit {
   enum unit_tag tag;
 };
 struct unit const unit = { unit_tag };
-void hello(void) {
+void ffi_hello(void) {
   printf("hello\n");
 }

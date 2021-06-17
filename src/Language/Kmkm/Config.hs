@@ -6,13 +6,15 @@ module Language.Kmkm.Config
   , TypeMap (..)
   ) where
 
+import Language.Kmkm.Syntax (CHeader)
+
 import Data.Default.Class (Default (def))
 import Data.Text          (Text)
 import GHC.Generics       (Generic)
 
 data Config =
   Config
-    { headers :: [FilePath]
+    { headers :: [CHeader]
     , typeMap :: TypeMap
     }
   deriving (Show, Read, Eq, Ord, Generic)

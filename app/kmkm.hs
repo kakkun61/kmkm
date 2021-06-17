@@ -12,11 +12,13 @@ import qualified Data.List              as L
 import           Data.Text              (Text)
 import qualified Data.Text.IO.Utf8      as T
 import qualified Dhall                  as D
+import           Language.Kmkm.Syntax   (CHeader (LocalHeader, SystemHeader))
 import           Main.Utf8              (withUtf8)
 import qualified Options.Declarative    as O
 import           System.Directory       (createDirectoryIfMissing)
-import           System.FilePath        (takeDirectory, (</>))
-import           System.IO
+import           System.FilePath        ((</>))
+import qualified System.FilePath        as F
+import           System.IO              (hPutStrLn, stderr)
 
 main :: IO ()
 main = withUtf8 $ O.run_ main'
@@ -30,31 +32,39 @@ main' dest config src =
   liftIO $
     catches
       do
-          config' <-
-            case O.get config of
-              Nothing -> pure def
-              Just c -> do
-                t <- T.readFile c
-                decodeConfig t
-          srcText <- T.readFile $ O.get src
-          destText <- compile config' (O.get src) srcText
-          case L.splitAt (length (O.get src) - 5) (O.get src) of
-            (path, ".s.km") -> do
-              let outputFile = O.get dest </> path ++ ".c"
-              createDirectoryIfMissing True $ takeDirectory outputFile
-              T.writeFile outputFile destText
-            _  -> fail "extension is not \"s.km\""
+        config' <-
+          case O.get config of
+            Nothing -> pure def
+            Just c -> do
+              t <- T.readFile c
+              decodeConfig t
+        let
+          writeFile path text = do
+            let path' = O.get dest </> path
+            createDirectoryIfMissing True $ F.takeDirectory path'
+            T.writeFile path' text
+        compile config' T.readFile writeFile =<< removeFileExtension "s.km" (O.get src)
       [ Handler $ \(KS.Exception m) -> hPutStrLn stderr $ "Parse error:\n" ++ m ]
+
+removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath
+removeFileExtension ext path = do
+  case L.splitAt (length path - length ext - 1) path of
+    (f, e) | e == '.' : ext -> pure f
+    _                       -> fail $ "extension is not \"" ++ ext ++ "\""
 
 decodeConfig :: Text -> IO Config
 decodeConfig =
-  D.input decoder
+  D.input config
   where
-    decoder =
+    config =
       D.record $
         Config
-          <$> D.field "headers" (D.list D.string)
+          <$> D.field "headers" (D.list header)
           <*> D.field "typeMap" typeMap
+    header =
+      D.union $
+        (SystemHeader <$> D.constructor "SystemHeader" D.strictText)
+        <> (LocalHeader <$> D.constructor "LocalHeader" D.strictText)
     typeMap =
       D.record $
         TypeMap

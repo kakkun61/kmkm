@@ -1,5 +1,6 @@
 (module
   definition
+  (list)
   (list
     (define
       myBool

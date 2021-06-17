@@ -1,6 +1,6 @@
-import qualified Language.Kmkm.Builder.C   as B
-import           Language.Kmkm.Parser.Sexp (parse)
-import qualified Language.Kmkm.Parser.Sexp as P
+import qualified Language.Kmkm.Builder.Pass1 as B1
+import qualified Language.Kmkm.Compiler      as M
+import qualified Language.Kmkm.Parser.Sexp   as P
 
 import           Control.Exception        (Exception (displayException))
 import qualified Control.Exception        as E
@@ -69,20 +69,19 @@ data Result = Pass | Mismatch P.Doc | Fail String
 
 test :: Text -> P.Doc -> Result
 test source expected =
-  case parse (T.unpack source) source of
+  case P.parse (T.unpack source) source >>= B1.typeCheck mempty of
     Left e ->
       case E.fromException e of
         Just (P.Exception m) -> Fail m
         Nothing              -> Fail $ displayException e
     Right m ->
-      case B.buildC def m of
-        Left e -> Fail $ displayException e
-        Right (_, d) ->
-          let result = C.pretty d
-          in
-            if result == expected
-              then Pass
-              else Mismatch result
+      let
+        (_, d, _) = M.buildC def m
+        result = C.pretty d
+      in
+        if result == expected
+          then Pass
+          else Mismatch result
 
 putStrLnGreen :: String -> IO ()
 putStrLnGreen s = do

@@ -4,7 +4,7 @@ module Language.Kmkm.Builder.C.Pass1
   ) where
 
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier)
+import           Language.Kmkm.Syntax.Base   (Identifier, ModuleName, QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax.Phase5 as P5
 import qualified Language.Kmkm.Syntax.Phase6 as P6
 import qualified Language.Kmkm.Syntax.Type   as T
@@ -22,39 +22,39 @@ import qualified Data.Set           as S
 -- of value definitions.
 
 convert :: P5.Module -> P6.Module
-convert (S.Module i ms) = S.Module i $ member (thunkIdentifiers ms) <$> ms
+convert (S.Module n ds ms) = S.Module n ds $ member n (thunkIdentifiers ms) <$> ms
 
-member :: Set Identifier -> P5.Member -> P6.Member
-member tids (S.ValueBind (S.ValueBindV i v) ms) =
+member :: ModuleName -> Set Identifier -> P5.Member -> P6.Member
+member n tids (S.ValueBind (S.ValueBindV i v) ms) =
   let
     tids' = (tids `S.difference` identifiers ms) `S.union` thunkIdentifiers ms
-    v' = term tids' v
+    v' = term n tids' v
   in
-    S.ValueBind (S.ValueBindN i [] v') (member tids' <$> ms)
-member _ m = m
+    S.ValueBind (S.ValueBindN i [] v') (member n tids' <$> ms)
+member _ _ m = m
 
-term :: Set Identifier -> P5.Term -> P6.Term
-term tids v@(V.TypedTerm (V.Variable i) t)
-  | i `S.member` tids = V.TypedTerm (V.Application $ V.ApplicationN (V.TypedTerm (V.Variable i) (T.Function $ T.FunctionN [] t)) []) t
-  | otherwise = v
-term tids (V.TypedTerm (V.Application (V.ApplicationN v vs)) t) =
+term :: ModuleName -> Set Identifier -> P5.Term -> P6.Term
+term n tids v@(V.TypedTerm (V.Variable i@(QualifiedIdentifier n' i')) t)
+  | Just n == n' &&i' `S.member` tids = V.TypedTerm (V.Application $ V.ApplicationN (V.TypedTerm (V.Variable i) (T.Function $ T.FunctionN [] t)) []) t
+  | otherwise         = v
+term n tids (V.TypedTerm (V.Application (V.ApplicationN v vs)) t) =
   V.TypedTerm (V.Application $ V.ApplicationN v' vs') t
   where
-    v' = term tids v
-    vs' = term tids <$> vs
-term tids (V.TypedTerm (V.Procedure (p:|ps)) t) =
+    v' = term n tids v
+    vs' = term n tids <$> vs
+term n tids (V.TypedTerm (V.Procedure (p :| ps)) t) =
   let
-    (tids', p') = procedureStep tids p
+    (tids', p') = procedureStep n tids p
     (_, ps') = foldr go (tids', []) ps
     go p (tids, ps) =
-      let (tids', p') = procedureStep tids p
+      let (tids', p') = procedureStep n tids p
       in (tids', p':ps)
-  in V.TypedTerm (V.Procedure $ p':|ps') t
-term _ v = v
+  in V.TypedTerm (V.Procedure $ p' :| ps') t
+term _ _ v = v
 
-procedureStep :: Set Identifier -> P5.ProcedureStep -> (Set Identifier, P6.ProcedureStep)
-procedureStep tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term tids v)
-procedureStep tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term tids v)
+procedureStep :: ModuleName -> Set Identifier -> P5.ProcedureStep -> (Set Identifier, P6.ProcedureStep)
+procedureStep n tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term n tids v)
+procedureStep n tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term n tids v)
 
 identifiers :: [P5.Member] -> Set Identifier
 identifiers =

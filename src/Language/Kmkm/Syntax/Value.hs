@@ -26,7 +26,8 @@ module Language.Kmkm.Syntax.Value
   ) where
 
 import           Language.Kmkm.Syntax.Base (Currying (Curried, Uncurried), Identifier,
-                                            LambdaLifting (LambdaLifted, LambdaUnlifted), Typing (Typed, Untyped))
+                                            LambdaLifting (LambdaLifted, LambdaUnlifted), QualifiedIdentifier,
+                                            Typing (Typed, Untyped))
 import           Language.Kmkm.Syntax.Type (Type)
 import qualified Language.Kmkm.Syntax.Type as T
 
@@ -67,7 +68,7 @@ deriving instance Eq (Function 'Uncurried l 'Untyped) => Eq (Term 'Uncurried l '
 deriving instance Ord (Function 'Uncurried l 'Untyped) => Ord (Term 'Uncurried l 'Untyped)
 
 data Term' c l t
-  = Variable Identifier
+  = Variable QualifiedIdentifier
   | Literal (Literal c l t)
   | Application (Application c l t)
   | Procedure (NonEmpty (ProcedureStep c l t))

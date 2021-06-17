@@ -1,21 +1,22 @@
 (module
-  dependencies
+  dependency
+  (list)
   (list
     (bind-value
       a
-      (type (apply (function x int b) c) int)
+      (type (apply (function x int dependency.b) dependency.c) int)
       (list))
     (bind-value
       b
-      (type d int)
+      (type dependency.d int)
       (list))
     (bind-value
       c
-      (apply (function x int d) e)
+      (apply (function x int dependency.d) dependency.e)
       (list))
     (bind-value
       d
-      (type b int)
+      (type dependency.b int)
       (list))
     (bind-value
       e

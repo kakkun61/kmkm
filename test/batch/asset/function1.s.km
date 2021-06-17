@@ -1,13 +1,14 @@
 (module
-  function
+  function1
+  (list)
   (list
     (bind-value
       add
-      (type (function a int (function b int (apply (apply add a) b))) (function int (function int int)))
+      (type (function a int (function b int (apply (apply function1.add a) b))) (function int (function int int)))
       (list))
     (bind-value
       succ
-      (apply add 1)
+      (apply function1.add 1)
       (list))
     (bind-value
       closure1
@@ -19,7 +20,7 @@
       (list))
     (bind-value
       succ2
-      succ
+      function1.succ
       (list))
     (bind-value
       higher1
@@ -27,9 +28,9 @@
       (list))
     (bind-value
       two1
-      (apply succ 1)
+      (apply function1.succ 1)
       (list))
     (bind-value
       two2
-      (apply succ2 1)
+      (apply function1.succ2 1)
       (list))))

@@ -1,11 +1,13 @@
-(module ffi
+(module
+  ffi
+  (list)
   (list
     (define unit (list unit))
     (bind-value-foreign
       hello
-      (list "stdio.h")
+      (list (system-header "stdio.h"))
       """
-        void hello(void) {
+        void ffi_hello(void) {
           printf("hello\n");
         }
       """

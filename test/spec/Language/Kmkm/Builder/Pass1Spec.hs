@@ -7,6 +7,7 @@ import           Language.Kmkm.Syntax
 import qualified Language.Kmkm.Syntax.Type   as T
 import           Language.Kmkm.Syntax.Value
 
+import Language.Kmkm.Syntax.Base
 import Test.Hspec
 
 spec :: Spec
@@ -15,14 +16,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck (Module "" [ValueBind (ValueBindU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
+          typeCheck mempty (Module "spec" [] [ValueBind (ValueBindU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
             `shouldReturn`
-              Module "" [ValueBind (ValueBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
+              Module "spec" [] [ValueBind (ValueBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
 
         it "0x10" $ do
-          typeCheck (Module "" [ValueBind (ValueBindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
+          typeCheck mempty (Module "spec" [] [ValueBind (ValueBindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
             `shouldReturn`
-              Module "" [ValueBind (ValueBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
+              Module "spec" [] [ValueBind (ValueBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
 
     describe "application" $ do
       describe "succ" $ do
@@ -30,7 +31,8 @@ spec = do
           let
             source =
               Module
-                ""
+                "spec"
+                []
                 [ ValueBind
                     ( ValueBindU
                         "succ"
@@ -46,8 +48,8 @@ spec = do
                                             $ UntypedTerm $
                                                 Application $
                                                   ApplicationC
-                                                    (UntypedTerm $ Variable "succ")
-                                                    (UntypedTerm $ Variable "a")
+                                                    (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                                                    (UntypedTerm $ Variable $ QualifiedIdentifier Nothing "a")
                                 )
                                 $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
                     )
@@ -55,7 +57,8 @@ spec = do
                 ]
             result =
               Module
-                ""
+                "spec"
+                []
                 [ ValueBind
                     ( ValueBindU "succ" $
                         TypedTerm
@@ -67,8 +70,8 @@ spec = do
                                   $ TypedTerm
                                       (Application $
                                         ApplicationC
-                                          (TypedTerm (Variable "succ") (T.Function $ T.FunctionC (T.Variable "int") (T.Variable "int")))
-                                          (TypedTerm (Variable "a") (T.Variable "int"))
+                                          (TypedTerm (Variable $ QualifiedIdentifier (Just "spec") "succ") (T.Function $ T.FunctionC (T.Variable "int") (T.Variable "int")))
+                                          (TypedTerm (Variable $ QualifiedIdentifier Nothing "a") (T.Variable "int"))
                                       )
                                       $ T.Variable "int"
                           )
@@ -76,13 +79,14 @@ spec = do
                     )
                     []
                 ]
-          typeCheck source `shouldReturn` result
+          typeCheck mempty source `shouldReturn` result
 
         it "fail" $ do
           let
             source =
               Module
-                ""
+                "spec"
+                []
                 [ ValueBind
                     ( ValueBindU
                         "succ"
@@ -95,10 +99,10 @@ spec = do
                                         FunctionC
                                           "a"
                                           (T.Variable "int")
-                                          (UntypedTerm $ Variable "succ")
+                                          (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
                                 )
                                 $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
                     )
                     []
                 ]
-          typeCheck source `shouldThrow` \MismatchException {} -> True
+          typeCheck mempty source `shouldThrow` \MismatchException {} -> True

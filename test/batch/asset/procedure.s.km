@@ -1,14 +1,15 @@
 (module
-  procedures
+  procedure
+  (list)
   (list
     (define unit (list unit))
     (bind-value
       rec0
-      (type rec0 unit)
+      (type procedure.rec0 unit)
       (list))
     (bind-value
       rec1
       (procedure
         (list
-          (term rec0)))
+          (term procedure.rec0)))
       (list))))

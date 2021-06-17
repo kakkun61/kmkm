@@ -23,7 +23,7 @@ uncurry :: P2.Module -> P3.Module
 uncurry = module'
 
 module' :: P2.Module -> P3.Module
-module' (S.Module i ms) = S.Module i $ member <$> ms
+module' (S.Module i ds ms) = S.Module i ds $ member <$> ms
 
 member :: P2.Member -> P3.Member
 member (S.Definition i cs) =
