@@ -36,7 +36,7 @@ member' _ _ m                                         = m
 valueBind :: ModuleName -> Set Identifier -> Identifier -> Maybe [(Identifier, P5.Type)] -> P5.Term -> [P5.Member] -> P6.Member
 valueBind n tids i mps v ms =
   let
-    tids' = tids `S.difference` identifiers ms
+    tids' = tids S.\\ identifiers ms
     v' = term n tids' v
   in
     S.ValueBind (maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps) $ member' n tids' <$> ms
@@ -61,7 +61,7 @@ term n tids (V.TypedTerm (V.Procedure (p :| ps)) t) =
 term _ _ v = v
 
 procedureStep :: ModuleName -> Set Identifier -> P5.ProcedureStep -> (Set Identifier, P6.ProcedureStep)
-procedureStep n tids (V.BindProcedure i v) = (tids `S.difference` S.singleton i, V.BindProcedure i $ term n tids v)
+procedureStep n tids (V.BindProcedure i v) = (tids S.\\ S.singleton i, V.BindProcedure i $ term n tids v)
 procedureStep n tids (V.TermProcedure v)   = (tids, V.TermProcedure $ term n tids v)
 
 identifiers :: [P5.Member] -> Set Identifier

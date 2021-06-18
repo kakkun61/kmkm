@@ -108,7 +108,7 @@ dependency mn siblings v ms =
       , ms >>= \m ->
           case m of
             S.ValueBind (S.ValueBindU _ v) ms ->
-              dependency mn (siblings `S.difference` subSiblings) v ms
+              dependency mn (siblings S.\\ subSiblings) v ms
             _ -> []
       ]
   where
