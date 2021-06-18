@@ -25,18 +25,26 @@ convert :: P5.Module -> P6.Module
 convert (S.Module n ds ms) = S.Module n ds $ member n (thunkIdentifiers ms) <$> ms
 
 member :: ModuleName -> Set Identifier -> P5.Member -> P6.Member
-member n tids (S.ValueBind (S.ValueBindV i v) ms) =
+member n tids (S.ValueBind (S.ValueBindV i v) ms) = member' n tids (S.ValueBind (S.ValueBindN i [] v) ms)
+member n tids m = member' n tids m
+
+member' :: ModuleName -> Set Identifier -> P5.Member -> P6.Member
+member' n tids (S.ValueBind (S.ValueBindV i v) ms) = valueBind n tids i Nothing v ms
+member' n tids (S.ValueBind (S.ValueBindN i ps v) ms) = valueBind n tids i (Just ps) v ms
+member' _ _ m = m
+
+valueBind :: ModuleName -> Set Identifier -> Identifier -> Maybe [(Identifier, P5.Type)] -> P5.Term -> [P5.Member] -> P6.Member
+valueBind n tids i mps v ms =
   let
-    tids' = (tids `S.difference` identifiers ms) `S.union` thunkIdentifiers ms
+    tids' = tids `S.difference` identifiers ms
     v' = term n tids' v
   in
-    S.ValueBind (S.ValueBindN i [] v') (member n tids' <$> ms)
-member _ _ m = m
+    S.ValueBind (maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps) $ member' n tids' <$> ms
 
 term :: ModuleName -> Set Identifier -> P5.Term -> P6.Term
 term n tids v@(V.TypedTerm (V.Variable i@(QualifiedIdentifier n' i')) t)
   | Just n == n' &&i' `S.member` tids = V.TypedTerm (V.Application $ V.ApplicationN (V.TypedTerm (V.Variable i) (T.Function $ T.FunctionN [] t)) []) t
-  | otherwise         = v
+  | otherwise                         = v
 term n tids (V.TypedTerm (V.Application (V.ApplicationN v vs)) t) =
   V.TypedTerm (V.Application $ V.ApplicationN v' vs') t
   where
