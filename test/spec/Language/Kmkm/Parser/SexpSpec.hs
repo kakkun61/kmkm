@@ -63,20 +63,20 @@ spec = do
       it "foo" $ do
         parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` UserIdentifier "foo"
 
-    describe "member" $ do
-      it "(bind-value foo 123 (list))" $ do
-        parse' (member <* M.eof) "spec" "(bind-value foo 123 (list))"
+    describe "valueBind" $ do
+      it "bind-value foo 123 (list)" $ do
+        parse' (valueBind <* M.eof) "spec" "bind-value foo 123 (list)"
           `shouldReturn`
             ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []
 
     describe "definition" $ do
-      it "(define bool (false true))" $ do
-        parse' (definition <* M.eof) "spec" "(define bool (list false true))"
+      it "define bool (false true)" $ do
+        parse' (definition <* M.eof) "spec" "define bool (list false true)"
           `shouldReturn`
             Definition "bool" [("false", []), ("true", [])]
 
-      it "(define book (list book (list (title string) (author string))))" $ do
-        parse' (definition <* M.eof) "spec" "(define book (list (book (list (title string) (author string)))))"
+      it "define book (list book (list (title string) (author string)))" $ do
+        parse' (definition <* M.eof) "spec" "define book (list (book (list (title string) (author string))))"
           `shouldReturn`
             Definition "book" [("book", [("title", T.Variable "string"), ("author", T.Variable "string")])]
 

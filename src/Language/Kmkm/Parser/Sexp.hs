@@ -8,6 +8,7 @@ module Language.Kmkm.Parser.Sexp
   , module'
   , member
   , definition
+  , valueBind
   , identifier
   , term
   , literal
@@ -94,19 +95,19 @@ list1 p =
 
 member :: Parser Member
 member =
-  "member" <!>
-    P.choice
-      [ P.try definition
-      , P.try valueBind
-      , P.try foreignValueBind
-      ]
+  M.label "member" $
+    P.parens $
+      P.choice
+        [ definition
+        , foreignValueBind
+        , valueBind
+        ]
 
 definition :: Parser Member
 definition =
-  M.label "definition" $
-    P.parens $ do
-      void $ P.textSymbol "define"
-      S.Definition <$> identifier <*> list valueConstructor
+  M.label "definition" $ do
+    void $ P.textSymbol "define"
+    S.Definition <$> identifier <*> list valueConstructor
 
 valueConstructor :: Parser (Identifier, [(Identifier, Type)])
 valueConstructor =
@@ -121,17 +122,15 @@ field = M.label "field" $ P.parens $ (,) <$> identifier <*> typ
 
 valueBind :: Parser Member
 valueBind =
-  M.label "valueBind" $
-    P.parens $ do
-      void $ P.textSymbol "bind-value"
-      S.ValueBind <$> (S.ValueBindU <$> identifier <*> term) <*> list member
+  M.label "valueBind" $ do
+    void $ P.textSymbol "bind-value"
+    S.ValueBind <$> (S.ValueBindU <$> identifier <*> term) <*> list member
 
 foreignValueBind :: Parser Member
 foreignValueBind =
-  M.label "foreignValueBind" $
-    P.parens $ do
-      void $ P.textSymbol "bind-value-foreign"
-      S.ForeignValueBind <$> identifier <*> list cHeader <*> cDefinition <*> typ
+  M.label "foreignValueBind" $ do
+    void $ P.textSymbol "bind-value-foreign"
+    S.ForeignValueBind <$> identifier <*> list cHeader <*> cDefinition <*> typ
 
 identifier :: Parser Identifier
 identifier =
@@ -170,10 +169,14 @@ term =
     V.UntypedTerm <$>
       P.choice
         [ V.Variable <$> qualifiedIdentifier
-        , P.try $ V.Literal <$> literal
-        , P.try $ V.Application <$> application
-        , P.try $ V.Procedure <$> procedure
-        , V.TypeAnnotation <$> typeAnnotation
+        , V.Literal <$> literal
+        , P.parens $
+            P.choice
+              [ V.Literal . V.Function <$> function
+              , V.Application <$> application
+              , V.Procedure <$> procedure
+              , V.TypeAnnotation <$> typeAnnotation
+              ]
         ]
 
 literal :: Parser Literal
@@ -183,25 +186,22 @@ literal =
       [ P.try fraction
       , integer
       , V.String <$> string
-      , V.Function <$> function
       ]
 
 application :: Parser Application
 application =
-  M.label "application" $
-    P.parens $ do
-      void $ P.textSymbol "apply"
-      V.ApplicationC <$> term <*> term
+  M.label "application" $ do
+    void $ P.textSymbol "apply"
+    V.ApplicationC <$> term <*> term
 
 procedure :: Parser (NonEmpty ProcedureStep)
 procedure =
-  M.label "procedure" $
-    P.parens $ do
-      void $ P.textSymbol "procedure"
-      list1 p
+  M.label "procedure" $ do
+    void $ P.textSymbol "procedure"
+    list1 p
   where
     p =
-      M.label "procedures.p" $
+      M.label "procedure.p" $
         P.parens $
           P.choice
             [ do
@@ -214,10 +214,9 @@ procedure =
 
 typeAnnotation :: Parser TypeAnnotation
 typeAnnotation =
-  M.label "typeAnnotation" $
-    P.parens $ do
-      void $ P.textSymbol "type"
-      V.TypeAnnotation' <$> term <*> typ
+  M.label "typeAnnotation" $ do
+    void $ P.textSymbol "type"
+    V.TypeAnnotation' <$> term <*> typ
 
 integer :: Parser Literal
 integer =
@@ -311,10 +310,9 @@ string =
 
 function :: Parser Function
 function =
-  M.label "function" $
-    P.parens $ do
-      void $ P.textSymbol "function"
-      V.FunctionC <$> identifier <*> typ <*> term
+  M.label "function" $ do
+    void $ P.textSymbol "function"
+    V.FunctionC <$> identifier <*> typ <*> term
 
 typ :: Parser Type
 typ =
