@@ -26,12 +26,12 @@ convert (S.Module n ds ms) = S.Module n ds $ member n (thunkIdentifiers ms) <$> 
 
 member :: ModuleName -> Set Identifier -> P5.Member -> P6.Member
 member n tids (S.ValueBind (S.ValueBindV i v) ms) = member' n tids (S.ValueBind (S.ValueBindN i [] v) ms)
-member n tids m = member' n tids m
+member n tids m                                   = member' n tids m
 
 member' :: ModuleName -> Set Identifier -> P5.Member -> P6.Member
-member' n tids (S.ValueBind (S.ValueBindV i v) ms) = valueBind n tids i Nothing v ms
+member' n tids (S.ValueBind (S.ValueBindV i v) ms)    = valueBind n tids i Nothing v ms
 member' n tids (S.ValueBind (S.ValueBindN i ps v) ms) = valueBind n tids i (Just ps) v ms
-member' _ _ m = m
+member' _ _ m                                         = m
 
 valueBind :: ModuleName -> Set Identifier -> Identifier -> Maybe [(Identifier, P5.Type)] -> P5.Term -> [P5.Member] -> P6.Member
 valueBind n tids i mps v ms =
