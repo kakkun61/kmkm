@@ -24,7 +24,7 @@ import           Language.C            (CBlockItem, CCompoundBlockItem (CBlockDe
                                         CStructTag (CStructTag, CUnionTag), CStructureUnion (CStruct), CTranslUnit,
                                         CTranslationUnit (CTranslUnit), CTypeQual, CTypeQualifier (CConstQual),
                                         CTypeSpec,
-                                        CTypeSpecifier (CBoolType, CDoubleType, CEnumType, CIntType, CSUType, CTypeDef, CUnsigType),
+                                        CTypeSpecifier (CBoolType, CDoubleType, CEnumType, CIntType, CSUType, CTypeDef, CUnsigType, CVoidType),
                                         Ident, noFlags, undefNode)
 import           Language.C.Data.Ident (Ident (Ident))
 import           Numeric               (showHex)
@@ -88,6 +88,7 @@ typeQualifier :: I.TypeQualifier -> CTypeSpec
 typeQualifier I.Unsigned = CUnsigType undefNode
 
 typ :: I.Type -> CTypeSpec
+typ I.Void                              = CVoidType undefNode
 typ I.Int                               = CIntType undefNode
 typ I.Double                            = CDoubleType undefNode
 typ (I.EnumerableLiteral i is)          = enumerableLiteral i is

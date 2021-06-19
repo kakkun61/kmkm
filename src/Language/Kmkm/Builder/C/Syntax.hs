@@ -58,7 +58,8 @@ data TypeQualifier
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Type
-  = Char
+  = Void
+  | Char
   | Int
   | Double
   | Float

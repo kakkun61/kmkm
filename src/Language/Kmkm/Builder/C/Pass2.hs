@@ -98,8 +98,10 @@ member config _ (S.TypeBind i t) =
 
 bindTermN :: Config -> ModuleName -> Identifier -> [(Identifier, Type)] -> Term -> [Member] -> I.Element
 bindTermN config n i ps v@(V.TypedTerm _ t) ms =
-  I.Definition $ I.StatementDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (Just n) i) (I.Function (parameter <$> ps) : deriverRoot config t) $ (elementStatement <$> (member config n =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
+  I.Definition $ I.StatementDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (Just n) i) (I.Function (parameters ps) : deriverRoot config t) $ (elementStatement <$> (member config n =<< ms)) ++ [I.BlockStatement $ I.Return (term config v)]
   where
+    parameters [] = [(([], I.Void), [], Nothing, [])]
+    parameters ps = parameter <$> ps
     parameter (i, t) = (typ config t, case t of { T.Function {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
 
 elementStatement :: I.Element -> I.BlockElement

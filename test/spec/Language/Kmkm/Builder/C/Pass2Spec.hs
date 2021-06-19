@@ -31,12 +31,12 @@ spec = do
         it "foo :: () → int ⇒ int foo()" $ do
           member def "spec" (S.ValueBind (S.ValueBindN "foo" [] $ V.TypedTerm (V.Literal $ V.Integer 10 10) $ T.Variable "int") [])
             `shouldBe`
-              [C.Definition (C.StatementDefinition ([], C.Int) [] "spec_foo" [C.Function []] [C.BlockStatement $ C.Return $ C.Literal $ C.Integer 10 C.IntDecimal])]
+              [C.Definition (C.StatementDefinition ([], C.Int) [] "spec_foo" [C.Function [(([], C.Void), [], Nothing, [])]] [C.BlockStatement $ C.Return $ C.Literal $ C.Integer 10 C.IntDecimal])]
 
         it "foo :: () → (int → int) ⇒ int (*foo())(int)" $ do
           member def "spec" (S.ValueBind (S.ValueBindN "foo" [] $ V.TypedTerm (V.Variable $ QualifiedIdentifier (Just "spec") "bar") $ T.Function $ T.FunctionN [T.Variable "int"] $ T.Variable "int") [])
             `shouldBe`
-              [C.Definition (C.StatementDefinition ([], C.Int) [] "spec_foo" [C.Function [], C.Pointer [], C.Function [(([], C.Int), [C.Constant], Nothing, [])]] [C.BlockStatement $ C.Return $ C.Variable "spec_bar"])]
+              [C.Definition (C.StatementDefinition ([], C.Int) [] "spec_foo" [C.Function [(([], C.Void), [], Nothing, [])], C.Pointer [], C.Function [(([], C.Int), [C.Constant], Nothing, [])]] [C.BlockStatement $ C.Return $ C.Variable "spec_bar"])]
 
       describe "1" $ do
         it "foo :: int → int ⇒ int foo(int a)" $ do
