@@ -100,7 +100,7 @@ moduleNameToHeaderPath :: ModuleName -> S.CHeader
 moduleNameToHeaderPath (ModuleName n) = S.LocalHeader $ T.intercalate "/" (N.toList n) <> ".h"
 
 build :: Config -> P2.Module -> (P.Doc, P.Doc)
-build config@Config { headers } m@(S.Module (ModuleName i) ms _) =
+build config@Config { headers } m@(S.Module n@(ModuleName i) ms _) =
   let
     (hs, c, h) = buildC config m
     key = P.text $ T.unpack $ T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
@@ -109,7 +109,7 @@ build config@Config { headers } m@(S.Module (ModuleName i) ms _) =
     include (S.LocalHeader h)  = P.text $ T.unpack $ "#include \"" <> h <> "\"\n"
   in
     ( mconcat $
-        (include . moduleNameToHeaderPath <$> ms) ++
+        (include . moduleNameToHeaderPath <$> n : ms) ++
         (include <$> headers ++ hs) ++
         [ C.pretty c
         , newline
