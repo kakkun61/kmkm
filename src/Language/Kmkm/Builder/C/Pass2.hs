@@ -113,6 +113,7 @@ identifier (UserIdentifier t)     = I.Identifier t
 identifier (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n
 
 qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
+qualifiedIdentifier (QualifiedIdentifier (Just "main") (UserIdentifier t)) = I.Identifier t
 qualifiedIdentifier (QualifiedIdentifier (Just (ModuleName m)) (UserIdentifier t)) = I.Identifier $ T.intercalate "_" (N.toList m) <> "_" <> t
 qualifiedIdentifier (QualifiedIdentifier Nothing (UserIdentifier t)) = I.Identifier t
 qualifiedIdentifier (QualifiedIdentifier _ (SystemIdentifier t n)) = I.Identifier $ T.pack $ '_' : t : show n
