@@ -5,11 +5,9 @@
     (define unit (list unit))
     (bind-value
       rec0
-      (type procedure.rec0 unit)
-      (list))
+      (type procedure.rec0 unit))
     (bind-value
       rec1
       (procedure
         (list
-          (term procedure.rec0)))
-      (list))))
+          (term procedure.rec0))))))

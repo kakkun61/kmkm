@@ -1,10 +1,11 @@
+{-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeFamilies          #-}
 
 #if __GLASGOW_HASKELL__ >= 902
@@ -21,12 +22,10 @@ module Language.Kmkm.Builder.Pass1
 
 import           Language.Kmkm.Exception     (unreachable)
 import qualified Language.Kmkm.Exception     as X
+import           Language.Kmkm.Syntax        (Identifier, ModuleName, QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (ModuleName, QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax.Phase1 as P1
 import qualified Language.Kmkm.Syntax.Phase2 as P2
-import qualified Language.Kmkm.Syntax.Type   as T
-import qualified Language.Kmkm.Syntax.Value  as V
 
 import qualified Algebra.Graph.AdjacencyMap           as G hiding (vertexList)
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
@@ -35,6 +34,7 @@ import qualified Algebra.Graph.ToGraph                as G
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch)
 import           Control.Monad.Catch                  (MonadThrow (throwM), catchJust)
+import           Data.Bifunctor                       (Bifunctor (first))
 import           Data.Either                          (fromRight)
 import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
@@ -48,129 +48,139 @@ import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
 typeCheck :: (MonadThrow m, MonadCatch m) => Map QualifiedIdentifier P1.Type -> P1.Module -> m P2.Module
-typeCheck ctx (S.Module mn ds ms) = S.Module mn ds <$> members mn ctx ms
+typeCheck ctx (S.Module mn ds ms) = S.Module mn ds <$> definitions mn ctx ms
 
-members :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> [P1.Member] -> m [P2.Member]
-members mn ctx ms = do
+definitions :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> [P1.Definition] -> m [P2.Definition]
+definitions moduleName context definitions' = do
   let
-    siblings = rootIdentifiers mn ms
-    dependencies =
-      G.overlays $ go <$> ms
-      where
-        go (S.ValueBind (S.ValueBindU i v) ms) = G.vertex (QualifiedIdentifier (Just mn) i) `G.connect` G.overlays (G.vertex <$> dependency mn (M.keysSet siblings) v ms)
-        go (S.ForeignValueBind i _ _ _)        = G.vertex $ QualifiedIdentifier (Just mn) i
-        go _                                   = G.empty
-    orderedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencies
-  typedSiblings <-
-    let
-      go :: (MonadThrow m, MonadCatch m) => GN.AdjacencyMap QualifiedIdentifier -> m (Map QualifiedIdentifier P2.Term) -> m (Map QualifiedIdentifier P2.Term)
-      go ks acc = do
-        let ks' = GN.vertexList1 ks
-        case sequence $ (\k -> (k,) <$> M.lookup k siblings) <$> ks' of
-          Nothing -> acc
-          Just bs -> do
-            acc' <- acc
-            let
-              ks = fst <$> bs
-              ctx' =
-                foldr go ((typ <$> acc') `M.union` ctx) bs
-                where
-                  go (k, V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' _ t))) c = M.insert k t c
-                  go _ c                                                             = c
-              go (k, v) acc = M.insert k <$> typeOfTerm mn ctx' v <*> acc
-            catchJust
-              (\e -> case e of { NotFoundException i -> if i `elem` ks then Just i else Nothing; _ -> Nothing })
-              (foldr go acc bs)
-              $ const $ throwM $ RecursionException $ S.fromList $ N.toList ks'
-      typ :: P2.Term -> P2.Type
-      typ (V.TypedTerm _ t) = t
-    in foldr go (pure M.empty) orderedIdentifiers
+    valueBinds = M.fromList $ first (QualifiedIdentifier $ Just moduleName) <$> mapMaybe valueBind definitions'
+    dependencyGraph = G.overlays $ dependency moduleName (M.keysSet valueBinds) <$> definitions'
+    sortedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencyGraph
+    context' = M.mapMaybe annotatedType valueBinds `M.union` context
+  typedValueBinds <- foldr (typeBind moduleName context' valueBinds) (pure M.empty) sortedIdentifiers
+  pure $ replaceTerm moduleName typedValueBinds <$> definitions'
+
+dependency :: ModuleName -> Set QualifiedIdentifier -> P1.Definition -> G.AdjacencyMap QualifiedIdentifier
+dependency mn valueBinds (S.ValueBind (S.BindU i v)) = G.vertex (QualifiedIdentifier (Just mn) i) `G.connect` G.overlays (G.vertex <$> dep mn valueBinds v)
+dependency _ _ _                                     = G.empty
+
+typeBind
+  :: (MonadThrow m, MonadCatch m)
+  => ModuleName
+  -> Map QualifiedIdentifier P1.Type
+  -> Map QualifiedIdentifier P1.Term
+  -> GN.AdjacencyMap QualifiedIdentifier
+  -> m (Map QualifiedIdentifier P2.Term)
+  -> m (Map QualifiedIdentifier P2.Term)
+typeBind moduleName context valueBinds recursionIdentifiers typedValueBinds =
+  catchJust
+    (\e -> case e of { NotFoundException i -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
+    do
+      typedValueBinds' <- typedValueBinds
+      let
+        context' = ((\(S.TypedTerm _ t) -> t) <$> typedValueBinds') `M.union` context
+        recursionValueBinds = M.filterWithKey (const . flip GN.hasVertex recursionIdentifiers) valueBinds
+      recursionTypedValueBinds <- sequence $ typeOfTerm moduleName context' <$> recursionValueBinds
+      pure $ recursionTypedValueBinds `M.union` typedValueBinds'
+    $ const $ throwM $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
+
+annotatedType :: P1.Term -> Maybe P1.Type
+annotatedType (S.UntypedTerm (S.TypeAnnotation (S.TypeAnnotation' _ t))) = Just t
+annotatedType _                                                          = Nothing
+
+replaceTerm :: ModuleName -> Map QualifiedIdentifier P2.Term -> P1.Definition -> P2.Definition
+replaceTerm _ _ (S.DataDefinition i cs) = S.DataDefinition i cs
+replaceTerm _ _ (S.TypeBind i t) = S.TypeBind i t
+replaceTerm moduleName typedValueBinds (S.ValueBind (S.BindU i _)) =
+  S.ValueBind (S.BindU i $ fromMaybe unreachable $ M.lookup (QualifiedIdentifier (Just moduleName) i) typedValueBinds)
+replaceTerm _ _ (S.ForeignValueBind i hs c t) = S.ForeignValueBind i hs c t
+
+valueBind :: S.Definition 'S.Curried 'S.LambdaUnlifted t -> Maybe (Identifier, S.Term 'S.Curried 'S.LambdaUnlifted t)
+valueBind (S.ValueBind (S.BindU i v)) = Just (i, v)
+valueBind _                           = Nothing
+
+-- dependency :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [P1.Definition] -> [QualifiedIdentifier]
+-- dependency mn valueBinds v ms =
+--   let subSiblings = M.keysSet $ definedIdentifiers mn ms
+--   in
+--     mconcat
+--       [ dep mn valueBinds v
+--       , ms >>= \m ->
+--           case m of
+--             S.ValueBind (S.BindU _ v) ->
+--               dependency mn (valueBinds S.\\ subSiblings) v ms
+--             _ -> []
+--       ]
+
+dep :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [QualifiedIdentifier]
+dep _ identifiers (S.UntypedTerm (S.Variable i))
+  | i `S.member` identifiers = [i]
+  | otherwise                = []
+dep moduleName identifiers (S.UntypedTerm (S.Literal (S.Function (S.FunctionC i _ v)))) = dep moduleName (S.delete (QualifiedIdentifier Nothing i) identifiers) v
+dep _ _ (S.UntypedTerm (S.Literal _)) = []
+dep moduleName identifiers (S.UntypedTerm (S.Application (S.ApplicationC v1 v2))) = mconcat $ dep moduleName identifiers <$> [v1, v2]
+dep moduleName identifiers (S.UntypedTerm (S.Procedure ps)) =
+  fst $ foldl' go ([], identifiers) ps
+  where
+    go (is, ss) (S.BindProcedure i v) = (dep moduleName ss v ++ is, S.delete (QualifiedIdentifier (Just moduleName) i) ss)
+    go (is, ss) (S.TermProcedure v)   = (dep moduleName ss v ++ is, ss)
+dep moduleName identifiers (S.UntypedTerm (S.TypeAnnotation (S.TypeAnnotation' v _))) = dep moduleName identifiers v
+dep moduleName identifiers (S.UntypedTerm (S.Let ds v)) =
   let
-    go (S.Definition i cs)                 = pure $ S.Definition i cs
-    go (S.TypeBind i t)                    = pure $ S.TypeBind i t
-    go (S.ValueBind (S.ValueBindU i _) ms) = S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup (QualifiedIdentifier (Just mn) i) typedSiblings) <$> members mn ctx ms
-    go (S.ForeignValueBind i hs c t)       = pure $ S.ForeignValueBind i hs c t
-  sequence $ go <$> ms
+    valueBinds = M.fromList $ first (QualifiedIdentifier Nothing) <$> mapMaybe valueBind ds
+    identifiers' = identifiers S.\\ M.keysSet valueBinds
+  in dep moduleName identifiers' =<< v : M.elems valueBinds
 
-rootIdentifiers :: ModuleName -> [P1.Member] -> Map QualifiedIdentifier P1.Term
-rootIdentifiers mn ms =
-  M.fromList $ mapMaybe go ms
-  where
-    go (S.ValueBind (S.ValueBindU i v) _) = Just (QualifiedIdentifier (Just mn) i, v)
-    go _                                  = Nothing
-
-dependency :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [P1.Member] -> [QualifiedIdentifier]
-dependency mn siblings v ms =
-  let subSiblings = M.keysSet $ rootIdentifiers mn ms
-  in
-    mconcat
-      [ dep siblings v
-      , ms >>= \m ->
-          case m of
-            S.ValueBind (S.ValueBindU _ v) ms ->
-              dependency mn (siblings S.\\ subSiblings) v ms
-            _ -> []
-      ]
-  where
-    dep :: Set QualifiedIdentifier -> P1.Term -> [QualifiedIdentifier]
-    dep siblings (V.UntypedTerm (V.Variable i))
-      | i `S.member` siblings = [i]
-      | otherwise             = []
-    dep siblings (V.UntypedTerm (V.Literal (V.Function (V.FunctionC i _ v)))) = dep (S.delete (QualifiedIdentifier Nothing i) siblings) v
-    dep _ (V.UntypedTerm (V.Literal _)) = []
-    dep siblings (V.UntypedTerm (V.Application (V.ApplicationC v1 v2))) = mconcat $ dep siblings <$> [v1, v2]
-    dep siblings (V.UntypedTerm (V.Procedure ps)) =
-      fst $ foldl' go ([], siblings) ps
-      where
-        go (is, ss) (V.BindProcedure i v) = (dep ss v ++ is, S.delete (QualifiedIdentifier (Just mn) i) ss)
-        go (is, ss) (V.TermProcedure v)   = (dep ss v ++ is, ss)
-    dep siblings (V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' v _))) = dep siblings v
-
-typeOfTerm :: MonadThrow m => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.Term -> m P2.Term
-typeOfTerm _ ctx (V.UntypedTerm (V.Variable i)) =
+typeOfTerm :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.Term -> m P2.Term
+typeOfTerm _ ctx (S.UntypedTerm (S.Variable i)) =
   case M.lookup i ctx of
     Nothing -> throwM $ NotFoundException i
-    Just t  -> pure $ V.TypedTerm (V.Variable i) t
-typeOfTerm _ _ (V.UntypedTerm (V.Literal (V.Integer v b))) = pure $ V.TypedTerm (V.Literal (V.Integer v b)) (T.Variable "int")
-typeOfTerm _ _ (V.UntypedTerm (V.Literal (V.Fraction s d e b))) = pure $ V.TypedTerm (V.Literal (V.Fraction s d e b)) (T.Variable "frac2")
-typeOfTerm _ _ (V.UntypedTerm (V.Literal (V.String t))) = pure $ V.TypedTerm (V.Literal (V.String t)) (T.Variable "string")
-typeOfTerm mn ctx (V.UntypedTerm (V.Literal (V.Function (V.FunctionC i t v)))) = do
-  v'@(V.TypedTerm _ t') <- typeOfTerm mn (M.insert (QualifiedIdentifier Nothing i) t ctx) v
-  pure $ V.TypedTerm (V.Literal (V.Function (V.FunctionC i t v'))) (T.Function $ T.FunctionC t t')
-typeOfTerm mn ctx (V.UntypedTerm (V.Application (V.ApplicationC v0 v1))) = do
-  v0'@(V.TypedTerm _ t0) <- typeOfTerm mn ctx v0
-  v1'@(V.TypedTerm _ t1) <- typeOfTerm mn ctx v1
+    Just t  -> pure $ S.TypedTerm (S.Variable i) t
+typeOfTerm _ _ (S.UntypedTerm (S.Literal (S.Integer v b))) = pure $ S.TypedTerm (S.Literal (S.Integer v b)) (S.TypeVariable "int")
+typeOfTerm _ _ (S.UntypedTerm (S.Literal (S.Fraction s d e b))) = pure $ S.TypedTerm (S.Literal (S.Fraction s d e b)) (S.TypeVariable "frac2")
+typeOfTerm _ _ (S.UntypedTerm (S.Literal (S.String t))) = pure $ S.TypedTerm (S.Literal (S.String t)) (S.TypeVariable "string")
+typeOfTerm mn ctx (S.UntypedTerm (S.Literal (S.Function (S.FunctionC i t v)))) = do
+  v'@(S.TypedTerm _ t') <- typeOfTerm mn (M.insert (QualifiedIdentifier Nothing i) t ctx) v
+  pure $ S.TypedTerm (S.Literal (S.Function (S.FunctionC i t v'))) (S.FunctionType $ S.FunctionTypeC t t')
+typeOfTerm mn ctx (S.UntypedTerm (S.Application (S.ApplicationC v0 v1))) = do
+  v0'@(S.TypedTerm _ t0) <- typeOfTerm mn ctx v0
+  v1'@(S.TypedTerm _ t1) <- typeOfTerm mn ctx v1
   case t0 of
-    T.Function (T.FunctionC t00 t01)
-      | t1 == t00 -> pure $ V.TypedTerm (V.Application (V.ApplicationC v0' v1')) t01
+    S.FunctionType (S.FunctionTypeC t00 t01)
+      | t1 == t00 -> pure $ S.TypedTerm (S.Application (S.ApplicationC v0' v1')) t01
       | otherwise -> throwM $ MismatchException (show t00) $ show t1
-    _ -> throwM $ MismatchException "arrow" $ show t0
-typeOfTerm mn ctx (V.UntypedTerm (V.Procedure (p:|ps))) = do
+    _ -> throwM $ MismatchException "function" $ show t0
+typeOfTerm mn ctx (S.UntypedTerm (S.Procedure (p:|ps))) = do
   (ctx', p') <- typeOfProcedure mn ctx p
   (_, ps') <- foldr go (pure (ctx', [])) ps
   let ps'' = p':|ps'
   case N.last ps'' of
-    V.TermProcedure (V.TypedTerm _ t) -> pure $ V.TypedTerm (V.Procedure ps'') t
-    V.BindProcedure {}                -> throwM BindProcedureEndException
+    S.TermProcedure (S.TypedTerm _ t) -> pure $ S.TypedTerm (S.Procedure ps'') t
+    S.BindProcedure {}                -> throwM BindProcedureEndException
   where
     go p acc = do
       (ctx, ps) <- acc
       (ctx', p') <- typeOfProcedure mn ctx p
       pure (ctx', p':ps)
-typeOfTerm mn ctx (V.UntypedTerm (V.TypeAnnotation (V.TypeAnnotation' v t))) = do
-  v'@(V.TypedTerm _ t') <- typeOfTerm mn ctx v
+typeOfTerm mn ctx (S.UntypedTerm (S.TypeAnnotation (S.TypeAnnotation' v t))) = do
+  v'@(S.TypedTerm _ t') <- typeOfTerm mn ctx v
   if t == t'
     then pure v'
     else throwM $ MismatchException (show t) (show t')
+typeOfTerm mn ctx (S.UntypedTerm (S.Let ds v)) = do
+  ds' <- definitions mn ctx ds
+  let ctx' = ((\(S.TypedTerm _ t) -> t) <$> M.fromList (first (QualifiedIdentifier Nothing) <$> mapMaybe valueBind ds')) `M.union` ctx
+  v'@(S.TypedTerm _ t') <- typeOfTerm mn ctx' v
+  pure $ S.TypedTerm (S.Let ds' v') t'
 
-typeOfProcedure :: MonadThrow m => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.ProcedureStep -> m (Map QualifiedIdentifier P1.Type, P2.ProcedureStep)
-typeOfProcedure mn ctx (V.BindProcedure i v) = do
-  v'@(V.TypedTerm _ t) <- typeOfTerm mn ctx v
+typeOfProcedure :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.ProcedureStep -> m (Map QualifiedIdentifier P1.Type, P2.ProcedureStep)
+typeOfProcedure mn ctx (S.BindProcedure i v) = do
+  v'@(S.TypedTerm _ t) <- typeOfTerm mn ctx v
   let ctx' = M.insert (QualifiedIdentifier (Just mn) i) t ctx
-  pure (ctx', V.BindProcedure i v')
-typeOfProcedure mn ctx (V.TermProcedure v) = do
+  pure (ctx', S.BindProcedure i v')
+typeOfProcedure mn ctx (S.TermProcedure v) = do
   v' <- typeOfTerm mn ctx v
-  pure (ctx, V.TermProcedure v')
+  pure (ctx, S.TermProcedure v')
 
 data Exception
   = NotFoundException QualifiedIdentifier

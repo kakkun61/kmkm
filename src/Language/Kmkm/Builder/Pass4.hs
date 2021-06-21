@@ -1,15 +1,14 @@
--- | \"Lambda lifting\" pass. And “top level identifier qualifying”.
+-- | “Lambda lifting” pass.
 module Language.Kmkm.Builder.Pass4
   ( lambdaLifting
   ) where
 
 import           Language.Kmkm.Exception     (unreachable)
-import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (SystemIdentifier), ModuleName,
+import           Language.Kmkm.Syntax        (Identifier (SystemIdentifier), ModuleName,
                                               QualifiedIdentifier (QualifiedIdentifier))
+import qualified Language.Kmkm.Syntax        as S
 import qualified Language.Kmkm.Syntax.Phase4 as P4
 import qualified Language.Kmkm.Syntax.Phase5 as P5
-import qualified Language.Kmkm.Syntax.Value  as V
 
 import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
@@ -21,57 +20,56 @@ lambdaLifting :: P4.Module -> P5.Module
 lambdaLifting = flip evalState 0 . module'
 
 module' :: P4.Module -> Pass P5.Module
-module' (S.Module mn ds ms) = S.Module mn ds <$> sequence (member mn <$> ms)
+module' (S.Module mn ms ds) = S.Module mn ms <$> sequence (definition mn <$> ds)
 
-member :: ModuleName -> P4.Member -> Pass P5.Member
-member _ (S.Definition i cs) = pure $ S.Definition i cs
-member _ (S.TypeBind i t) = pure $ S.TypeBind i t
-member mn (S.ValueBind b ms) =
+definition :: ModuleName -> P4.Definition -> Pass P5.Definition
+definition _ (S.DataDefinition i cs) = pure $ S.DataDefinition i cs
+definition _ (S.TypeBind i t) = pure $ S.TypeBind i t
+definition mn (S.ValueBind (S.BindU i (S.TypedTerm (S.Literal (S.Function (S.FunctionN is v))) _))) =
   scope $ do
-    ms' <- sequence $ member mn <$> ms
-    (b, ms'') <- valueBind mn b
-    pure $ S.ValueBind b (ms' ++ ms'')
-member _ (S.ForeignValueBind i hs c t) = pure $ S.ForeignValueBind i hs c t
+    (v'@(S.TypedTerm _ t), ds) <- term mn v
+    pure $ S.ValueBind $ S.BindN i is $ S.TypedTerm (S.Let ds v') t
+definition mn (S.ValueBind (S.BindU i v)) =
+  scope $ do
+    (v'@(S.TypedTerm _ t), ds) <- term mn v
+    pure $ S.ValueBind $ S.BindV i $ S.TypedTerm (S.Let ds v') t
+definition _ (S.ForeignValueBind i hs c t) = pure $ S.ForeignValueBind i hs c t
 
-valueBind :: ModuleName -> P4.ValueBind -> Pass (P5.ValueBind, [P5.Member])
-valueBind mn (S.ValueBindU i (V.TypedTerm (V.Literal (V.Function (V.FunctionN is v))) _)) = do
-  (v', ms) <- term mn v
-  pure (S.ValueBindN i is v', ms)
-valueBind mn (S.ValueBindU i v) = do
-  (v', ms) <- term mn v
-  pure (S.ValueBindV i v', ms)
+term :: ModuleName -> P4.Term -> Pass (P5.Term, [P5.Definition])
+term _ (S.TypedTerm (S.Variable i) t) = pure (S.TypedTerm (S.Variable i) t, [])
+term mn (S.TypedTerm (S.Literal l) t) = do
+  (l, ds) <- literal mn l
+  pure (S.TypedTerm l t, ds)
+term mn (S.TypedTerm (S.Application (S.ApplicationN v vs)) t) = do
+  (v', ds) <- term mn v
+  (vs', dss) <- unzip <$> sequence (term mn <$> vs)
+  pure (S.TypedTerm (S.Application (S.ApplicationN v' vs')) t, mconcat $ ds : dss)
+term mn (S.TypedTerm (S.Procedure ps) t) = do
+  (ps', dss) <- N.unzip <$> sequence (procedureStep mn <$> ps)
+  pure (S.TypedTerm (S.Procedure ps') t, mconcat $ N.toList dss)
+term _ (S.TypedTerm S.TypeAnnotation {} _) = unreachable
+term mn (S.TypedTerm (S.Let ds v) t) = do
+  ds' <- sequence (definition mn <$> ds)
+  (v', vds) <- term mn v
+  pure (S.TypedTerm (S.Let ds' v') t, vds)
 
-term :: ModuleName -> P4.Term -> Pass (P5.Term, [P5.Member])
-term _ (V.TypedTerm (V.Variable i) t) = pure (V.TypedTerm (V.Variable i) t, [])
-term mn (V.TypedTerm (V.Literal l) t) = do
-  (l, ms) <- literal mn l
-  pure (V.TypedTerm l t, ms)
-term mn (V.TypedTerm (V.Application (V.ApplicationN v vs)) t) = do
-  (v', ms) <- term mn v
-  (vs', mss) <- unzip <$> sequence (term mn <$> vs)
-  pure (V.TypedTerm (V.Application (V.ApplicationN v' vs')) t, mconcat $ ms : mss)
-term mn (V.TypedTerm (V.Procedure ps) t) = do
-  (ps', mss) <- N.unzip <$> sequence (procedureStep mn <$> ps)
-  pure (V.TypedTerm (V.Procedure ps') t, mconcat $ N.toList mss)
-term _ (V.TypedTerm V.TypeAnnotation {} _) = unreachable
+procedureStep :: ModuleName -> P4.ProcedureStep -> Pass (P5.ProcedureStep, [P5.Definition])
+procedureStep mn (S.BindProcedure i v) = do
+  (v', ds) <- term mn v
+  pure (S.BindProcedure i v', ds)
+procedureStep mn (S.TermProcedure v) = do
+  (v', ds) <- term mn v
+  pure (S.TermProcedure v', ds)
 
-procedureStep :: ModuleName -> P4.ProcedureStep -> Pass (P5.ProcedureStep, [P5.Member])
-procedureStep mn (V.BindProcedure i v) = do
-  (v', ms) <- term mn v
-  pure (V.BindProcedure i v', ms)
-procedureStep mn (V.TermProcedure v) = do
-  (v', ms) <- term mn v
-  pure (V.TermProcedure v', ms)
-
-literal :: ModuleName -> P4.Literal -> Pass (P5.Term', [P5.Member])
-literal _ (V.Integer v b) = pure (V.Literal $ V.Integer v b, [])
-literal _ (V.Fraction s f e b) = pure (V.Literal $ V.Fraction s f e b, [])
-literal _ (V.String t) = pure (V.Literal $ V.String t, [])
-literal mn (V.Function (V.FunctionN is v)) = do
+literal :: ModuleName -> P4.Literal -> Pass (P5.Term', [P5.Definition])
+literal _ (S.Integer v b) = pure (S.Literal $ S.Integer v b, [])
+literal _ (S.Fraction s f e b) = pure (S.Literal $ S.Fraction s f e b, [])
+literal _ (S.String t) = pure (S.Literal $ S.String t, [])
+literal mn (S.Function (S.FunctionN is v)) = do
   i <- newIdentifier
-  (v', ms) <- term mn v
-  let m = S.ValueBind (S.ValueBindN i is v') ms
-  pure (V.Variable $ QualifiedIdentifier Nothing i, [m])
+  (v', ds) <- term mn v
+  let m = S.ValueBind (S.BindN i is v')
+  pure (S.Variable $ QualifiedIdentifier Nothing i, ds ++ [m])
 
 newIdentifier :: Pass Identifier
 newIdentifier = do

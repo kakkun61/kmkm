@@ -2,11 +2,8 @@
 
 module Language.Kmkm.Parser.SexpSpec where
 
-import           Language.Kmkm.Parser.Sexp
-import           Language.Kmkm.Syntax
-import           Language.Kmkm.Syntax.Base
-import qualified Language.Kmkm.Syntax.Type  as T
-import           Language.Kmkm.Syntax.Value
+import Language.Kmkm.Parser.Sexp
+import Language.Kmkm.Syntax
 
 import           Test.Hspec
 import qualified Text.Megaparsec as M
@@ -64,29 +61,29 @@ spec = do
         parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` UserIdentifier "foo"
 
     describe "valueBind" $ do
-      it "bind-value foo 123 (list)" $ do
-        parse' (valueBind <* M.eof) "spec" "bind-value foo 123 (list)"
+      it "bind-value foo 123" $ do
+        parse' (valueBind <* M.eof) "spec" "bind-value foo 123"
           `shouldReturn`
-            ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []
+            ValueBind (BindU "foo" $ UntypedTerm $ Literal $ Integer 123 10)
 
-    describe "definition" $ do
+    describe "dataDefinition" $ do
       it "define bool (false true)" $ do
-        parse' (definition <* M.eof) "spec" "define bool (list false true)"
+        parse' (dataDefinition <* M.eof) "spec" "define bool (list false true)"
           `shouldReturn`
-            Definition "bool" [("false", []), ("true", [])]
+            DataDefinition "bool" [("false", []), ("true", [])]
 
       it "define book (list book (list (title string) (author string)))" $ do
-        parse' (definition <* M.eof) "spec" "define book (list (book (list (title string) (author string))))"
+        parse' (dataDefinition <* M.eof) "spec" "define book (list (book (list (title string) (author string))))"
           `shouldReturn`
-            Definition "book" [("book", [("title", T.Variable "string"), ("author", T.Variable "string")])]
+            DataDefinition "book" [("book", [("title", TypeVariable "string"), ("author", TypeVariable "string")])]
 
     describe "module" $ do
-      it "(module math (list) (list (bind-value foo 123 (list))" $ do
-        parse' (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123 (list))))"
+      it "(module math (list) (list (bind-value foo 123)" $ do
+        parse' (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123)))"
           `shouldReturn`
-            Module "math" [] [ValueBind (ValueBindU "foo" (UntypedTerm $ Literal $ Integer 123 10)) []]
+            Module "math" [] [ValueBind $ BindU "foo" $ UntypedTerm $ Literal $ Integer 123 10]
 
       it "(module math (list) (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list) (list (define bool (list false true))))"
           `shouldReturn`
-            Module "math" [] [Definition "bool" [("false", []), ("true", [])]]
+            Module "math" [] [DataDefinition "bool" [("false", []), ("true", [])]]

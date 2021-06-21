@@ -95,8 +95,8 @@ instance IsString Identifier where
   fromString = Identifier . fromString
 
 data Initializer
-  = Expression Expression
-  | List [Initializer]
+  = ExpressionInitializer Expression
+  | ListInitializer [Initializer]
   deriving (Show, Eq, Ord, Generic)
 
 data Expression

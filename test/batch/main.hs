@@ -8,6 +8,7 @@ import           Control.Exception.Safe   (tryIO)
 import           Control.Monad            (unless)
 import qualified Data.ByteString.Char8    as B
 import           Data.Default.Class       (def)
+import           Data.Functor.Identity    (Identity (runIdentity))
 import           Data.List                (nub, sort)
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -76,7 +77,7 @@ test source expected =
         Nothing              -> Fail $ displayException e
     Right m ->
       let
-        (_, d, _) = M.buildC def m
+        (_, d, _) = runIdentity $ M.buildC def (const $ pure ()) m
         result = C.pretty d
       in
         if result == expected

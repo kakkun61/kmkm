@@ -4,21 +4,16 @@
   (list
     (bind-value
       a
-      (type (apply (function x int dependency.b) dependency.c) int)
-      (list))
+      (type (apply (function x int dependency.b) dependency.c) int))
     (bind-value
       b
-      (type dependency.d int)
-      (list))
+      (type dependency.d int))
     (bind-value
       c
-      (apply (function x int dependency.d) dependency.e)
-      (list))
+      (apply (function x int dependency.d) dependency.e))
     (bind-value
       d
-      (type dependency.b int)
-      (list))
+      (type dependency.b int))
     (bind-value
       e
-      1
-      (list))))
+      1)))

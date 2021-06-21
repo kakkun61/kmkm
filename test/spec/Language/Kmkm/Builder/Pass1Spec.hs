@@ -2,12 +2,9 @@
 
 module Language.Kmkm.Builder.Pass1Spec where
 
-import           Language.Kmkm.Builder.Pass1
-import           Language.Kmkm.Syntax
-import qualified Language.Kmkm.Syntax.Type   as T
-import           Language.Kmkm.Syntax.Value
+import Language.Kmkm.Builder.Pass1
 
-import Language.Kmkm.Syntax.Base
+import Language.Kmkm.Syntax
 import Test.Hspec
 
 spec :: Spec
@@ -16,14 +13,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind (ValueBindU "ten" (UntypedTerm $ Literal $ Integer 10 10)) []])
+          typeCheck mempty (Module "spec" [] [ValueBind $ BindU "ten" $ UntypedTerm $ Literal $ Integer 10 10])
             `shouldReturn`
-              Module "spec" [] [ValueBind (ValueBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (T.Variable "int")) []]
+              Module "spec" [] [ValueBind $ BindU "ten" $ TypedTerm (Literal $ Integer 10 10) (TypeVariable "int")]
 
         it "0x10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind (ValueBindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)) []])
+          typeCheck mempty (Module "spec" [] [ValueBind $ BindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)])
             `shouldReturn`
-              Module "spec" [] [ValueBind (ValueBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (T.Variable "int")) []]
+              Module "spec" [] [ValueBind $ BindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (TypeVariable "int")]
 
     describe "application" $ do
       describe "succ" $ do
@@ -33,51 +30,47 @@ spec = do
               Module
                 "spec"
                 []
-                [ ValueBind
-                    ( ValueBindU
-                        "succ"
-                        $ UntypedTerm $
-                            TypeAnnotation $
-                              TypeAnnotation'
-                                ( UntypedTerm $
-                                    Literal $
-                                        Function $
-                                          FunctionC
-                                            "a"
-                                            (T.Variable "int")
-                                            $ UntypedTerm $
-                                                Application $
-                                                  ApplicationC
-                                                    (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
-                                                    (UntypedTerm $ Variable $ QualifiedIdentifier Nothing "a")
-                                )
-                                $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
-                    )
-                    []
+                [ ValueBind $
+                    BindU
+                      "succ"
+                      $ UntypedTerm $
+                          TypeAnnotation $
+                            TypeAnnotation'
+                              ( UntypedTerm $
+                                  Literal $
+                                      Function $
+                                        FunctionC
+                                          "a"
+                                          (TypeVariable "int")
+                                          $ UntypedTerm $
+                                              Application $
+                                                ApplicationC
+                                                  (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                                                  (UntypedTerm $ Variable $ QualifiedIdentifier Nothing "a")
+                              )
+                              $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
                 ]
             result =
               Module
                 "spec"
                 []
-                [ ValueBind
-                    ( ValueBindU "succ" $
-                        TypedTerm
-                          ( Literal $
-                              Function $
-                                FunctionC
-                                  "a"
-                                  (T.Variable "int")
-                                  $ TypedTerm
-                                      (Application $
-                                        ApplicationC
-                                          (TypedTerm (Variable $ QualifiedIdentifier (Just "spec") "succ") (T.Function $ T.FunctionC (T.Variable "int") (T.Variable "int")))
-                                          (TypedTerm (Variable $ QualifiedIdentifier Nothing "a") (T.Variable "int"))
-                                      )
-                                      $ T.Variable "int"
-                          )
-                          $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
-                    )
-                    []
+                [ ValueBind $
+                    BindU "succ" $
+                      TypedTerm
+                        ( Literal $
+                            Function $
+                              FunctionC
+                                "a"
+                                (TypeVariable "int")
+                                $ TypedTerm
+                                    (Application $
+                                      ApplicationC
+                                        (TypedTerm (Variable $ QualifiedIdentifier (Just "spec") "succ") (FunctionType $ FunctionTypeC (TypeVariable "int") (TypeVariable "int")))
+                                        (TypedTerm (Variable $ QualifiedIdentifier Nothing "a") (TypeVariable "int"))
+                                    )
+                                    $ TypeVariable "int"
+                        )
+                        $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
                 ]
           typeCheck mempty source `shouldReturn` result
 
@@ -87,22 +80,20 @@ spec = do
               Module
                 "spec"
                 []
-                [ ValueBind
-                    ( ValueBindU
-                        "succ"
-                        $ UntypedTerm $
-                            TypeAnnotation $
-                              TypeAnnotation'
-                                ( UntypedTerm $
-                                    Literal $
-                                      Function $
-                                        FunctionC
-                                          "a"
-                                          (T.Variable "int")
-                                          (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
-                                )
-                                $ T.Function $ T.FunctionC (T.Variable "int") $ T.Variable "int"
-                    )
-                    []
+                [ ValueBind $
+                    BindU
+                      "succ"
+                      $ UntypedTerm $
+                          TypeAnnotation $
+                            TypeAnnotation'
+                              ( UntypedTerm $
+                                  Literal $
+                                    Function $
+                                      FunctionC
+                                        "a"
+                                        (TypeVariable "int")
+                                        (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                              )
+                              $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
                 ]
           typeCheck mempty source `shouldThrow` \MismatchException {} -> True

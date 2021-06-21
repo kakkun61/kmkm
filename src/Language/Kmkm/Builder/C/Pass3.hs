@@ -1,16 +1,50 @@
+-- | “Redundant statement-expression removal” pass.
 module Language.Kmkm.Builder.C.Pass3
-  ( header
+  ( simplify
   ) where
 
-import qualified Language.Kmkm.Builder.C.Syntax as I
+import Language.Kmkm.Builder.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
+                                       Definition (ExpressionDefinition, StatementDefinition),
+                                       Element (Declaration, Definition, Embed, TypeDefinition),
+                                       Expression (StatementExpression), File (File),
+                                       Initializer (ExpressionInitializer, ListInitializer),
+                                       Statement (Block, ExpressionStatement, Return))
 
-import Data.Maybe (mapMaybe)
+simplify :: File -> File
+simplify f =
+  let f' = simplify' f
+  in if f == f' then f else simplify f'
 
-header :: I.File -> I.File
-header (I.File n es) = I.File n $ mapMaybe element es
+simplify' :: File -> File
+simplify' (File n es) = File n $ element <$> es
 
-element :: I.Element -> Maybe I.Element
-element (I.Definition (I.ExpressionDefinition t qs i ds _)) = Just $ I.Declaration t qs (Just i) ds
-element (I.Definition (I.StatementDefinition t qs i ds _))  = Just $ I.Declaration t qs (Just i) ds
-element I.Embed {}                                          = Nothing
-element e                                                   = Just e
+element :: Element -> Element
+element d@Declaration {}    = d
+element (Definition d)      = Definition $ definition d
+element d@TypeDefinition {} = d
+element e@Embed {}          = e
+
+definition :: Definition -> Definition
+definition (ExpressionDefinition t qs i ds n) = ExpressionDefinition t qs i ds $ initializer n
+definition (StatementDefinition t qs i ds es@[BlockStatement (Return (StatementExpression (Block es')))]) =
+  case es' of
+    [] -> StatementDefinition t qs i ds $ blockElement <$> es
+    _ ->
+      case last es' of -- last never fail
+        BlockStatement (ExpressionStatement e) ->
+          let es'' = (blockElement <$> init es') ++ [BlockStatement $ Return $ expression e]
+          in StatementDefinition t qs i ds es''
+        _ -> StatementDefinition t qs i ds $ blockElement <$> es
+definition d = d
+
+initializer :: Initializer -> Initializer
+initializer (ExpressionInitializer e) = ExpressionInitializer $ expression e
+initializer (ListInitializer is)      = ListInitializer $ initializer <$> is
+
+expression :: Expression -> Expression
+expression (StatementExpression (Block [BlockStatement (ExpressionStatement e)])) = e
+expression e                                                                      = e
+
+blockElement :: BlockElement -> BlockElement
+blockElement (BlockDefinition d) = BlockDefinition $ definition d
+blockElement e                   = e

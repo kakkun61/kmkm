@@ -3,3 +3,4 @@
 - ignore: { name: Use list comprehension }
 - ignore: { name: Use section }
 - ignore: { name: Use tuple-section }
+- ignore: { name: Use isNothing }

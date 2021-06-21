@@ -6,8 +6,8 @@ module Language.Kmkm.Parser.Sexp
   ( parse
   , parse'
   , module'
-  , member
   , definition
+  , dataDefinition
   , valueBind
   , identifier
   , term
@@ -20,13 +20,12 @@ module Language.Kmkm.Parser.Sexp
   ) where
 
 import qualified Language.Kmkm.Exception     as X
-import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Base   (Identifier (UserIdentifier), ModuleName (ModuleName),
+import           Language.Kmkm.Syntax        (CDefinition (CDefinition), CHeader (LocalHeader, SystemHeader),
+                                              Identifier (UserIdentifier), ModuleName (ModuleName),
                                               QualifiedIdentifier (QualifiedIdentifier))
-import           Language.Kmkm.Syntax.Phase1 (Application, Function, Literal, Member, Module, ProcedureStep, TFunction,
-                                              Term, Type, TypeAnnotation)
-import qualified Language.Kmkm.Syntax.Type   as T
-import qualified Language.Kmkm.Syntax.Value  as V
+import qualified Language.Kmkm.Syntax        as S
+import           Language.Kmkm.Syntax.Phase1 (Application, Definition, Function, FunctionType, Literal, Module,
+                                              ProcedureStep, Term, Type, TypeAnnotation)
 
 import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
@@ -51,7 +50,6 @@ import qualified Text.Megaparsec            as M
 import qualified Text.Megaparsec.Char.Lexer as M
 import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
 import qualified Text.Parser.Char           as P
-import           Text.Parser.Combinators    ((<?>))
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 
@@ -77,7 +75,7 @@ module' =
   M.label "module" $
     P.parens $ do
       void $ P.textSymbol "module"
-      S.Module <$> moduleName <*> list moduleName <*> list member
+      S.Module <$> moduleName <*> list moduleName <*> list definition
 
 list :: Parser a -> Parser [a]
 list p =
@@ -93,25 +91,25 @@ list1 p =
       void $ P.textSymbol "list"
       N.fromList <$> P.some p -- never empty list.
 
-member :: Parser Member
-member =
-  M.label "member" $
+definition :: Parser Definition
+definition =
+  M.label "definition" $
     P.parens $
       P.choice
-        [ definition
+        [ dataDefinition
         , foreignValueBind
         , valueBind
         ]
 
-definition :: Parser Member
-definition =
-  M.label "definition" $ do
+dataDefinition :: Parser Definition
+dataDefinition =
+  M.label "dataDefinition" $ do
     void $ P.textSymbol "define"
-    S.Definition <$> identifier <*> list valueConstructor
+    S.DataDefinition <$> identifier <*> list valueConstructor
 
 valueConstructor :: Parser (Identifier, [(Identifier, Type)])
 valueConstructor =
-  "valueConstructor" <!>
+  M.label "valueConstructor" $
     P.choice
       [ flip (,) [] <$> identifier
       , P.parens $ (,) <$> identifier <*> list field
@@ -120,13 +118,13 @@ valueConstructor =
 field :: Parser (Identifier, Type)
 field = M.label "field" $ P.parens $ (,) <$> identifier <*> typ
 
-valueBind :: Parser Member
+valueBind :: Parser Definition
 valueBind =
   M.label "valueBind" $ do
     void $ P.textSymbol "bind-value"
-    S.ValueBind <$> (S.ValueBindU <$> identifier <*> term) <*> list member
+    S.ValueBind <$> (S.BindU <$> identifier <*> term)
 
-foreignValueBind :: Parser Member
+foreignValueBind :: Parser Definition
 foreignValueBind =
   M.label "foreignValueBind" $ do
     void $ P.textSymbol "bind-value-foreign"
@@ -166,33 +164,34 @@ identifierSegment = do
 term :: Parser Term
 term =
   M.label "term'" $
-    V.UntypedTerm <$>
+    S.UntypedTerm <$>
       P.choice
-        [ V.Variable <$> qualifiedIdentifier
-        , V.Literal <$> literal
+        [ S.Variable <$> qualifiedIdentifier
+        , S.Literal <$> literal
         , P.parens $
             P.choice
-              [ V.Literal . V.Function <$> function
-              , V.Application <$> application
-              , V.Procedure <$> procedure
-              , V.TypeAnnotation <$> typeAnnotation
+              [ S.Literal . S.Function <$> function
+              , S.Application <$> application
+              , S.Procedure <$> procedure
+              , S.TypeAnnotation <$> typeAnnotation
+              , S.Let <$> (P.textSymbol "let" *> list definition) <*> term
               ]
         ]
 
 literal :: Parser Literal
 literal =
-  "literal" <!>
+  M.label "literal" $
     P.choice
       [ P.try fraction
       , integer
-      , V.String <$> string
+      , S.String <$> string
       ]
 
 application :: Parser Application
 application =
   M.label "application" $ do
     void $ P.textSymbol "apply"
-    V.ApplicationC <$> term <*> term
+    S.ApplicationC <$> term <*> term
 
 procedure :: Parser (NonEmpty ProcedureStep)
 procedure =
@@ -206,32 +205,32 @@ procedure =
           P.choice
             [ do
                 void $ P.textSymbol "bind"
-                V.BindProcedure <$> identifier <*> term
+                S.BindProcedure <$> identifier <*> term
             , do
                 void $ P.textSymbol "term"
-                V.TermProcedure <$> term
+                S.TermProcedure <$> term
             ]
 
 typeAnnotation :: Parser TypeAnnotation
 typeAnnotation =
   M.label "typeAnnotation" $ do
     void $ P.textSymbol "type"
-    V.TypeAnnotation' <$> term <*> typ
+    S.TypeAnnotation' <$> term <*> typ
 
 integer :: Parser Literal
 integer =
-  "integer" <!> do
+  M.label "integer" $ do
     P.token $
       P.choice
-        [ P.text "0b" >> flip V.Integer 2 <$> M.binary
-        , P.text "0o" >> flip V.Integer 8 <$> M.octal
-        , P.text "0x" >> flip V.Integer 16 <$> M.hexadecimal
-        , flip V.Integer 10 <$> M.decimal
+        [ P.text "0b" >> flip S.Integer 2 <$> M.binary
+        , P.text "0o" >> flip S.Integer 8 <$> M.octal
+        , P.text "0x" >> flip S.Integer 16 <$> M.hexadecimal
+        , flip S.Integer 10 <$> M.decimal
         ]
 
 fraction :: Parser Literal
 fraction =
-  "fraction" <!> do P.token $ hexadecimal <|> decimal
+  M.label "fraction" $ do P.token $ hexadecimal <|> decimal
   where
     hexadecimal = do
       void $ P.text "0x"
@@ -245,7 +244,7 @@ fraction =
       epos <- sign
       estr <- digits 16
       exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.hexadecimal.exponent" estr
-      pure $ V.Fraction significand fractionDigits (sign' epos exponent) 16
+      pure $ S.Fraction significand fractionDigits (sign' epos exponent) 16
     decimal = do
       istr <- digits 10
       (fstr, epos, estr) <-
@@ -267,7 +266,7 @@ fraction =
         fractionDigits = fromIntegral $ T.length fstr
       significand <- parse'' M.decimal "fraction.decimal.significand" $ istr <> fstr
       exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.decimal.exponent" estr
-      pure $ V.Fraction significand fractionDigits (sign' epos exponent) 10
+      pure $ S.Fraction significand fractionDigits (sign' epos exponent) 10
     sign' :: Num n => Bool -> n -> n
     sign' = bool negate id
 
@@ -281,7 +280,7 @@ sign =  P.option True $ P.text "-" $> False <|> P.text "+" $> True
 
 string :: Parser Text
 string =
-  "string" <!> do
+  M.label "string" $ do
     P.token $
       P.choice
         [ do
@@ -312,56 +311,56 @@ function :: Parser Function
 function =
   M.label "function" $ do
     void $ P.textSymbol "function"
-    V.FunctionC <$> identifier <*> typ <*> term
+    S.FunctionC <$> identifier <*> typ <*> term
 
 typ :: Parser Type
 typ =
-  "type" <!> do
+  M.label "type" $ do
     P.choice
-      [ T.Variable <$> identifier
-      , P.try $ T.Function <$> arrow
-      , P.try $ uncurry T.Application <$> typeApplication
-      , T.Procedure <$> procedureStep
+      [ S.TypeVariable <$> identifier
+      , P.parens $
+          P.choice
+            [ S.FunctionType <$> functionType
+            , uncurry S.TypeApplication <$> typeApplication
+            , S.ProcedureType <$> procedureStep
+            ]
       ]
 
-arrow :: Parser TFunction
-arrow =
-  M.label "arrow" $
-    P.parens $ do
-      void $ P.textSymbol "function"
-      T.FunctionC <$> typ <*> typ
+functionType :: Parser FunctionType
+functionType =
+  M.label "functionType" $ do
+    void $ P.textSymbol "function"
+    S.FunctionTypeC <$> typ <*> typ
 
 typeApplication :: Parser (Type, Type)
 typeApplication =
-  M.label "typeApplication" $
-    P.parens $ do
-      void $ P.textSymbol "apply"
-      (,) <$> typ <*> typ
+  M.label "typeApplication" $ do
+    void $ P.textSymbol "apply"
+    (,) <$> typ <*> typ
 
 procedureStep :: Parser Type
 procedureStep =
-  M.label "procedureStep" $
-    P.parens $ do
-      void $ P.textSymbol "procedure"
-      typ
+  M.label "procedureStep" $ do
+    void $ P.textSymbol "procedure"
+    typ
 
-cDefinition :: Parser S.CDefinition
+cDefinition :: Parser CDefinition
 cDefinition = do
   s <- T.encodeUtf8 <$> string
   case C.execParser_ C.extDeclP s C.nopos of
     Left (C.ParseError (m, _)) -> fail $ unlines m
-    Right c                    -> pure $ S.CDefinition c
+    Right c                    -> pure $ CDefinition c
 
-cHeader :: Parser S.CHeader
+cHeader :: Parser CHeader
 cHeader =
   P.parens $
     P.choice
       [ do
           void $ P.textSymbol "system-header"
-          S.SystemHeader <$> string
+          SystemHeader <$> string
       , do
           void $ P.textSymbol "local-header"
-          S.LocalHeader <$> string
+          LocalHeader <$> string
       ]
 
 doubleQuote :: Parser a -> Parser a
@@ -375,10 +374,6 @@ asciiUpper = P.choice $ P.char <$> ['A' .. 'Z']
 
 asciiLower :: Parser Char
 asciiLower = P.choice $ P.char <$> ['a' .. 'z']
-
-(<!>) :: String -> Parser a -> Parser a
-(<!>) = flip (<?>)
-infix <!>
 
 newtype Exception
   = Exception String

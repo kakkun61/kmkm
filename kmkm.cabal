@@ -46,6 +46,7 @@ library
                    Language.Kmkm.Builder.C.Pass2
                    Language.Kmkm.Builder.C.Pass3
                    Language.Kmkm.Builder.C.Pass4
+                   Language.Kmkm.Builder.C.Pass5
                    Language.Kmkm.Builder.C.Syntax
                    Language.Kmkm.Builder.Pass1
                    Language.Kmkm.Builder.Pass2
@@ -56,15 +57,13 @@ library
                    Language.Kmkm.Exception
                    Language.Kmkm.Parser.Sexp
                    Language.Kmkm.Syntax
-                   Language.Kmkm.Syntax.Base
                    Language.Kmkm.Syntax.Phase1
                    Language.Kmkm.Syntax.Phase2
                    Language.Kmkm.Syntax.Phase3
                    Language.Kmkm.Syntax.Phase4
                    Language.Kmkm.Syntax.Phase5
                    Language.Kmkm.Syntax.Phase6
-                   Language.Kmkm.Syntax.Type
-                   Language.Kmkm.Syntax.Value
+                   Language.Kmkm.Syntax.Phase7
   build-depends: algebraic-graphs,
                  containers,
                  data-default-class,
@@ -92,7 +91,7 @@ executable kmkm
                  dhall,
                  directory,
                  filepath,
-                 optparse-declarative,
+                 optparse-declarative >= 0.4.2,
                  safe-exceptions,
                  text,
                  with-utf8

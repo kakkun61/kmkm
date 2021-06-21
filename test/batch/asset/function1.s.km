@@ -4,33 +4,25 @@
   (list
     (bind-value
       add
-      (type (function a int (function b int (apply (apply function1.add a) b))) (function int (function int int)))
-      (list))
+      (type (function a int (function b int (apply (apply function1.add a) b))) (function int (function int int))))
     (bind-value
       succ
-      (apply function1.add 1)
-      (list))
+      (apply function1.add 1))
     (bind-value
       closure1
-      (apply (function a int a) 0)
-      (list))
+      (apply (function a int a) 0))
     (bind-value
       closure2
-      (function a int (apply (function b int a) 0))
-      (list))
+      (function a int (apply (function b int a) 0)))
     (bind-value
       succ2
-      function1.succ
-      (list))
+      function1.succ)
     (bind-value
       higher1
-      (function a (function int int) (apply a 0))
-      (list))
+      (function a (function int int) (apply a 0)))
     (bind-value
       two1
-      (apply function1.succ 1)
-      (list))
+      (apply function1.succ 1))
     (bind-value
       two2
-      (apply function1.succ2 1)
-      (list))))
+      (apply function1.succ2 1))))

@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Language.Kmkm.Syntax.Phase6
+module Language.Kmkm.Syntax.Phase7
   ( module Language.Kmkm.Syntax.Phase5
   ) where
 

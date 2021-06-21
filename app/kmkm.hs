@@ -10,7 +10,9 @@ import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Default.Class     (def)
 import qualified Data.List              as L
 import           Data.Text              (Text)
-import qualified Data.Text.IO.Utf8      as T
+import qualified Data.Text              as T
+import qualified Data.Text.IO           as T
+import qualified Data.Text.IO.Utf8      as TU
 import qualified Dhall                  as D
 import           Language.Kmkm.Syntax   (CHeader (LocalHeader, SystemHeader))
 import           Main.Utf8              (withUtf8)
@@ -26,25 +28,29 @@ main = withUtf8 $ O.run_ main'
 main'
   :: O.Flag "o" '["output"] "DIRECTORY" "output directory" (O.Def "." String)
   -> O.Flag "c" '["config"] "FILE" "configuration file" (Maybe String)
+  -> O.Flag "n" '["dry-run"] "" "dry run" Bool
   -> O.Arg "SOURCE" String
   -> O.Cmd "Kmkm compiler" ()
-main' dest config src =
-  liftIO $
-    catches
-      do
-        config' <-
-          case O.get config of
-            Nothing -> pure def
-            Just c -> do
-              t <- T.readFile c
-              decodeConfig t
-        let
-          writeFile path text = do
-            let path' = O.get dest </> path
-            createDirectoryIfMissing True $ F.takeDirectory path'
-            T.writeFile path' text
-        compile config' T.readFile writeFile =<< removeFileExtension "s.km" (O.get src)
-      [ Handler $ \(KS.Exception m) -> hPutStrLn stderr $ "Parse error:\n" ++ m ]
+main' dest config dryRun src =
+  catches
+    do
+      config' <-
+        case O.get config of
+          Nothing -> pure def
+          Just c -> liftIO $ do
+            t <- TU.readFile c
+            decodeConfig t
+      let
+        writeFile path text =
+          if O.get dryRun
+            then pure ()
+            else do
+              let path' = O.get dest </> path
+              liftIO $ createDirectoryIfMissing True $  F.takeDirectory path'
+              liftIO $ TU.writeFile path' text
+        writeLog = O.logStr 1 . T.unpack
+      compile config' (liftIO . T.readFile) writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
+    [ Handler $ \(KS.Exception m) -> liftIO $ hPutStrLn stderr $ "Parse error:\n" ++ m ]
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath
 removeFileExtension ext path = do

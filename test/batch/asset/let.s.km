@@ -1,0 +1,10 @@
+(module
+  let
+  (list)
+  (list
+    (bind-value
+      a
+      (let
+        (list
+          (bind-value b 1))
+        b))))

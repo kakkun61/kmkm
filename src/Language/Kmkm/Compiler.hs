@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -11,6 +12,7 @@ import qualified Language.Kmkm.Builder.C.Pass1 as BC1
 import qualified Language.Kmkm.Builder.C.Pass2 as BC2
 import qualified Language.Kmkm.Builder.C.Pass3 as BC3
 import qualified Language.Kmkm.Builder.C.Pass4 as BC4
+import qualified Language.Kmkm.Builder.C.Pass5 as BC5
 import qualified Language.Kmkm.Builder.Pass1   as B1
 import qualified Language.Kmkm.Builder.Pass2   as B2
 import qualified Language.Kmkm.Builder.Pass3   as B3
@@ -19,18 +21,18 @@ import           Language.Kmkm.Config          (Config (Config, headers))
 import           Language.Kmkm.Exception       (unreachable)
 import qualified Language.Kmkm.Exception       as X
 import           Language.Kmkm.Parser.Sexp     (parse)
+import           Language.Kmkm.Syntax          (ModuleName (ModuleName), QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax          as S
-import           Language.Kmkm.Syntax.Base     (ModuleName (ModuleName), QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax.Phase1   as P1
 import qualified Language.Kmkm.Syntax.Phase2   as P2
-import qualified Language.Kmkm.Syntax.Value    as V
 
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Control.Exception                    as E
 import           Control.Monad                        (when)
-import           Control.Monad.Catch                  (MonadThrow (throwM))
+import           Control.Monad.Catch                  (MonadCatch, MonadThrow (throwM))
+import           Data.Bifunctor                       (Bifunctor (second))
 import           Data.Either                          (fromRight)
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
@@ -48,14 +50,14 @@ import           System.FilePath                      (isPathSeparator, pathSepa
 import qualified System.FilePath                      as F
 import qualified Text.PrettyPrint                     as P
 
-compile :: Config -> (FilePath -> IO Text) -> (FilePath -> Text -> IO ()) -> FilePath -> IO ()
-compile _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
-compile config readFile writeFile src = do
+compile :: MonadCatch m => Config -> (FilePath -> m Text) -> (FilePath -> Text -> m ()) -> (Text -> m ()) -> FilePath -> m ()
+compile _ _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
+compile config readFile writeFile writeLog src = do
   let src' = F.normalise src
   (deps, modules1) <- readRecursively readFile src'
   orderedModuleNames <- sequence $ (\ms@(m :| ms') -> if null ms' then pure m else throwM $ RecursionException ms) . GN.vertexList1 <$> fromRight unreachable (G.topSort $ G.scc deps)
   (_, modules2) <- foldr (eachModule modules1) (pure (M.empty, M.empty)) orderedModuleNames
-  let docs = build config <$> modules2
+  docs <- sequence $ build config writeLog <$> modules2
   sequence_ $ M.mapWithKey write docs
   where
     eachModule modules1 moduleName acc = do
@@ -65,19 +67,18 @@ compile config readFile writeFile src = do
         types' =
           M.fromList $ mapMaybe go ms
           where
-            go (S.ValueBind (S.ValueBindU i (V.TypedTerm _ t)) _) = Just (QualifiedIdentifier (Just moduleName) i, t)
-            go _                                                  = Nothing
+            go (S.ValueBind (S.BindU i (S.TypedTerm _ t))) = Just (QualifiedIdentifier (Just moduleName) i, t)
+            go _                                           = Nothing
       pure (types `M.union` types', M.insert moduleName m modules2)
     write k (c, h) = do
       let path = moduleNameToFilePath k
       writeFile (F.addExtension path "c") $ T.pack $ P.render c
       writeFile (F.addExtension path "h") $ T.pack $ P.render h
 
-readRecursively :: (FilePath -> IO Text) -> FilePath -> IO (G.AdjacencyMap ModuleName, Map ModuleName P1.Module)
+readRecursively :: MonadThrow m => (FilePath -> m Text) -> FilePath -> m (G.AdjacencyMap ModuleName, Map ModuleName P1.Module)
 readRecursively readFile =
   go $ pure (G.empty, M.empty)
   where
-    go :: IO (G.AdjacencyMap ModuleName, Map ModuleName P1.Module) -> FilePath -> IO (G.AdjacencyMap ModuleName, Map ModuleName P1.Module)
     go acc path = do
       module'@(S.Module moduleName deps _) <- parse path =<< readFile (F.addExtension path "s.km")
       let moduleName' = filePathToModuleName path
@@ -99,15 +100,15 @@ moduleNameToFilePath (ModuleName n) = T.unpack $ T.intercalate (T.singleton path
 moduleNameToHeaderPath :: ModuleName -> S.CHeader
 moduleNameToHeaderPath (ModuleName n) = S.LocalHeader $ T.intercalate "/" (N.toList n) <> ".h"
 
-build :: Config -> P2.Module -> (P.Doc, P.Doc)
-build config@Config { headers } m@(S.Module n@(ModuleName i) ms _) =
+build :: Monad m => Config -> (Text -> m ()) -> P2.Module -> m (P.Doc, P.Doc)
+build config@Config { headers } writeLog m@(S.Module n@(ModuleName i) ms _) = do
+  (hs, c, h) <- buildC config writeLog m
   let
-    (hs, c, h) = buildC config m
     key = P.text $ T.unpack $ T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
     newline = P.char '\n'
     include (S.SystemHeader h) = P.text $ T.unpack $ "#include <" <> h <> ">\n"
     include (S.LocalHeader h)  = P.text $ T.unpack $ "#include \"" <> h <> "\"\n"
-  in
+  pure
     ( mconcat $
         (include . moduleNameToHeaderPath <$> n : ms) ++
         (include <$> headers ++ hs) ++
@@ -131,10 +132,22 @@ build config@Config { headers } m@(S.Module n@(ModuleName i) ms _) =
         ]
     )
 
-buildC :: Config -> P2.Module -> ([S.CHeader], CTranslUnit, CTranslUnit)
-buildC config m =
-  let (hs, c) = BC2.convert config $ BC1.convert $ B4.lambdaLifting $ B3.partialApplication $ B2.uncurry m
-  in (hs, BC4.convert c, BC4.convert $ BC3.header c)
+buildC :: Applicative m => Config -> (Text -> m ()) -> P2.Module -> m ([S.CHeader], CTranslUnit, CTranslUnit)
+buildC config writeLog m2 = do
+  writeLog $ "typed module: " <> T.pack (show m2)
+  let m3 = B2.uncurry m2
+  writeLog $ "uncurried module: " <> T.pack (show m3)
+  let m4 = B3.partialApplication m3
+  writeLog $ "non-partial-application module: " <> T.pack (show m4)
+  let m5 = B4.lambdaLifting m4
+  writeLog $ "lambda-lifted module: " <> T.pack (show m5)
+  let m6 = BC1.thunk m5
+  writeLog $ "thunk module: " <> T.pack (show m6)
+  let m7 = BC2.translate config m6
+  writeLog $ "abstract C file: " <> T.pack (show $ snd m7)
+  let (hs, c) = second BC3.simplify m7
+  writeLog $ "simplified abstract C file: " <> T.pack (show c)
+  pure (hs, BC5.translate c, BC5.translate $ BC4.header c)
 
 data Exception
   = RecursionException (N.NonEmpty ModuleName)

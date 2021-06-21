@@ -2,7 +2,7 @@
 
 module Language.Kmkm.Syntax.Phase5
   ( Module
-  , Member
+  , Definition
   , ValueBind
   , Type
   , Term
@@ -11,32 +11,30 @@ module Language.Kmkm.Syntax.Phase5
   , Literal
   , Function
   , Application
-  , TFunction
+  , FunctionType
   ) where
 
-import qualified Language.Kmkm.Syntax       as S
-import           Language.Kmkm.Syntax.Base  (Currying (Uncurried), LambdaLifting (LambdaLifted), Typing (Typed))
-import qualified Language.Kmkm.Syntax.Type  as T
-import qualified Language.Kmkm.Syntax.Value as V
+import           Language.Kmkm.Syntax (Currying (Uncurried), LambdaLifting (LambdaLifted), Typing (Typed))
+import qualified Language.Kmkm.Syntax as S
 
 type Module = S.Module 'Uncurried 'LambdaLifted 'Typed
 
-type Member = S.Member 'Uncurried 'LambdaLifted 'Typed
+type Definition = S.Definition 'Uncurried 'LambdaLifted 'Typed
 
 type ValueBind = S.ValueBind 'Uncurried 'LambdaLifted 'Typed
 
-type Type = T.Type 'Uncurried
+type Type = S.Type 'Uncurried
 
-type Term = V.Term 'Uncurried 'LambdaLifted 'Typed
+type Term = S.Term 'Uncurried 'LambdaLifted 'Typed
 
-type Term' = V.Term' 'Uncurried 'LambdaLifted 'Typed
+type Term' = S.Term' 'Uncurried 'LambdaLifted 'Typed
 
-type ProcedureStep = V.ProcedureStep 'Uncurried 'LambdaLifted 'Typed
+type ProcedureStep = S.ProcedureStep 'Uncurried 'LambdaLifted 'Typed
 
-type Literal = V.Literal 'Uncurried 'LambdaLifted 'Typed
+type Literal = S.Literal 'Uncurried 'LambdaLifted 'Typed
 
-type Function = V.Function 'Uncurried 'LambdaLifted 'Typed
+type Function = S.Function 'Uncurried 'LambdaLifted 'Typed
 
-type Application = V.Application 'Uncurried 'LambdaLifted 'Typed
+type Application = S.Application 'Uncurried 'LambdaLifted 'Typed
 
-type TFunction = T.Function 'Uncurried
+type FunctionType = S.FunctionType 'Uncurried

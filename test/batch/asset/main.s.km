@@ -1,0 +1,9 @@
+(module
+  main
+  (list)
+  (list
+    (bind-value
+      main
+      (procedure
+        (list
+          (term 0))))))

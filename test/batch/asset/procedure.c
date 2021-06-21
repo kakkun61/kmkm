@@ -11,7 +11,5 @@ struct unit procedure_rec0(void)
 }
 struct unit procedure_rec1(void)
 {
-  return ({
-    procedure_rec0();
-  });
+  return procedure_rec0();
 }
