@@ -99,19 +99,6 @@ valueBind :: S.Definition 'S.Curried 'S.LambdaUnlifted t -> Maybe (Identifier, S
 valueBind (S.ValueBind (S.BindU i v)) = Just (i, v)
 valueBind _                           = Nothing
 
--- dependency :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [P1.Definition] -> [QualifiedIdentifier]
--- dependency mn valueBinds v ms =
---   let subSiblings = M.keysSet $ definedIdentifiers mn ms
---   in
---     mconcat
---       [ dep mn valueBinds v
---       , ms >>= \m ->
---           case m of
---             S.ValueBind (S.BindU _ v) ->
---               dependency mn (valueBinds S.\\ subSiblings) v ms
---             _ -> []
---       ]
-
 dep :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [QualifiedIdentifier]
 dep _ identifiers (S.UntypedTerm (S.Variable i))
   | i `S.member` identifiers = [i]
