@@ -11,13 +11,13 @@ jobs:
         ghc: ['8.10']
         test: [doctest, spec, batch]
         continue-on-error: [false]
-        include:
-          - ghc: latest
-            test: doctest
-            continue-on-error: true
-          - ghc: latest
-            test: spec
-            continue-on-error: true
+        # include:
+        #   - ghc: latest
+        #     test: doctest
+        #     continue-on-error: true
+        #   - ghc: latest
+        #     test: spec
+        #     continue-on-error: true
 
     runs-on: ubuntu-latest
 
