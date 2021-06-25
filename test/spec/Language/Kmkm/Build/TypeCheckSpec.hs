@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.Pass1Spec where
+module Language.Kmkm.Build.TypeCheckSpec where
 
-import Language.Kmkm.Builder.Pass1
+import Language.Kmkm.Build.TypeCheck
 
 import Language.Kmkm.Syntax
 import Test.Hspec

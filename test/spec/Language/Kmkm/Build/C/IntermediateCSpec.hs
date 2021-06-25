@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Pass2Spec where
+module Language.Kmkm.Build.C.IntermediateCSpec where
 
-import           Language.Kmkm.Builder.C.Pass2
-import qualified Language.Kmkm.Builder.C.Syntax as C
-import qualified Language.Kmkm.Syntax           as S
+import           Language.Kmkm.Build.C.IntermediateC
+import qualified Language.Kmkm.Build.C.Syntax        as C
+import qualified Language.Kmkm.Syntax                as S
 
 import Data.Default.Class
 import Language.Kmkm.Syntax

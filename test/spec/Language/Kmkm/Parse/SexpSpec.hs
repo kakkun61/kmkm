@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Parser.SexpSpec where
+module Language.Kmkm.Parse.SexpSpec where
 
-import Language.Kmkm.Parser.Sexp
+import Language.Kmkm.Parse.Sexp
 import Language.Kmkm.Syntax
 
 import           Test.Hspec

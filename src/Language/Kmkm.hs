@@ -4,5 +4,5 @@ module Language.Kmkm
   , TypeMap (..)
   ) where
 
-import Language.Kmkm.Compiler (compile)
-import Language.Kmkm.Config   (Config (Config), TypeMap (TypeMap, byte, frac, frac2, int))
+import Language.Kmkm.Compile (compile)
+import Language.Kmkm.Config  (Config (Config), TypeMap (TypeMap, byte, frac, frac2, int))

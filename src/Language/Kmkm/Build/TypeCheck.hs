@@ -15,8 +15,10 @@
 #endif
 
 -- | \"Type check\" pass.
-module Language.Kmkm.Builder.Pass1
+module Language.Kmkm.Build.TypeCheck
   ( typeCheck
+  , Module
+  , Type
   , Exception (..)
   ) where
 
@@ -24,8 +26,6 @@ import           Language.Kmkm.Exception     (unreachable)
 import qualified Language.Kmkm.Exception     as X
 import           Language.Kmkm.Syntax        (Identifier, ModuleName, QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax        as S
-import qualified Language.Kmkm.Syntax.Phase1 as P1
-import qualified Language.Kmkm.Syntax.Phase2 as P2
 
 import qualified Algebra.Graph.AdjacencyMap           as G hiding (vertexList)
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
@@ -47,10 +47,20 @@ import qualified Data.Set                             as S
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-typeCheck :: (MonadThrow m, MonadCatch m) => Map QualifiedIdentifier P1.Type -> P1.Module -> m P2.Module
+type Module t = S.Module 'S.Curried 'S.LambdaUnlifted t
+
+type Definition t = S.Definition 'S.Curried 'S.LambdaUnlifted t
+
+type Type = S.Type 'S.Curried
+
+type Term t = S.Term 'S.Curried 'S.LambdaUnlifted t
+
+type ProcedureStep t = S.ProcedureStep 'S.Curried 'S.LambdaUnlifted t
+
+typeCheck :: (MonadThrow m, MonadCatch m) => Map QualifiedIdentifier Type -> Module 'S.Untyped -> m (Module 'S.Typed)
 typeCheck ctx (S.Module mn ds ms) = S.Module mn ds <$> definitions mn ctx ms
 
-definitions :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> [P1.Definition] -> m [P2.Definition]
+definitions :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier Type -> [Definition 'S.Untyped] -> m [Definition 'S.Typed]
 definitions moduleName context definitions' = do
   let
     valueBinds = M.fromList $ first (QualifiedIdentifier $ Just moduleName) <$> mapMaybe valueBind definitions'
@@ -60,18 +70,18 @@ definitions moduleName context definitions' = do
   typedValueBinds <- foldr (typeBind moduleName context' valueBinds) (pure M.empty) sortedIdentifiers
   pure $ replaceTerm moduleName typedValueBinds <$> definitions'
 
-dependency :: ModuleName -> Set QualifiedIdentifier -> P1.Definition -> G.AdjacencyMap QualifiedIdentifier
+dependency :: ModuleName -> Set QualifiedIdentifier -> Definition 'S.Untyped -> G.AdjacencyMap QualifiedIdentifier
 dependency mn valueBinds (S.ValueBind (S.BindU i v)) = G.vertex (QualifiedIdentifier (Just mn) i) `G.connect` G.overlays (G.vertex <$> dep mn valueBinds v)
 dependency _ _ _                                     = G.empty
 
 typeBind
   :: (MonadThrow m, MonadCatch m)
   => ModuleName
-  -> Map QualifiedIdentifier P1.Type
-  -> Map QualifiedIdentifier P1.Term
+  -> Map QualifiedIdentifier Type
+  -> Map QualifiedIdentifier (Term 'S.Untyped)
   -> GN.AdjacencyMap QualifiedIdentifier
-  -> m (Map QualifiedIdentifier P2.Term)
-  -> m (Map QualifiedIdentifier P2.Term)
+  -> m (Map QualifiedIdentifier (Term 'S.Typed))
+  -> m (Map QualifiedIdentifier (Term 'S.Typed))
 typeBind moduleName context valueBinds recursionIdentifiers typedValueBinds =
   catchJust
     (\e -> case e of { NotFoundException i -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
@@ -84,11 +94,11 @@ typeBind moduleName context valueBinds recursionIdentifiers typedValueBinds =
       pure $ recursionTypedValueBinds `M.union` typedValueBinds'
     $ const $ throwM $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
 
-annotatedType :: P1.Term -> Maybe P1.Type
+annotatedType :: Term 'S.Untyped -> Maybe Type
 annotatedType (S.UntypedTerm (S.TypeAnnotation (S.TypeAnnotation' _ t))) = Just t
 annotatedType _                                                          = Nothing
 
-replaceTerm :: ModuleName -> Map QualifiedIdentifier P2.Term -> P1.Definition -> P2.Definition
+replaceTerm :: ModuleName -> Map QualifiedIdentifier (Term 'S.Typed) -> Definition 'S.Untyped -> Definition 'S.Typed
 replaceTerm _ _ (S.DataDefinition i cs) = S.DataDefinition i cs
 replaceTerm _ _ (S.TypeBind i t) = S.TypeBind i t
 replaceTerm moduleName typedValueBinds (S.ValueBind (S.BindU i _)) =
@@ -99,7 +109,7 @@ valueBind :: S.Definition 'S.Curried 'S.LambdaUnlifted t -> Maybe (Identifier, S
 valueBind (S.ValueBind (S.BindU i v)) = Just (i, v)
 valueBind _                           = Nothing
 
-dep :: ModuleName -> Set QualifiedIdentifier -> P1.Term -> [QualifiedIdentifier]
+dep :: ModuleName -> Set QualifiedIdentifier -> Term 'S.Untyped -> [QualifiedIdentifier]
 dep _ identifiers (S.UntypedTerm (S.Variable i))
   | i `S.member` identifiers = [i]
   | otherwise                = []
@@ -118,7 +128,7 @@ dep moduleName identifiers (S.UntypedTerm (S.Let ds v)) =
     identifiers' = identifiers S.\\ M.keysSet valueBinds
   in dep moduleName identifiers' =<< v : M.elems valueBinds
 
-typeOfTerm :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.Term -> m P2.Term
+typeOfTerm :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier Type -> Term 'S.Untyped -> m (Term 'S.Typed)
 typeOfTerm _ ctx (S.UntypedTerm (S.Variable i)) =
   case M.lookup i ctx of
     Nothing -> throwM $ NotFoundException i
@@ -160,7 +170,7 @@ typeOfTerm mn ctx (S.UntypedTerm (S.Let ds v)) = do
   v'@(S.TypedTerm _ t') <- typeOfTerm mn ctx' v
   pure $ S.TypedTerm (S.Let ds' v') t'
 
-typeOfProcedure :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier P1.Type -> P1.ProcedureStep -> m (Map QualifiedIdentifier P1.Type, P2.ProcedureStep)
+typeOfProcedure :: (MonadThrow m, MonadCatch m) => ModuleName -> Map QualifiedIdentifier Type -> ProcedureStep 'S.Untyped -> m (Map QualifiedIdentifier Type, ProcedureStep 'S.Typed)
 typeOfProcedure mn ctx (S.BindProcedure i v) = do
   v'@(S.TypedTerm _ t) <- typeOfTerm mn ctx v
   let ctx' = M.insert (QualifiedIdentifier (Just mn) i) t ctx

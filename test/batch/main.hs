@@ -1,6 +1,6 @@
-import qualified Language.Kmkm.Builder.Pass1 as B1
-import qualified Language.Kmkm.Compiler      as M
-import qualified Language.Kmkm.Parser.Sexp   as P
+import qualified Language.Kmkm.Build.TypeCheck as B1
+import qualified Language.Kmkm.Compile         as M
+import qualified Language.Kmkm.Parse.Sexp      as P
 
 import           Control.Exception        (Exception (displayException))
 import qualified Control.Exception        as E

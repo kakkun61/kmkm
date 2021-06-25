@@ -2,29 +2,29 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds #-}
 
-module Language.Kmkm.Compiler
+module Language.Kmkm.Compile
   ( compile
   , buildC
   ) where
 
-import qualified Language.Kmkm.Builder.C.Pass1 as BC1
-import qualified Language.Kmkm.Builder.C.Pass2 as BC2
-import qualified Language.Kmkm.Builder.C.Pass3 as BC3
-import qualified Language.Kmkm.Builder.C.Pass4 as BC4
-import qualified Language.Kmkm.Builder.C.Pass5 as BC5
-import qualified Language.Kmkm.Builder.Pass1   as B1
-import qualified Language.Kmkm.Builder.Pass2   as B2
-import qualified Language.Kmkm.Builder.Pass3   as B3
-import qualified Language.Kmkm.Builder.Pass4   as B4
-import           Language.Kmkm.Config          (Config (Config, headers))
-import           Language.Kmkm.Exception       (unreachable)
-import qualified Language.Kmkm.Exception       as X
-import           Language.Kmkm.Parser.Sexp     (parse)
-import           Language.Kmkm.Syntax          (ModuleName (ModuleName), QualifiedIdentifier (QualifiedIdentifier))
-import qualified Language.Kmkm.Syntax          as S
-import qualified Language.Kmkm.Syntax.Phase1   as P1
-import qualified Language.Kmkm.Syntax.Phase2   as P2
+import qualified Language.Kmkm.Build.C.C             as BC5
+import qualified Language.Kmkm.Build.C.Declare       as BC4
+import qualified Language.Kmkm.Build.C.IntermediateC as BC2
+import qualified Language.Kmkm.Build.C.Simplify      as BC3
+import qualified Language.Kmkm.Build.C.Thunk         as BC1
+import qualified Language.Kmkm.Build.LambdaLift      as B4
+import qualified Language.Kmkm.Build.PartiallyApply  as B3
+import qualified Language.Kmkm.Build.TypeCheck       as B1
+import qualified Language.Kmkm.Build.Uncurry         as B2
+import           Language.Kmkm.Config                (Config (Config, headers))
+import           Language.Kmkm.Exception             (unreachable)
+import qualified Language.Kmkm.Exception             as X
+import           Language.Kmkm.Parse.Sexp            (parse)
+import           Language.Kmkm.Syntax                (ModuleName (ModuleName),
+                                                      QualifiedIdentifier (QualifiedIdentifier))
+import qualified Language.Kmkm.Syntax                as S
 
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
@@ -75,7 +75,7 @@ compile config readFile writeFile writeLog src = do
       writeFile (F.addExtension path "c") $ T.pack $ P.render c
       writeFile (F.addExtension path "h") $ T.pack $ P.render h
 
-readRecursively :: MonadThrow m => (FilePath -> m Text) -> FilePath -> m (G.AdjacencyMap ModuleName, Map ModuleName P1.Module)
+readRecursively :: MonadThrow m => (FilePath -> m Text) -> FilePath -> m (G.AdjacencyMap ModuleName, Map ModuleName (S.Module 'S.Curried 'S.LambdaUnlifted 'S.Untyped))
 readRecursively readFile =
   go $ pure (G.empty, M.empty)
   where
@@ -100,7 +100,7 @@ moduleNameToFilePath (ModuleName n) = T.unpack $ T.intercalate (T.singleton path
 moduleNameToHeaderPath :: ModuleName -> S.CHeader
 moduleNameToHeaderPath (ModuleName n) = S.LocalHeader $ T.intercalate "/" (N.toList n) <> ".h"
 
-build :: Monad m => Config -> (Text -> m ()) -> P2.Module -> m (P.Doc, P.Doc)
+build :: Monad m => Config -> (Text -> m ()) -> S.Module 'S.Curried 'S.LambdaUnlifted 'S.Typed -> m (P.Doc, P.Doc)
 build config@Config { headers } writeLog m@(S.Module n@(ModuleName i) ms _) = do
   (hs, c, h) <- buildC config writeLog m
   let
@@ -132,14 +132,14 @@ build config@Config { headers } writeLog m@(S.Module n@(ModuleName i) ms _) = do
         ]
     )
 
-buildC :: Applicative m => Config -> (Text -> m ()) -> P2.Module -> m ([S.CHeader], CTranslUnit, CTranslUnit)
+buildC :: Applicative m => Config -> (Text -> m ()) -> S.Module 'S.Curried 'S.LambdaUnlifted 'S.Typed -> m ([S.CHeader], CTranslUnit, CTranslUnit)
 buildC config writeLog m2 = do
   writeLog $ "typed module: " <> T.pack (show m2)
   let m3 = B2.uncurry m2
   writeLog $ "uncurried module: " <> T.pack (show m3)
-  let m4 = B3.partialApplication m3
+  let m4 = B3.partiallyApply m3
   writeLog $ "non-partial-application module: " <> T.pack (show m4)
-  let m5 = B4.lambdaLifting m4
+  let m5 = B4.lambdaLift m4
   writeLog $ "lambda-lifted module: " <> T.pack (show m5)
   let m6 = BC1.thunk m5
   writeLog $ "thunk module: " <> T.pack (show m6)
@@ -147,7 +147,7 @@ buildC config writeLog m2 = do
   writeLog $ "abstract C file: " <> T.pack (show $ snd m7)
   let (hs, c) = second BC3.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
-  pure (hs, BC5.translate c, BC5.translate $ BC4.header c)
+  pure (hs, BC5.translate c, BC5.translate $ BC4.declare c)
 
 data Exception
   = RecursionException (N.NonEmpty ModuleName)

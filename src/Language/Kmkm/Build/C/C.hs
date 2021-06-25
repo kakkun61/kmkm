@@ -1,11 +1,11 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Pass5
+module Language.Kmkm.Build.C.C
   ( translate
   ) where
 
-import qualified Language.Kmkm.Builder.C.Syntax as I
+import qualified Language.Kmkm.Build.C.Syntax as I
 
 import           Data.Hashable         (Hashable (hash))
 import qualified Data.List             as L

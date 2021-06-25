@@ -42,28 +42,21 @@ library
           warnings
   hs-source-dirs: src
   exposed-modules: Language.Kmkm
-                   Language.Kmkm.Builder.C.Pass1
-                   Language.Kmkm.Builder.C.Pass2
-                   Language.Kmkm.Builder.C.Pass3
-                   Language.Kmkm.Builder.C.Pass4
-                   Language.Kmkm.Builder.C.Pass5
-                   Language.Kmkm.Builder.C.Syntax
-                   Language.Kmkm.Builder.Pass1
-                   Language.Kmkm.Builder.Pass2
-                   Language.Kmkm.Builder.Pass3
-                   Language.Kmkm.Builder.Pass4
-                   Language.Kmkm.Compiler
+                   Language.Kmkm.Build.C.C
+                   Language.Kmkm.Build.C.Declare
+                   Language.Kmkm.Build.C.IntermediateC
+                   Language.Kmkm.Build.C.Simplify
+                   Language.Kmkm.Build.C.Thunk
+                   Language.Kmkm.Build.C.Syntax
+                   Language.Kmkm.Build.LambdaLift
+                   Language.Kmkm.Build.PartiallyApply
+                   Language.Kmkm.Build.TypeCheck
+                   Language.Kmkm.Build.Uncurry
+                   Language.Kmkm.Compile
                    Language.Kmkm.Config
                    Language.Kmkm.Exception
-                   Language.Kmkm.Parser.Sexp
+                   Language.Kmkm.Parse.Sexp
                    Language.Kmkm.Syntax
-                   Language.Kmkm.Syntax.Phase1
-                   Language.Kmkm.Syntax.Phase2
-                   Language.Kmkm.Syntax.Phase3
-                   Language.Kmkm.Syntax.Phase4
-                   Language.Kmkm.Syntax.Phase5
-                   Language.Kmkm.Syntax.Phase6
-                   Language.Kmkm.Syntax.Phase7
   build-depends: algebraic-graphs,
                  containers,
                  data-default-class,
@@ -113,9 +106,9 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test/spec
-  other-modules: Language.Kmkm.Builder.C.Pass2Spec
-                 Language.Kmkm.Builder.Pass1Spec
-                 Language.Kmkm.Parser.SexpSpec
+  other-modules: Language.Kmkm.Build.C.IntermediateCSpec
+                 Language.Kmkm.Build.TypeCheckSpec
+                 Language.Kmkm.Parse.SexpSpec
   build-depends: kmkm,
                  data-default-class,
                  megaparsec,

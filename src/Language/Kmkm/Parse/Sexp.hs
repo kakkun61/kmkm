@@ -1,8 +1,9 @@
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds #-}
 
-module Language.Kmkm.Parser.Sexp
+module Language.Kmkm.Parse.Sexp
   ( parse
   , parse'
   , module'
@@ -24,8 +25,8 @@ import           Language.Kmkm.Syntax        (CDefinition (CDefinition), CHeader
                                               Identifier (UserIdentifier), ModuleName (ModuleName),
                                               QualifiedIdentifier (QualifiedIdentifier))
 import qualified Language.Kmkm.Syntax        as S
-import           Language.Kmkm.Syntax.Phase1 (Application, Definition, Function, FunctionType, Literal, Module,
-                                              ProcedureStep, Term, Type, TypeAnnotation)
+-- import           Language.Kmkm.Syntax.Phase1 (Application, Definition, Function, FunctionType, Literal, Module,
+--                                               ProcedureStep, Term, Type, TypeAnnotation)
 
 import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
@@ -52,6 +53,26 @@ import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
 import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
+
+type Module = S.Module 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type Definition = S.Definition 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type Type = S.Type 'S.Curried
+
+type FunctionType = S.FunctionType 'S.Curried
+
+type Term = S.Term 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type Literal = S.Literal 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type Function = S.Function 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type Application = S.Application 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type TypeAnnotation = S.TypeAnnotation 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+
+type ProcedureStep = S.ProcedureStep 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
 type Parser = ParsecT Void Text Identity
 

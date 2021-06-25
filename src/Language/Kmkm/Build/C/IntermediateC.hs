@@ -2,24 +2,36 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds #-}
 
-module Language.Kmkm.Builder.C.Pass2
+module Language.Kmkm.Build.C.IntermediateC
   ( translate
+  , Module
   , definition
   ) where
 
-import qualified Language.Kmkm.Builder.C.Syntax as I
-import           Language.Kmkm.Config           (Config (Config, typeMap))
-import qualified Language.Kmkm.Config           as C
-import           Language.Kmkm.Exception        (unreachable)
-import           Language.Kmkm.Syntax           (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
-                                                 QualifiedIdentifier (QualifiedIdentifier))
-import qualified Language.Kmkm.Syntax           as S
-import           Language.Kmkm.Syntax.Phase7    (Definition, Literal, Module, ProcedureStep, Term, Type)
-
+import qualified Language.Kmkm.Build.C.Syntax as I
+import           Language.Kmkm.Config         (Config (Config, typeMap))
+import qualified Language.Kmkm.Config         as C
+import           Language.Kmkm.Exception      (unreachable)
+import           Language.Kmkm.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
+                                               QualifiedIdentifier (QualifiedIdentifier))
+import qualified Language.Kmkm.Syntax         as S
 import qualified Data.List.NonEmpty as N
 import           Data.Text          (Text)
 import qualified Data.Text          as T
+
+type Module = S.Module 'S.Uncurried 'S.LambdaLifted 'S.Typed
+
+type Definition = S.Definition 'S.Uncurried 'S.LambdaLifted 'S.Typed
+
+type Type = S.Type 'S.Uncurried
+
+type Term = S.Term 'S.Uncurried 'S.LambdaLifted 'S.Typed
+
+type Literal = S.Literal 'S.Uncurried 'S.LambdaLifted 'S.Typed
+
+type ProcedureStep = S.ProcedureStep 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
 translate :: Config -> Module -> ([S.CHeader], I.File)
 translate = module'

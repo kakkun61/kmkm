@@ -2,8 +2,8 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Language.Kmkm             (Config (Config), TypeMap (TypeMap), compile)
-import qualified Language.Kmkm.Parser.Sexp as KS
+import           Language.Kmkm            (Config (Config), TypeMap (TypeMap), compile)
+import qualified Language.Kmkm.Parse.Sexp as KS
 
 import           Control.Exception.Safe (Handler (Handler), catches)
 import           Control.Monad.IO.Class (MonadIO (liftIO))

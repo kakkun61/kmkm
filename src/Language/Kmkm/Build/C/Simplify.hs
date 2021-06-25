@@ -1,14 +1,14 @@
 -- | “Redundant statement-expression removal” pass.
-module Language.Kmkm.Builder.C.Pass3
+module Language.Kmkm.Build.C.Simplify
   ( simplify
   ) where
 
-import Language.Kmkm.Builder.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
-                                       Definition (ExpressionDefinition, StatementDefinition),
-                                       Element (Declaration, Definition, Embed, TypeDefinition),
-                                       Expression (StatementExpression), File (File),
-                                       Initializer (ExpressionInitializer, ListInitializer),
-                                       Statement (Block, ExpressionStatement, Return))
+import Language.Kmkm.Build.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
+                                     Definition (ExpressionDefinition, StatementDefinition),
+                                     Element (Declaration, Definition, Embed, TypeDefinition),
+                                     Expression (StatementExpression), File (File),
+                                     Initializer (ExpressionInitializer, ListInitializer),
+                                     Statement (Block, ExpressionStatement, Return))
 
 simplify :: File -> File
 simplify f =

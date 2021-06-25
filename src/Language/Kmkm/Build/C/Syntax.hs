@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Builder.C.Syntax
+module Language.Kmkm.Build.C.Syntax
   ( File (..)
   , Element (..)
   , Definition (..)
