@@ -13,7 +13,7 @@ module Language.Kmkm.Parse.Sexp
   , dataDefinition
   , valueBind
   , identifier
-  , term
+  , value
   , literal
   , integer
   , fraction
@@ -145,7 +145,7 @@ valueBind :: Parser Definition
 valueBind =
   M.label "valueBind" $ do
     void $ P.textSymbol "bind-value"
-    S.ValueBind <$> (S.ValueBindU <$> identifier <*> term)
+    S.ValueBind <$> (S.ValueBindU <$> identifier <*> value)
 
 foreignValueBind :: Parser Definition
 foreignValueBind =
@@ -202,9 +202,9 @@ identifierSegment = do
   b <- many $ P.choice [asciiAlphabet, P.digit]
   pure $ T.pack $ a : b
 
-term :: Parser Value
-term =
-  M.label "term'" $
+value :: Parser Value
+value =
+  M.label "value'" $
     S.UntypedValue <$>
       P.choice
         [ S.Variable <$> eitherIdentifier
@@ -215,7 +215,7 @@ term =
               , S.Application <$> application
               , S.Procedure <$> procedure
               , S.TypeAnnotation <$> typeAnnotation
-              , S.Let <$> (P.textSymbol "let" *> list definition) <*> term
+              , S.Let <$> (P.textSymbol "let" *> list definition) <*> value
               ]
         ]
 
@@ -232,7 +232,7 @@ application :: Parser Application
 application =
   M.label "application" $ do
     void $ P.textSymbol "apply"
-    S.ApplicationC <$> term <*> term
+    S.ApplicationC <$> value <*> value
 
 procedure :: Parser (NonEmpty ProcedureStep)
 procedure =
@@ -246,17 +246,17 @@ procedure =
           P.choice
             [ do
                 void $ P.textSymbol "bind"
-                S.BindProcedure <$> identifier <*> term
+                S.BindProcedure <$> identifier <*> value
             , do
-                void $ P.textSymbol "term"
-                S.TermProcedure <$> term
+                void $ P.textSymbol "value"
+                S.TermProcedure <$> value
             ]
 
 typeAnnotation :: Parser TypeAnnotation
 typeAnnotation =
   M.label "typeAnnotation" $ do
     void $ P.textSymbol "type"
-    S.TypeAnnotation' <$> term <*> typ
+    S.TypeAnnotation' <$> value <*> typ
 
 integer :: Parser Literal
 integer =
@@ -352,7 +352,7 @@ function :: Parser Function
 function =
   M.label "function" $ do
     void $ P.textSymbol "function"
-    S.FunctionC <$> identifier <*> typ <*> term
+    S.FunctionC <$> identifier <*> typ <*> value
 
 typ :: Parser Type
 typ =

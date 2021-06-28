@@ -1,0 +1,8 @@
+(module
+  kmkm.prim
+  (list)
+  (list
+    (bind-type-foreign
+      int
+      (list)
+      "typedef int kmkm_prim_int;")))

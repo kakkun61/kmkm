@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE TypeFamilies          #-}
 
 #if __GLASGOW_HASKELL__ >= 902
@@ -131,9 +132,9 @@ typeOfTerm ctx (S.UntypedValue (S.Variable i)) =
   case M.lookup i ctx of
     Nothing -> throwM $ NotFoundException i
     Just t  -> pure $ S.TypedTerm (S.Variable i) t
-typeOfTerm _ (S.UntypedValue (S.Literal (S.Integer v b))) = pure $ S.TypedTerm (S.Literal (S.Integer v b)) (S.TypeVariable (S.GlobalIdentifier "kmkm.prim" "int"))
-typeOfTerm _ (S.UntypedValue (S.Literal (S.Fraction s d e b))) = pure $ S.TypedTerm (S.Literal (S.Fraction s d e b)) (S.TypeVariable (S.GlobalIdentifier "kmkm.prim" "frac2"))
-typeOfTerm _ (S.UntypedValue (S.Literal (S.String t))) = pure $ S.TypedTerm (S.Literal (S.String t)) (S.TypeVariable (S.GlobalIdentifier "kmkm.prim" "string"))
+typeOfTerm _ (S.UntypedValue (S.Literal (S.Integer v b))) = pure $ S.TypedTerm (S.Literal (S.Integer v b)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "int"))
+typeOfTerm _ (S.UntypedValue (S.Literal (S.Fraction s d e b))) = pure $ S.TypedTerm (S.Literal (S.Fraction s d e b)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "frac2"))
+typeOfTerm _ (S.UntypedValue (S.Literal (S.String t))) = pure $ S.TypedTerm (S.Literal (S.String t)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "string"))
 typeOfTerm ctx (S.UntypedValue (S.Literal (S.Function (S.FunctionC i t v)))) = do
   v'@(S.TypedTerm _ t') <- typeOfTerm (M.insert i t ctx) v
   pure $ S.TypedTerm (S.Literal (S.Function (S.FunctionC i t v'))) (S.FunctionType $ S.FunctionTypeC t t')
