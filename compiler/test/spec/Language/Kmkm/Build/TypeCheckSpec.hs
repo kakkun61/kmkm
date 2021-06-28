@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Build.TypeCheckSpec where
@@ -13,14 +14,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU "ten" $ UntypedValue $ Literal $ Integer 10 10])
+          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (TypeVariable "int")]
+              Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedTerm (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])]
 
         it "0x10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU "sixteen" (UntypedValue $ Literal $ Integer 16 16)])
+          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (TypeVariable "int")]
+              Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedTerm (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])]
 
     describe "application" $ do
       describe "succ" $ do
@@ -32,7 +33,7 @@ spec = do
                 []
                 [ ValueBind $
                     ValueBindU
-                      "succ"
+                      ["spec", "succ"]
                       $ UntypedValue $
                           TypeAnnotation $
                             TypeAnnotation'
@@ -41,36 +42,36 @@ spec = do
                                       Function $
                                         FunctionC
                                           "a"
-                                          (TypeVariable "int")
+                                          (TypeVariable ["kmkm", "prim", "int"])
                                           $ UntypedValue $
                                               Application $
                                                 ApplicationC
-                                                  (UntypedValue $ Variable $ QualifiedIdentifier (Just "spec") "succ")
-                                                  (UntypedValue $ Variable $ QualifiedIdentifier Nothing "a")
+                                                  (UntypedValue $ Variable ["spec", "succ"])
+                                                  (UntypedValue $ Variable "a")
                               )
-                              $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
+                              $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
             result =
               Module
                 "spec"
                 []
                 [ ValueBind $
-                    ValueBindU "succ" $
+                    ValueBindU ["spec", "succ"] $
                       TypedTerm
                         ( Literal $
                             Function $
                               FunctionC
                                 "a"
-                                (TypeVariable "int")
+                                (TypeVariable ["kmkm", "prim", "int"])
                                 $ TypedTerm
                                     (Application $
                                       ApplicationC
-                                        (TypedTerm (Variable $ QualifiedIdentifier (Just "spec") "succ") (FunctionType $ FunctionTypeC (TypeVariable "int") (TypeVariable "int")))
-                                        (TypedTerm (Variable $ QualifiedIdentifier Nothing "a") (TypeVariable "int"))
+                                        (TypedTerm (Variable ["spec", "succ"]) (FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) (TypeVariable ["kmkm", "prim", "int"])))
+                                        (TypedTerm (Variable "a") (TypeVariable ["kmkm", "prim", "int"]))
                                     )
-                                    $ TypeVariable "int"
+                                    $ TypeVariable ["kmkm", "prim", "int"]
                         )
-                        $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
+                        $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
           typeCheck mempty source `shouldReturn` result
 
@@ -82,7 +83,7 @@ spec = do
                 []
                 [ ValueBind $
                     ValueBindU
-                      "succ"
+                      ["spec", "succ"]
                       $ UntypedValue $
                           TypeAnnotation $
                             TypeAnnotation'
@@ -91,9 +92,9 @@ spec = do
                                     Function $
                                       FunctionC
                                         "a"
-                                        (TypeVariable "int")
-                                        (UntypedValue $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                                        (TypeVariable ["kmkm", "prim", "int"])
+                                        (UntypedValue $ Variable ["spec", "succ"])
                               )
-                              $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
+                              $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
           typeCheck mempty source `shouldThrow` \MismatchException {} -> True

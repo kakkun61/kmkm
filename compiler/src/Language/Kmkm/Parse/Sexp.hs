@@ -248,7 +248,7 @@ procedure =
                 void $ P.textSymbol "bind"
                 S.BindProcedure <$> identifier <*> value
             , do
-                void $ P.textSymbol "value"
+                void $ P.textSymbol "term"
                 S.TermProcedure <$> value
             ]
 

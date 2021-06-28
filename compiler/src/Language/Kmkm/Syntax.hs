@@ -392,10 +392,44 @@ data QualifiedIdentifier
   | LocalIdentifier Identifier
   deriving (Show, Read, Eq, Ord, Generic)
 
+instance IsString QualifiedIdentifier where
+  fromString = LocalIdentifier . fromString
+
+-- | Note that these are partial functions.
+instance IsList QualifiedIdentifier where
+  type Item QualifiedIdentifier = Text
+
+  fromList [] = error "more than 1 items necessary"
+  fromList [t] = LocalIdentifier $ UserIdentifier t
+  fromList ts =
+    let
+      n = ModuleName $ N.fromList $ init ts
+      i = UserIdentifier $ last ts
+    in GlobalIdentifier n i
+
+  toList (GlobalIdentifier (ModuleName n) (UserIdentifier t)) = N.toList n ++ [t]
+  toList (LocalIdentifier (UserIdentifier t)) = [t]
+  toList _ = error "system identifiers are not acceptable"
+
 data EitherIdentifier
   = UnqualifiedIdentifier Identifier
   | QualifiedIdentifier QualifiedIdentifier
   deriving (Show, Read, Eq, Ord, Generic)
+
+instance IsString EitherIdentifier where
+  fromString = UnqualifiedIdentifier . fromString
+
+-- | Note that these are partial functions.
+instance IsList EitherIdentifier where
+  type Item EitherIdentifier = Text
+
+  fromList [] = error "more than 1 items necessary"
+  fromList [t] = UnqualifiedIdentifier $ UserIdentifier t
+  fromList ts = QualifiedIdentifier $ E.fromList ts
+
+  toList (QualifiedIdentifier i) = E.toList i
+  toList (UnqualifiedIdentifier (UserIdentifier t)) = [t]
+  toList _ = error "system identifiers are not acceptable"
 
 type BindIdentifier :: NameResolving -> K.Type
 type family BindIdentifier n

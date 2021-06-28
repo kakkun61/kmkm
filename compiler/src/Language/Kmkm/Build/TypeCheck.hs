@@ -5,8 +5,8 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedLists       #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE TypeFamilies          #-}
 
 #if __GLASGOW_HASKELL__ >= 902

@@ -58,7 +58,7 @@ spec = do
 
     describe "identifier" $ do
       it "foo" $ do
-        parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` UserIdentifier "foo"
+        parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` "foo"
 
     describe "valueBind" $ do
       it "bind-value foo 123" $ do

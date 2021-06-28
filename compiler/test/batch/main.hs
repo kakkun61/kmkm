@@ -83,7 +83,7 @@ test source expected =
       Left e ->
         case (E.fromException e, E.fromException e) of
           (Just (KP.Exception m), _)        -> Fail m
-          (_, Just (KN.UnknownException i)) -> Fail $ show i
+          (_, Just (KN.UnknownException i)) -> Fail $ "unknown identifier: " ++ show i
           (Nothing, Nothing)                -> Fail $ displayException e
       Right m ->
         let
