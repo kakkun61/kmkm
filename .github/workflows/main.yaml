@@ -38,9 +38,13 @@ jobs:
           key: store-${{ runner.os }}-${{ matrix.ghc }}
       - run: '"package kmkm`n  tests: true`n  ghc-options: -Werror -fno-ignore-asserts`n  test-show-details: direct`n" | Out-File cabal.project.local'
         shell: pwsh
+        working-directory: compiler
       - run: make build-deps
+        working-directory: compiler
       - run: make build
+        working-directory: compiler
       - run: make ${{ matrix.test }}
+        working-directory: compiler
 
   lint:
     runs-on: ubuntu-latest
@@ -49,3 +53,4 @@ jobs:
       - uses: actions/checkout@v2
       - uses: rwe/actions-hlint-setup@v1
       - run: make lint
+        working-directory: compiler
