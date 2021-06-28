@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DataKinds #-}
 
 module Language.Kmkm.Parse.Sexp
   ( parse
@@ -20,13 +20,8 @@ module Language.Kmkm.Parse.Sexp
   , Exception (..)
   ) where
 
-import qualified Language.Kmkm.Exception     as X
-import           Language.Kmkm.Syntax        (CDefinition (CDefinition), CHeader (LocalHeader, SystemHeader),
-                                              Identifier (UserIdentifier), ModuleName (ModuleName),
-                                              QualifiedIdentifier (QualifiedIdentifier))
-import qualified Language.Kmkm.Syntax        as S
--- import           Language.Kmkm.Syntax.Phase1 (Application, Definition, Function, FunctionType, Literal, Module,
---                                               ProcedureStep, Term, Type, TypeAnnotation)
+import qualified Language.Kmkm.Exception as X
+import qualified Language.Kmkm.Syntax    as S
 
 import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
@@ -54,25 +49,25 @@ import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 
-type Module = S.Module 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type Definition = S.Definition 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Definition = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type Type = S.Type 'S.Curried
+type Type = S.Type 'S.NameUnresolved 'S.Curried
 
-type FunctionType = S.FunctionType 'S.Curried
+type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried
 
-type Term = S.Term 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Value = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type Literal = S.Literal 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Literal = S.Literal 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type Function = S.Function 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Function = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type Application = S.Application 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type TypeAnnotation = S.TypeAnnotation 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type TypeAnnotation = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
-type ProcedureStep = S.ProcedureStep 'S.Curried 'S.LambdaUnlifted 'S.Untyped
+type ProcedureStep = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
 type Parser = ParsecT Void Text Identity
 
@@ -128,7 +123,7 @@ dataDefinition =
     void $ P.textSymbol "define"
     S.DataDefinition <$> identifier <*> list valueConstructor
 
-valueConstructor :: Parser (Identifier, [(Identifier, Type)])
+valueConstructor :: Parser (S.Identifier, [(S.Identifier, Type)])
 valueConstructor =
   M.label "valueConstructor" $
     P.choice
@@ -136,14 +131,14 @@ valueConstructor =
       , P.parens $ (,) <$> identifier <*> list field
       ]
 
-field :: Parser (Identifier, Type)
+field :: Parser (S.Identifier, Type)
 field = M.label "field" $ P.parens $ (,) <$> identifier <*> typ
 
 valueBind :: Parser Definition
 valueBind =
   M.label "valueBind" $ do
     void $ P.textSymbol "bind-value"
-    S.ValueBind <$> (S.BindU <$> identifier <*> term)
+    S.ValueBind <$> (S.ValueBindU <$> identifier <*> term)
 
 foreignValueBind :: Parser Definition
 foreignValueBind =
@@ -151,26 +146,26 @@ foreignValueBind =
     void $ P.textSymbol "bind-value-foreign"
     S.ForeignValueBind <$> identifier <*> list cHeader <*> cDefinition <*> typ
 
-identifier :: Parser Identifier
+identifier :: Parser S.Identifier
 identifier =
   M.label "identifier" $
     P.token $ do
       a <- asciiAlphabet
       b <- many $ P.choice [asciiAlphabet, P.digit]
-      pure $ UserIdentifier $ T.pack $ a : b
+      pure $ S.UserIdentifier $ T.pack $ a : b
 
-qualifiedIdentifier :: Parser QualifiedIdentifier
-qualifiedIdentifier =
-  M.label "qualifiedIdentifier" $
+eitherIdentifier :: Parser S.EitherIdentifier
+eitherIdentifier =
+  M.label "eitherIdentifier" $
     P.token $ do
       is <- dotSeparatedIdentifier
-      let
-        m = ModuleName <$> N.nonEmpty (N.init is)
-        n = UserIdentifier $ N.last is
-      pure $ QualifiedIdentifier m n
+      let n = S.UserIdentifier $ N.last is
+      case N.nonEmpty (N.init is) of
+        Nothing -> pure $ S.UnqualifiedIdentifier n
+        Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
 
-moduleName :: Parser ModuleName
-moduleName = M.label "moduleName" $ ModuleName <$> P.token dotSeparatedIdentifier
+moduleName :: Parser S.ModuleName
+moduleName = M.label "moduleName" $ S.ModuleName <$> P.token dotSeparatedIdentifier
 
 dotSeparatedIdentifier :: Parser (N.NonEmpty Text)
 dotSeparatedIdentifier =
@@ -182,12 +177,12 @@ identifierSegment = do
   b <- many $ P.choice [asciiAlphabet, P.digit]
   pure $ T.pack $ a : b
 
-term :: Parser Term
+term :: Parser Value
 term =
   M.label "term'" $
-    S.UntypedTerm <$>
+    S.UntypedValue <$>
       P.choice
-        [ S.Variable <$> qualifiedIdentifier
+        [ S.Variable <$> eitherIdentifier
         , S.Literal <$> literal
         , P.parens $
             P.choice
@@ -338,7 +333,7 @@ typ :: Parser Type
 typ =
   M.label "type" $ do
     P.choice
-      [ S.TypeVariable <$> identifier
+      [ S.TypeVariable <$> eitherIdentifier
       , P.parens $
           P.choice
             [ S.FunctionType <$> functionType
@@ -365,23 +360,23 @@ procedureStep =
     void $ P.textSymbol "procedure"
     typ
 
-cDefinition :: Parser CDefinition
+cDefinition :: Parser S.CDefinition
 cDefinition = do
   s <- T.encodeUtf8 <$> string
   case C.execParser_ C.extDeclP s C.nopos of
     Left (C.ParseError (m, _)) -> fail $ unlines m
-    Right c                    -> pure $ CDefinition c
+    Right c                    -> pure $ S.CDefinition c
 
-cHeader :: Parser CHeader
+cHeader :: Parser S.CHeader
 cHeader =
   P.parens $
     P.choice
       [ do
           void $ P.textSymbol "system-header"
-          SystemHeader <$> string
+          S.SystemHeader <$> string
       , do
           void $ P.textSymbol "local-header"
-          LocalHeader <$> string
+          S.LocalHeader <$> string
       ]
 
 doubleQuote :: Parser a -> Parser a

@@ -13,14 +13,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ BindU "ten" $ UntypedTerm $ Literal $ Integer 10 10])
+          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU "ten" $ UntypedValue $ Literal $ Integer 10 10])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ BindU "ten" $ TypedTerm (Literal $ Integer 10 10) (TypeVariable "int")]
+              Module "spec" [] [ValueBind $ ValueBindU "ten" $ TypedTerm (Literal $ Integer 10 10) (TypeVariable "int")]
 
         it "0x10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ BindU "sixteen" (UntypedTerm $ Literal $ Integer 16 16)])
+          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU "sixteen" (UntypedValue $ Literal $ Integer 16 16)])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ BindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (TypeVariable "int")]
+              Module "spec" [] [ValueBind $ ValueBindU "sixteen" $ TypedTerm (Literal $ Integer 16 16) (TypeVariable "int")]
 
     describe "application" $ do
       describe "succ" $ do
@@ -31,22 +31,22 @@ spec = do
                 "spec"
                 []
                 [ ValueBind $
-                    BindU
+                    ValueBindU
                       "succ"
-                      $ UntypedTerm $
+                      $ UntypedValue $
                           TypeAnnotation $
                             TypeAnnotation'
-                              ( UntypedTerm $
+                              ( UntypedValue $
                                   Literal $
                                       Function $
                                         FunctionC
                                           "a"
                                           (TypeVariable "int")
-                                          $ UntypedTerm $
+                                          $ UntypedValue $
                                               Application $
                                                 ApplicationC
-                                                  (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
-                                                  (UntypedTerm $ Variable $ QualifiedIdentifier Nothing "a")
+                                                  (UntypedValue $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                                                  (UntypedValue $ Variable $ QualifiedIdentifier Nothing "a")
                               )
                               $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
                 ]
@@ -55,7 +55,7 @@ spec = do
                 "spec"
                 []
                 [ ValueBind $
-                    BindU "succ" $
+                    ValueBindU "succ" $
                       TypedTerm
                         ( Literal $
                             Function $
@@ -81,18 +81,18 @@ spec = do
                 "spec"
                 []
                 [ ValueBind $
-                    BindU
+                    ValueBindU
                       "succ"
-                      $ UntypedTerm $
+                      $ UntypedValue $
                           TypeAnnotation $
                             TypeAnnotation'
-                              ( UntypedTerm $
+                              ( UntypedValue $
                                   Literal $
                                     Function $
                                       FunctionC
                                         "a"
                                         (TypeVariable "int")
-                                        (UntypedTerm $ Variable $ QualifiedIdentifier (Just "spec") "succ")
+                                        (UntypedValue $ Variable $ QualifiedIdentifier (Just "spec") "succ")
                               )
                               $ FunctionType $ FunctionTypeC (TypeVariable "int") $ TypeVariable "int"
                 ]

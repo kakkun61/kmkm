@@ -5,8 +5,7 @@ module Language.Kmkm.Build.C.Thunk
   ( thunk
   ) where
 
-import           Language.Kmkm.Syntax        (Identifier, ModuleName, QualifiedIdentifier (QualifiedIdentifier))
-import qualified Language.Kmkm.Syntax        as S
+import qualified Language.Kmkm.Syntax as S
 
 import           Data.List.NonEmpty (NonEmpty ((:|)))
 import           Data.Maybe         (mapMaybe)
@@ -19,75 +18,75 @@ import qualified Data.Set           as S
 -- I think that a smarter method needs topological sort for dependencies
 -- of value definitions.
 
-type Module = S.Module 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type Definition = S.Definition 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type Type = S.Type 'S.Uncurried
+type Type = S.Type 'S.NameResolved 'S.Uncurried
 
-type Term = S.Term 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type ProcedureStep = S.ProcedureStep 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
 thunk :: Module -> Module
-thunk (S.Module n ds ms) = S.Module n ds $ definition n (thunkIdentifiers ms) <$> ms
+thunk (S.Module n ds ms) = S.Module n ds $ definition (thunkIdentifiers ms) <$> ms
 
-definition :: ModuleName -> Set Identifier -> Definition -> Definition
-definition n tids (S.ValueBind (S.BindV i v)) = definition' n tids (S.ValueBind (S.BindN i [] v))
-definition n tids m                           = definition' n tids m
+definition :: Set S.QualifiedIdentifier -> Definition -> Definition
+definition tids (S.ValueBind (S.ValueBindV i v)) = definition' tids (S.ValueBind (S.ValueBindN i [] v))
+definition tids m                                = definition' tids m
 
-definition' :: ModuleName -> Set Identifier -> Definition -> Definition
-definition' n tids (S.ValueBind (S.BindV i v))    = valueBind n tids i Nothing v
-definition' n tids (S.ValueBind (S.BindN i ps v)) = valueBind n tids i (Just ps) v
-definition' _ _ m                                 = m
+definition' :: Set S.QualifiedIdentifier -> Definition -> Definition
+definition' tids (S.ValueBind (S.ValueBindV i v))    = valueBind tids i Nothing v
+definition' tids (S.ValueBind (S.ValueBindN i ps v)) = valueBind tids i (Just ps) v
+definition' _ m                                      = m
 
-valueBind :: ModuleName -> Set Identifier -> Identifier -> Maybe [(Identifier, Type)] -> Term -> Definition
-valueBind n tids i mps v =
+valueBind :: Set S.QualifiedIdentifier -> S.QualifiedIdentifier -> Maybe [(S.QualifiedIdentifier, Type)] -> Value -> Definition
+valueBind tids i mps v =
   let
-    v' = term n tids v
+    v' = term tids v
   in
-    S.ValueBind (maybe (S.BindV i v') (\ps -> S.BindN i ps v') mps)
+    S.ValueBind (maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps)
 
-term :: ModuleName -> Set Identifier -> Term -> Term
-term n tids v@(S.TypedTerm (S.Variable i@(QualifiedIdentifier n' i')) t)
-  | Just n == n' && i' `S.member` tids = S.TypedTerm (S.Application $ S.ApplicationN (S.TypedTerm (S.Variable i) (S.FunctionType $ S.FunctionTypeN [] t)) []) t
+term :: Set S.QualifiedIdentifier -> Value -> Value
+term tids v@(S.TypedTerm (S.Variable i) t)
+  | i `S.member` tids = S.TypedTerm (S.Application $ S.ApplicationN (S.TypedTerm (S.Variable i) (S.FunctionType $ S.FunctionTypeN [] t)) []) t
   | otherwise                          = v
-term n tids (S.TypedTerm (S.Application (S.ApplicationN v vs)) t) =
+term tids (S.TypedTerm (S.Application (S.ApplicationN v vs)) t) =
   S.TypedTerm (S.Application $ S.ApplicationN v' vs') t
   where
-    v' = term n tids v
-    vs' = term n tids <$> vs
-term n tids (S.TypedTerm (S.Procedure (p :| ps)) t) =
+    v' = term tids v
+    vs' = term tids <$> vs
+term tids (S.TypedTerm (S.Procedure (p :| ps)) t) =
   let
-    (tids', p') = procedureStep n tids p
+    (tids', p') = procedureStep tids p
     (_, ps') = foldr go (tids', []) ps
     go p (tids, ps) =
-      let (tids', p') = procedureStep n tids p
+      let (tids', p') = procedureStep tids p
       in (tids', p':ps)
   in S.TypedTerm (S.Procedure $ p' :| ps') t
-term n tids (S.TypedTerm (S.Let ds v) t) =
+term tids (S.TypedTerm (S.Let ds v) t) =
   let
     tids' = thunkIdentifiers ds `S.union` (tids S.\\ identifiers ds)
-    ds' = definition' n tids' <$> ds
-    v' = term n tids' v
+    ds' = definition' tids' <$> ds
+    v' = term tids' v
   in S.TypedTerm (S.Let ds' v') t
-term _ _ v = v
+term _ v = v
 
-procedureStep :: ModuleName -> Set Identifier -> ProcedureStep -> (Set Identifier, ProcedureStep)
-procedureStep n tids (S.BindProcedure i v) = (tids S.\\ S.singleton i, S.BindProcedure i $ term n tids v)
-procedureStep n tids (S.TermProcedure v)   = (tids, S.TermProcedure $ term n tids v)
+procedureStep :: Set S.QualifiedIdentifier -> ProcedureStep -> (Set S.QualifiedIdentifier, ProcedureStep)
+procedureStep tids (S.BindProcedure i v) = (tids S.\\ S.singleton i, S.BindProcedure i $ term tids v)
+procedureStep tids (S.TermProcedure v)   = (tids, S.TermProcedure $ term tids v)
 
-identifiers :: [Definition] -> Set Identifier
+identifiers :: [Definition] -> Set S.QualifiedIdentifier
 identifiers =
   S.fromList . mapMaybe go
   where
-    go (S.ValueBind (S.BindN i _ _)) = Just i
-    go _                             = Nothing
+    go (S.ValueBind (S.ValueBindN i _ _)) = Just i
+    go _                                  = Nothing
 
-thunkIdentifiers :: [Definition] -> Set Identifier
+thunkIdentifiers :: [Definition] -> Set S.QualifiedIdentifier
 thunkIdentifiers =
   S.fromList . mapMaybe go
   where
-    go (S.ValueBind (S.BindV i _)) = Just i
-    go S.ValueBind {}              = Nothing
-    go _                           = Nothing
+    go (S.ValueBind (S.ValueBindV i _)) = Just i
+    go S.ValueBind {}                   = Nothing
+    go _                                = Nothing

@@ -46,9 +46,10 @@ library
                    Language.Kmkm.Build.C.Declare
                    Language.Kmkm.Build.C.IntermediateC
                    Language.Kmkm.Build.C.Simplify
-                   Language.Kmkm.Build.C.Thunk
                    Language.Kmkm.Build.C.Syntax
+                   Language.Kmkm.Build.C.Thunk
                    Language.Kmkm.Build.LambdaLift
+                   Language.Kmkm.Build.NameResolve
                    Language.Kmkm.Build.PartiallyApply
                    Language.Kmkm.Build.TypeCheck
                    Language.Kmkm.Build.Uncurry
@@ -56,6 +57,7 @@ library
                    Language.Kmkm.Config
                    Language.Kmkm.Exception
                    Language.Kmkm.Parse.Sexp
+                   Language.Kmkm.Primitive
                    Language.Kmkm.Syntax
   build-depends: algebraic-graphs,
                  containers,

@@ -64,7 +64,7 @@ spec = do
       it "bind-value foo 123" $ do
         parse' (valueBind <* M.eof) "spec" "bind-value foo 123"
           `shouldReturn`
-            ValueBind (BindU "foo" $ UntypedTerm $ Literal $ Integer 123 10)
+            ValueBind (ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10)
 
     describe "dataDefinition" $ do
       it "define bool (false true)" $ do
@@ -81,7 +81,7 @@ spec = do
       it "(module math (list) (list (bind-value foo 123)" $ do
         parse' (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123)))"
           `shouldReturn`
-            Module "math" [] [ValueBind $ BindU "foo" $ UntypedTerm $ Literal $ Integer 123 10]
+            Module "math" [] [ValueBind $ ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10]
 
       it "(module math (list) (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list) (list (define bool (list false true))))"

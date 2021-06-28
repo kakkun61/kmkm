@@ -1,8 +1,8 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DataKinds #-}
 
 module Language.Kmkm.Build.C.IntermediateC
   ( translate
@@ -14,30 +14,32 @@ import qualified Language.Kmkm.Build.C.Syntax as I
 import           Language.Kmkm.Config         (Config (Config, typeMap))
 import qualified Language.Kmkm.Config         as C
 import           Language.Kmkm.Exception      (unreachable)
+import qualified Language.Kmkm.Primitive      as P
 import           Language.Kmkm.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
-                                               QualifiedIdentifier (QualifiedIdentifier))
+                                               QualifiedIdentifier)
 import qualified Language.Kmkm.Syntax         as S
+
 import qualified Data.List.NonEmpty as N
 import           Data.Text          (Text)
 import qualified Data.Text          as T
 
-type Module = S.Module 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type Definition = S.Definition 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type Type = S.Type 'S.Uncurried
+type Type = S.Type 'S.NameResolved 'S.Uncurried
 
-type Term = S.Term 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type Literal = S.Literal 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type Literal = S.Literal 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
-type ProcedureStep = S.ProcedureStep 'S.Uncurried 'S.LambdaLifted 'S.Typed
+type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed
 
 translate :: Config -> Module -> ([S.CHeader], I.File)
 translate = module'
 
 module' :: Config -> Module -> ([S.CHeader ], I.File)
-module' config (S.Module n _ ms) = (header =<< ms, I.File (moduleName n) $ definition config n True =<< ms)
+module' config (S.Module n _ ms) = (header =<< ms, I.File (moduleName n) $ definition config n =<< ms)
 
 header :: Definition -> [S.CHeader]
 header (S.ForeignValueBind _ hs _ _) = hs
@@ -55,24 +57,23 @@ header _                             = []
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-definition :: Config -> ModuleName -> Bool -> Definition -> [I.Element]
-definition config _ _ (S.DataDefinition i cs) =
+definition :: Config -> ModuleName -> Definition -> [I.Element]
+definition config _ (S.DataDefinition i cs) =
   mconcat
     [ tagEnum
     , [structure]
     , I.Definition . constructor (length cs) <$> cs
     ]
   where
-    tagEnumIdent (UserIdentifier t)     = I.Identifier $ t <> "_tag"
-    tagEnumIdent (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n ++ "_tag"
+    tagEnumIdent i = I.Identifier $ qualifiedIdentifierText i <> "_tag"
     tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
     tagEnum =
       case cs of
         [(_, _:_)] -> []
         _          -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
-    structType = ([], I.Structure $ identifier i)
+    structType = ([], I.Structure $ qualifiedIdentifier i)
     structure =
-      I.Declaration ([], I.StructureLiteral (Just $ identifier i) fields) [] Nothing []
+      I.Declaration ([], I.StructureLiteral (Just $ qualifiedIdentifier i) fields) [] Nothing []
       where
         fields =
           case cs of
@@ -83,36 +84,36 @@ definition config _ _ (S.DataDefinition i cs) =
                   if hasFields
                     then [I.Field ([], I.Union $ constructor <$> cs) "body"]
                     else []
-        field (i, t) = I.Field (typ config t) $ identifier i
-        constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ identifier i
+        field (i, t) = I.Field (typ config t) $ qualifiedIdentifier i
+        constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ qualifiedIdentifier i
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
-    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (identifier c) [] $ I.ListInitializer [I.ExpressionInitializer $ I.Variable $ tagEnumIdent c]
+    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c) [] $ I.ListInitializer [I.ExpressionInitializer $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
-      I.StatementDefinition structType [] (identifier c) [I.Function $ parameter <$> fs] [blockItem]
+      I.StatementDefinition structType [] (qualifiedIdentifier c) [I.Function $ parameter <$> fs] [blockItem]
       where
-        parameter (i, t) = (typ config t, [I.Constant], Just $ identifier i, [])
+        parameter (i, t) = (typ config t, [I.Constant], Just $ qualifiedIdentifier i, [])
         blockItem = I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
             (1, _:_) -> argument <$> fs
             _        -> I.ExpressionInitializer (I.Variable $ tagEnumIdent c) : (argument <$> fs)
-        argument (i, _) = I.ExpressionInitializer $ I.Variable $ identifier i
-definition config n root (S.ValueBind (S.BindV i v@(S.TypedTerm _ t))) =
-  [I.Definition $ I.ExpressionDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (if root then Just n else Nothing) i) (deriver config t) $ I.ExpressionInitializer $ term config n v]
-definition config n root (S.ValueBind (S.BindN i is v)) =
-  [bindTermN config n root i is v]
-definition _ _ _ (S.ForeignValueBind _ _ (S.CDefinition c) _) =
+        argument (i, _) = I.ExpressionInitializer $ I.Variable $ qualifiedIdentifier i
+definition config n (S.ValueBind (S.ValueBindV i v@(S.TypedTerm _ t))) =
+  [I.Definition $ I.ExpressionDefinition (typ config t) [] (qualifiedIdentifier i) (deriver config t) $ I.ExpressionInitializer $ term config n v]
+definition config n (S.ValueBind (S.ValueBindN i is v)) =
+  [bindTermN config n i is v]
+definition _ _ (S.ForeignValueBind _ _ (S.CDefinition c) _) =
   [I.Embed $ I.C c]
-definition config _ _ (S.TypeBind i t) =
-  [I.TypeDefinition (typ config t) $ identifier i]
+definition config _ (S.TypeBind i t) =
+  [I.TypeDefinition (typ config t) $ qualifiedIdentifier i]
 
-bindTermN :: Config -> ModuleName -> Bool -> Identifier -> [(Identifier, Type)] -> Term -> I.Element
-bindTermN config n root i ps v@(S.TypedTerm _ t) =
-  I.Definition $ I.StatementDefinition (typ config t) [] (qualifiedIdentifier $ QualifiedIdentifier (if root then Just n else Nothing) i) (I.Function (parameters ps) : deriverRoot config t) [I.BlockStatement $ I.Return (term config n v)]
+bindTermN :: Config -> ModuleName -> S.QualifiedIdentifier -> [(S.QualifiedIdentifier, Type)] -> Value -> I.Element
+bindTermN config n i ps v@(S.TypedTerm _ t) =
+  I.Definition $ I.StatementDefinition (typ config t) [] (qualifiedIdentifier i) (I.Function (parameters ps) : deriverRoot config t) [I.BlockStatement $ I.Return (term config n v)]
   where
     parameters [] = [(([], I.Void), [], Nothing, [])]
     parameters ps = parameter <$> ps
-    parameter (i, t) = (typ config t, case t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ identifier i, deriver config t)
+    parameter (i, t) = (typ config t, case t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ qualifiedIdentifier i, deriver config t)
 
 elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
@@ -120,26 +121,28 @@ elementStatement (I.Definition d)          = I.BlockDefinition d
 elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
 elementStatement (I.Embed c)               = I.BlockEmbed c
 
-identifier :: Identifier -> I.Identifier
-identifier (UserIdentifier t)     = I.Identifier t
-identifier (SystemIdentifier t n) = I.Identifier $ T.pack $ '_' : t : show n
-
 qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
-qualifiedIdentifier (QualifiedIdentifier (Just "main") (UserIdentifier t)) = I.Identifier t
-qualifiedIdentifier (QualifiedIdentifier (Just (ModuleName m)) (UserIdentifier t)) = I.Identifier $ T.intercalate "_" (N.toList m) <> "_" <> t
-qualifiedIdentifier (QualifiedIdentifier Nothing (UserIdentifier t)) = I.Identifier t
-qualifiedIdentifier (QualifiedIdentifier _ (SystemIdentifier t n)) = I.Identifier $ T.pack $ '_' : t : show n
+qualifiedIdentifier = I.Identifier . qualifiedIdentifierText
+
+identifierText :: S.Identifier -> Text
+identifierText (UserIdentifier t)     = t
+identifierText (SystemIdentifier t n) = T.pack $ '_' : t : show n
+
+qualifiedIdentifierText :: QualifiedIdentifier -> Text
+qualifiedIdentifierText (S.GlobalIdentifier "main" i) = identifierText i
+qualifiedIdentifierText (S.GlobalIdentifier m i)      = moduleName m <> "_" <> identifierText i
+qualifiedIdentifierText (S.LocalIdentifier i)         = identifierText i
 
 moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = T.intercalate "_" $ N.toList n
 
-term :: Config -> ModuleName -> Term -> I.Expression
+term :: Config -> ModuleName -> Value -> I.Expression
 term _ _ (S.TypedTerm (S.Variable i) _)                             = I.Variable $ qualifiedIdentifier i
 term _ _ (S.TypedTerm (S.Literal l) _)                              = I.Literal $ literal l
 term config n (S.TypedTerm (S.Application (S.ApplicationN v vs)) _) = I.Call (term config n v) $ term config n <$> vs
 term config n (S.TypedTerm (S.Procedure ps) _)                      = I.StatementExpression $ I.Block $ procedureStep config n =<< N.toList ps
 term _ _ (S.TypedTerm (S.TypeAnnotation _) _)                       = unreachable
-term config n (S.TypedTerm (S.Let ds v) _) = I.StatementExpression $ I.Block $ (elementStatement <$> (definition config n False =<< ds)) ++ [I.BlockStatement (I.ExpressionStatement $ term config n v)]
+term config n (S.TypedTerm (S.Let ds v) _) = I.StatementExpression $ I.Block $ (elementStatement <$> (definition config n =<< ds)) ++ [I.BlockStatement (I.ExpressionStatement $ term config n v)]
 
 literal :: Literal -> I.Literal
 literal (S.Integer i b) =
@@ -160,8 +163,8 @@ literal l = error (show l)
 
 procedureStep :: Config -> ModuleName -> ProcedureStep -> [I.BlockElement]
 procedureStep config n (S.BindProcedure i v@(S.TypedTerm _ t)) =
-  [ I.BlockDeclaration (typ config t) [I.Constant] (Just $ identifier i) []
-  , I.BlockStatement $ I.ExpressionStatement $ I.Assign (identifier i) (term config n v)
+  [ I.BlockDeclaration (typ config t) [I.Constant] (Just $ qualifiedIdentifier i) []
+  , I.BlockStatement $ I.ExpressionStatement $ I.Assign (qualifiedIdentifier i) (term config n v)
   ]
 procedureStep config n (S.TermProcedure v) =
   [I.BlockStatement $ I.ExpressionStatement $ term config n v]
@@ -170,14 +173,12 @@ typ :: Config -> Type -> I.QualifiedType
 typ Config { typeMap } (S.TypeVariable n) =
   get typeMap
   where
-    get =
-      case n of
-        "int"   -> I.readCType . C.int
-        "uint"  -> I.readCType . C.uint
-        "byte"  -> I.readCType . C.byte
-        "frac"  -> I.readCType . C.frac
-        "frac2" -> I.readCType . C.frac2
-        _       -> const ([], I.Structure $ identifier n)
+    get | n == P.int   = I.readCType . C.int
+        | n == P.uint  = I.readCType . C.uint
+        | n == P.byte  = I.readCType . C.byte
+        | n == P.frac  = I.readCType . C.frac
+        | n == P.frac2 = I.readCType . C.frac2
+        | otherwise    = const ([], I.Structure $ qualifiedIdentifier n)
 typ c (S.FunctionType (S.FunctionTypeN _ t)) = typ c t
 typ _ t = error $ show t
 

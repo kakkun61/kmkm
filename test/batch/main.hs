@@ -1,6 +1,8 @@
-import qualified Language.Kmkm.Build.TypeCheck as B1
-import qualified Language.Kmkm.Compile         as M
-import qualified Language.Kmkm.Parse.Sexp      as P
+import qualified Language.Kmkm.Build.NameResolve as KN
+import qualified Language.Kmkm.Build.TypeCheck   as KT
+import qualified Language.Kmkm.Compile           as KC
+import qualified Language.Kmkm.Parse.Sexp        as KP
+import qualified Language.Kmkm.Syntax            as KS
 
 import           Control.Exception        (Exception (displayException))
 import qualified Control.Exception        as E
@@ -14,6 +16,7 @@ import           Data.Text                (Text)
 import qualified Data.Text                as T
 import qualified Data.Text.IO             as T
 import           Data.Traversable         (for)
+import qualified GHC.Exts                 as X
 import           Language.C               (parseC)
 import qualified Language.C.Data.Position as C
 import qualified Language.C.Pretty        as C
@@ -70,19 +73,26 @@ data Result = Pass | Mismatch P.Doc | Fail String
 
 test :: Text -> P.Doc -> Result
 test source expected =
-  case P.parse (T.unpack source) source >>= B1.typeCheck mempty of
-    Left e ->
-      case E.fromException e of
-        Just (P.Exception m) -> Fail m
-        Nothing              -> Fail $ displayException e
-    Right m ->
-      let
-        (_, d, _) = runIdentity $ M.buildC def (const $ pure ()) m
-        result = C.pretty d
-      in
-        if result == expected
-          then Pass
-          else Mismatch result
+  let
+    r = do
+      m@(KS.Module n _ _) <- KP.parse (T.unpack source) source
+      m' <- KN.nameResolve (KN.boundIdentifiers $ X.fromList [(n, m)]) m
+      KT.typeCheck mempty m'
+  in
+    case r of
+      Left e ->
+        case (E.fromException e, E.fromException e) of
+          (Just (KP.Exception m), _)        -> Fail m
+          (_, Just (KN.UnknownException i)) -> Fail $ show i
+          (Nothing, Nothing)                -> Fail $ displayException e
+      Right m ->
+        let
+          (_, d, _) = runIdentity $ KC.buildC def (const $ pure ()) m
+          result = C.pretty d
+        in
+          if result == expected
+            then Pass
+            else Mismatch result
 
 putStrLnGreen :: String -> IO ()
 putStrLnGreen s = do
