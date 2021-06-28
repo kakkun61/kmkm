@@ -98,6 +98,7 @@ annotatedType _                                                           = Noth
 replaceTerm :: Map S.QualifiedIdentifier (Value 'S.Typed) -> Definition 'S.Untyped -> Definition 'S.Typed
 replaceTerm _ (S.DataDefinition i cs) = S.DataDefinition i cs
 replaceTerm _ (S.TypeBind i t) = S.TypeBind i t
+replaceTerm _ (S.ForeignTypeBind i hs c) = S.ForeignTypeBind i hs c
 replaceTerm typedValueBinds (S.ValueBind (S.ValueBindU i _)) =
   S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup i typedValueBinds)
 replaceTerm _ (S.ForeignValueBind i hs c t) = S.ForeignValueBind i hs c t

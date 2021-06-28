@@ -50,6 +50,7 @@ definition (S.DataDefinition i cs) =
       where
         go (i, t) = (i, typ t)
 definition (S.TypeBind i t) = S.TypeBind i $ typ t
+definition (S.ForeignTypeBind i hs c) = S.ForeignTypeBind i hs c
 definition (S.ValueBind (S.ValueBindU i v)) = S.ValueBind (S.ValueBindU i $ term v)
 definition (S.ForeignValueBind i hs c t) = S.ForeignValueBind i hs c $ typ t
 

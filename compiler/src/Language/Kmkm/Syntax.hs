@@ -75,6 +75,7 @@ data Definition n c l t
   | TypeBind (BindIdentifier n) (Type n c)
   | ValueBind (ValueBind n c l t)
   | ForeignValueBind (BindIdentifier n) [CHeader] CDefinition (Type n c)
+  | ForeignTypeBind (BindIdentifier n) [CHeader] CDefinition
   deriving Generic
 
 type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Constraint

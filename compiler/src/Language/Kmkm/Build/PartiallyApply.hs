@@ -30,13 +30,11 @@ module' :: Module -> Pass Module
 module' (S.Module mn ds ms) = S.Module mn ds <$> sequence (definition mn <$> ms)
 
 definition :: S.ModuleName -> Definition -> Pass Definition
-definition _ d@S.DataDefinition {} = pure d
-definition _ t@S.TypeBind {} = pure t
 definition mn (S.ValueBind (S.ValueBindU i v)) =
   scope $ do
     v' <- term mn v
     pure $ S.ValueBind (S.ValueBindU i v')
-definition _ b@S.ForeignValueBind {} = pure b
+definition _ d = pure d
 
 term :: S.ModuleName -> Value -> Pass Value
 term mn (S.TypedTerm (S.Application (S.ApplicationN v@(S.TypedTerm _ (S.FunctionType (S.FunctionTypeN t0s t0))) vs)) t) = do

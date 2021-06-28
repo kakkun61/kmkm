@@ -40,7 +40,7 @@ element (I.Declaration t qs i ds)                           = CDeclExt $ valueDe
 element (I.Definition (I.ExpressionDefinition t qs i ds l)) = CDeclExt $ valueDeclaration t qs (Just i) ds (Just l)
 element (I.Definition (I.StatementDefinition t qs i ds is)) = CFDefExt $ functionDefinition t qs i ds is
 element (I.TypeDefinition t i)                              = CDeclExt $ typeDefinition t i
-element (I.Embed (I.C c))                                   = c
+element (I.Embedded (I.C c))                                = c
 
 valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> [I.Deriver] -> Maybe I.Initializer -> CDecl
 valueDeclaration t qs i ds l =

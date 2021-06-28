@@ -1,7 +1,9 @@
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Language.Kmkm.Parse.Sexp
   ( parse
@@ -40,14 +42,18 @@ import qualified Data.Text.Encoding         as T
 import qualified Data.Typeable              as Y
 import           Data.Void                  (Void)
 import           GHC.Generics               (Generic)
+import qualified Language.C.Data.Ident      as C
 import qualified Language.C.Data.Position   as C
 import qualified Language.C.Parser          as C
+import qualified Language.C.Pretty          as C
+import qualified Language.C.Syntax.AST      as C
 import qualified Text.Megaparsec            as M
 import qualified Text.Megaparsec.Char.Lexer as M
 import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
 import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
+import qualified Text.PrettyPrint           as R
 
 type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
@@ -115,6 +121,7 @@ definition =
         [ dataDefinition
         , foreignValueBind
         , valueBind
+        , foreignTypeBind
         ]
 
 dataDefinition :: Parser Definition
@@ -127,7 +134,7 @@ valueConstructor :: Parser (S.Identifier, [(S.Identifier, Type)])
 valueConstructor =
   M.label "valueConstructor" $
     P.choice
-      [ flip (,) [] <$> identifier
+      [ (, []) <$> identifier
       , P.parens $ (,) <$> identifier <*> list field
       ]
 
@@ -144,7 +151,25 @@ foreignValueBind :: Parser Definition
 foreignValueBind =
   M.label "foreignValueBind" $ do
     void $ P.textSymbol "bind-value-foreign"
-    S.ForeignValueBind <$> identifier <*> list cHeader <*> cDefinition <*> typ
+    S.ForeignValueBind <$> identifier <*> list cHeader <*> (S.CDefinition <$> cExternalDeclaration) <*> typ
+
+foreignTypeBind :: Parser Definition
+foreignTypeBind =
+  M.label "foreignTypeBind" $ do
+    void $ P.textSymbol "bind-type-foreign"
+    S.ForeignTypeBind <$> identifier <*> list cHeader <*> (S.CDefinition <$> (check =<< cExternalDeclaration))
+  where
+    check declExt@(C.CDeclExt (C.CDecl declSpecs [(Just (C.CDeclr (Just C.Ident {}) [] Nothing [] _), Nothing, Nothing)] _)) =
+      case foldr declSpecAcc (pure (False, False)) declSpecs of
+        Right (True, True) -> pure declExt
+        Right (False, _)   -> fail "typedef must be used"
+        Right (_, False)   -> fail "no typedef names are found"
+        Left s             -> fail $ "\"" ++ R.render (C.pretty s) ++ "\" cannot be used"
+    check declExt = fail $ "\"" ++ R.render (C.pretty declExt) ++ "\" cannot be used"
+    declSpecAcc (C.CTypeSpec (C.CUnsigType _)) acc = acc >>= \(d, t) -> pure (d, t)
+    declSpecAcc C.CTypeSpec {} acc                 = acc >>= \(d, _) -> pure (d, True)
+    declSpecAcc (C.CStorageSpec C.CTypedef {}) acc = acc >>= \(_, ts) -> pure (True, ts)
+    declSpecAcc s _                                = Left s
 
 identifier :: Parser S.Identifier
 identifier =
@@ -360,12 +385,12 @@ procedureStep =
     void $ P.textSymbol "procedure"
     typ
 
-cDefinition :: Parser S.CDefinition
-cDefinition = do
+cExternalDeclaration :: Parser C.CExtDecl
+cExternalDeclaration = do
   s <- T.encodeUtf8 <$> string
   case C.execParser_ C.extDeclP s C.nopos of
     Left (C.ParseError (m, _)) -> fail $ unlines m
-    Right c                    -> pure $ S.CDefinition c
+    Right c                    -> pure c
 
 cHeader :: Parser S.CHeader
 cHeader =

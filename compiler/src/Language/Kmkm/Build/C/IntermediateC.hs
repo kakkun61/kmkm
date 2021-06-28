@@ -103,9 +103,11 @@ definition config n (S.ValueBind (S.ValueBindV i v@(S.TypedTerm _ t))) =
 definition config n (S.ValueBind (S.ValueBindN i is v)) =
   [bindTermN config n i is v]
 definition _ _ (S.ForeignValueBind _ _ (S.CDefinition c) _) =
-  [I.Embed $ I.C c]
+  [I.Embedded $ I.C c]
 definition config _ (S.TypeBind i t) =
   [I.TypeDefinition (typ config t) $ qualifiedIdentifier i]
+definition _ _ (S.ForeignTypeBind _ _ (S.CDefinition c)) =
+  [I.Embedded $ I.C c]
 
 bindTermN :: Config -> ModuleName -> S.QualifiedIdentifier -> [(S.QualifiedIdentifier, Type)] -> Value -> I.Element
 bindTermN config n i ps v@(S.TypedTerm _ t) =
@@ -119,7 +121,7 @@ elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
 elementStatement (I.Definition d)          = I.BlockDefinition d
 elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
-elementStatement (I.Embed c)               = I.BlockEmbed c
+elementStatement (I.Embedded c)            = I.BlockEmbed c
 
 qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
 qualifiedIdentifier = I.Identifier . qualifiedIdentifierText

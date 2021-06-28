@@ -41,7 +41,7 @@ data Element
   = Declaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | Definition Definition
   | TypeDefinition QualifiedType Identifier
-  | Embed C
+  | Embedded C
   deriving (Show, Eq, Ord, Generic)
 
 data Definition

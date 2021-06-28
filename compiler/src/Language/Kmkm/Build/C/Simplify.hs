@@ -5,7 +5,7 @@ module Language.Kmkm.Build.C.Simplify
 
 import Language.Kmkm.Build.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
                                      Definition (ExpressionDefinition, StatementDefinition),
-                                     Element (Declaration, Definition, Embed, TypeDefinition),
+                                     Element (Declaration, Definition, Embedded, TypeDefinition),
                                      Expression (StatementExpression), File (File),
                                      Initializer (ExpressionInitializer, ListInitializer),
                                      Statement (Block, ExpressionStatement, Return))
@@ -22,7 +22,7 @@ element :: Element -> Element
 element d@Declaration {}    = d
 element (Definition d)      = Definition $ definition d
 element d@TypeDefinition {} = d
-element e@Embed {}          = e
+element e@Embedded {}       = e
 
 definition :: Definition -> Definition
 definition (ExpressionDefinition t qs i ds n) = ExpressionDefinition t qs i ds $ initializer n

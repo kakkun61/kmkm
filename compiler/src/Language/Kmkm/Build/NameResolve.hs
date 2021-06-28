@@ -53,6 +53,7 @@ nameResolve identifiers (S.Module moduleName ms ds) = do
 definition :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Definition 'S.NameUnresolved -> m (Definition 'S.NameResolved)
 definition affiliations moduleName (S.ValueBind b) = S.ValueBind <$> valueBind affiliations moduleName b
 definition affiliations moduleName (S.TypeBind i t) = S.TypeBind (S.GlobalIdentifier moduleName i) <$> typ affiliations moduleName t
+definition _ moduleName (S.ForeignTypeBind i hs c) = pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName i) hs c
 definition affiliations moduleName (S.DataDefinition i cs) =
   S.DataDefinition (S.GlobalIdentifier moduleName i) <$> sequence (constructor <$> cs)
   where

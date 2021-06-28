@@ -36,6 +36,7 @@ module' (S.Module mn ms ds) = S.Module mn ms <$> sequence (definition <$> ds)
 definition :: Definition 'S.LambdaUnlifted -> Pass (Definition 'S.LambdaLifted)
 definition (S.DataDefinition i cs) = pure $ S.DataDefinition i cs
 definition (S.TypeBind i t) = pure $ S.TypeBind i t
+definition (S.ForeignTypeBind i hs c) = pure $ S.ForeignTypeBind i hs c
 definition (S.ValueBind (S.ValueBindU i (S.TypedTerm (S.Literal (S.Function (S.FunctionN is v))) _))) =
   scope $ do
     (v'@(S.TypedTerm _ t), ds) <- term v
