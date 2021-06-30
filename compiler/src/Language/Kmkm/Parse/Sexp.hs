@@ -36,6 +36,7 @@ import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
 import           Data.List.NonEmpty         (NonEmpty)
 import qualified Data.List.NonEmpty         as N
+import           Data.Maybe                 (fromMaybe)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import qualified Data.Text.Encoding         as T
@@ -54,7 +55,6 @@ import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 import qualified Text.PrettyPrint           as R
-import Data.Maybe (fromMaybe)
 
 type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 

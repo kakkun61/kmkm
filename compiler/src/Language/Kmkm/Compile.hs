@@ -1,7 +1,6 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Compile
@@ -18,9 +17,9 @@ import qualified Language.Kmkm.Build.PartiallyApply  as KBP
 import qualified Language.Kmkm.Build.TypeCheck       as KBT
 import qualified Language.Kmkm.Build.Uncurry         as KBU
 import qualified Language.Kmkm.Exception             as KE
+import qualified Language.Kmkm.Exception             as X
 import qualified Language.Kmkm.Parse.Sexp            as KP
 import qualified Language.Kmkm.Syntax                as KS
-import qualified Language.Kmkm.Exception as X
 
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
@@ -34,7 +33,7 @@ import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
 import qualified Data.Map.Strict                      as M
-import           Data.Maybe                           (mapMaybe, fromMaybe)
+import           Data.Maybe                           (fromMaybe, mapMaybe)
 import qualified Data.Set                             as KS
 import qualified Data.Set                             as S
 import           Data.Text                            (Text)

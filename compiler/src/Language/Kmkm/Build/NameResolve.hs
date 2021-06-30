@@ -110,7 +110,7 @@ referenceIdentifier valueAffiliations _ i@(S.UnqualifiedIdentifier i') =
 referenceIdentifier valueAffiliations _ i@(S.QualifiedIdentifier i'@(S.GlobalIdentifier n i'')) =
   case M.lookup i'' valueAffiliations of
     Just (Global n') | n == n' -> pure i'
-    _ -> throwM $ UnknownIdentifierException i
+    _                          -> throwM $ UnknownIdentifierException i
 referenceIdentifier _ _ (S.QualifiedIdentifier i) = pure i
 
 boundIdentifiers :: Functor f => f (Module 'S.NameUnresolved) -> (f (Set S.Identifier), f (Set S.Identifier))
@@ -121,13 +121,13 @@ boundIdentifiers modules =
 
 boundValueIdentifier :: Definition 'S.NameUnresolved -> Maybe S.Identifier
 boundValueIdentifier (S.ValueBind (S.ValueBindU i _)) = Just i
-boundValueIdentifier (S.ForeignValueBind i _ _ _) = Just i
+boundValueIdentifier (S.ForeignValueBind i _ _ _)     = Just i
 boundValueIdentifier _                                = Nothing
 
 boundTypeIdentifier :: Definition 'S.NameUnresolved -> Maybe S.Identifier
-boundTypeIdentifier (S.TypeBind i _) = Just i
+boundTypeIdentifier (S.TypeBind i _)          = Just i
 boundTypeIdentifier (S.ForeignTypeBind i _ _) = Just i
-boundTypeIdentifier _                                = Nothing
+boundTypeIdentifier _                         = Nothing
 
 importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =
