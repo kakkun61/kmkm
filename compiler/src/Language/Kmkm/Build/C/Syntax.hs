@@ -22,7 +22,6 @@ module Language.Kmkm.Build.C.Syntax
   , Statement (..)
   , Branch (..)
   , C (..)
-  , readCType
   ) where
 
 import           Data.Function         (on)
@@ -72,12 +71,6 @@ data Type
   deriving (Show, Read, Eq, Ord, Generic)
 
 type QualifiedType = ([TypeQualifier], Type)
-
-readCType :: Text -> QualifiedType
-readCType "int"          = ([], Int)
-readCType "unsigned int" = ([Unsigned], Int)
-readCType "double"       = ([], Double)
-readCType t              = ([], TypeVariable $ Identifier t)
 
 data Deriver
   = Pointer [VariableQualifier]

@@ -19,10 +19,6 @@ doctest: build-deps
 spec: build-deps
 	cabal v2-test spec
 
-.PHONY: batch
-batch: build-deps
-	cabal v2-test batch
-
 .PHONY: repl
 repl:
 	cabal v2-repl

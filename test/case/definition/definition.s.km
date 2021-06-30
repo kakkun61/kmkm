@@ -1,6 +1,7 @@
 (module
   definition
-  (list)
+  (list
+    kmkm.prim)
   (list
     (define
       myBool
@@ -12,17 +13,17 @@
       (list
         (fraction
           (list
-            (numerator int)
-            (denominator int)))))
+            (numerator kmkm.prim.int)
+            (denominator kmkm.prim.int)))))
     (define
       passenger
       (list
         (person
           (list
-            (class uint)))
+            (class kmkm.prim.uint)))
         (pet
           (list
-            (species uint)))))
+            (species kmkm.prim.uint)))))
     (define
       unit
       (list

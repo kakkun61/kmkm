@@ -7,3 +7,6 @@ indent_style = space
 
 [Makefile]
 indent_style = tab
+
+[*.ps1]
+end_of_line = crlf

@@ -54,10 +54,8 @@ library
                    Language.Kmkm.Build.TypeCheck
                    Language.Kmkm.Build.Uncurry
                    Language.Kmkm.Compile
-                   Language.Kmkm.Config
                    Language.Kmkm.Exception
                    Language.Kmkm.Parse.Sexp
-                   Language.Kmkm.Primitive
                    Language.Kmkm.Syntax
   build-depends: algebraic-graphs,
                  containers,
@@ -82,8 +80,6 @@ executable kmkm
   hs-source-dirs: app
   main-is: kmkm.hs
   build-depends: kmkm == 0.1.0.0,
-                 data-default-class,
-                 dhall,
                  directory,
                  filepath,
                  optparse-declarative >= 0.4.2,
@@ -119,22 +115,3 @@ test-suite spec
                -rtsopts
                -with-rtsopts=-N
   build-tool-depends: hspec-discover:hspec-discover
-
-test-suite batch
-  import: common
-  type: exitcode-stdio-1.0
-  main-is: main.hs
-  hs-source-dirs: test/batch
-  build-depends: kmkm == 0.1.0.0,
-                 ansi-terminal,
-                 bytestring,
-                 data-default-class,
-                 directory,
-                 language-c,
-                 pretty,
-                 safe-exceptions,
-                 text,
-                 with-utf8
-  ghc-options: -threaded
-               -rtsopts
-               -with-rtsopts=-N

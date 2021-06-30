@@ -6,7 +6,6 @@
 
 module Language.Kmkm.Compile
   ( compile
-  , buildC
   ) where
 
 import qualified Language.Kmkm.Build.C.C             as KBCC
@@ -18,10 +17,10 @@ import qualified Language.Kmkm.Build.LambdaLift      as KBL
 import qualified Language.Kmkm.Build.PartiallyApply  as KBP
 import qualified Language.Kmkm.Build.TypeCheck       as KBT
 import qualified Language.Kmkm.Build.Uncurry         as KBU
-import qualified Language.Kmkm.Config                as KC
 import qualified Language.Kmkm.Exception             as KE
 import qualified Language.Kmkm.Parse.Sexp            as KP
 import qualified Language.Kmkm.Syntax                as KS
+import qualified Language.Kmkm.Exception as X
 
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
@@ -35,8 +34,9 @@ import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
 import qualified Data.Map.Strict                      as M
-import           Data.Maybe                           (mapMaybe)
+import           Data.Maybe                           (mapMaybe, fromMaybe)
 import qualified Data.Set                             as KS
+import qualified Data.Set                             as S
 import           Data.Text                            (Text)
 import qualified Data.Text                            as T
 import qualified Data.Typeable                        as Y
@@ -48,17 +48,19 @@ import           System.FilePath                      (isPathSeparator, pathSepa
 import qualified System.FilePath                      as F
 import qualified Text.PrettyPrint                     as P
 
-compile :: MonadCatch m => KC.Config -> (FilePath -> m Text) -> (FilePath -> Text -> m ()) -> (Text -> m ()) -> FilePath -> m ()
-compile _ _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
-compile config readFile writeFile writeLog src = do
+compile :: MonadCatch m => (FilePath -> m Text) -> (FilePath -> Text -> m ()) -> (Text -> m ()) -> FilePath -> m ()
+compile _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
+compile readFile writeFile writeLog src = do
   let src' = F.normalise src
   (nameDeps, modules1) <- readRecursively readFile src'
-  let boundIdentifiers = KBN.boundIdentifiers modules1
-  modules2 <- sequence $ KBN.nameResolve boundIdentifiers <$> modules1
-  let deps = G.gmap (modules2 M.!) nameDeps -- (M.!) never fail
+  let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
+  modules2 <- sequence $ KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers <$> modules1
+  let deps = G.gmap (fromMaybe X.unreachable . flip M.lookup modules2) nameDeps
   sortedModules <- sortModules deps
-  (_, modules3) <- foldr (accumulate typeCheck) (pure mempty) sortedModules
-  docs <- sequence $ (\m@(KS.Module n _ _) -> do { ds <- build config writeLog m; pure (n, ds)}) <$> KS.toList modules3
+  modules3 <- snd <$> foldr (accumulate typeCheck) (pure mempty) sortedModules
+  modules4 <- sequence $ build1 writeLog <$> S.toList modules3
+  let typeOrigins = M.unions $ KBCI.typeOrigins <$> modules4
+  docs <- sequence $ (\m@(KS.Module n _ _) -> do { ds <- build2 writeLog typeOrigins m; pure (n, ds) }) <$> modules4
   sequence_ $ write <$> docs
   where
     accumulate f v acc = do
@@ -66,9 +68,11 @@ compile config readFile writeFile writeLog src = do
       (v1, v2) <- f v acc1
       pure (M.union acc1 v1, KS.insert v2 acc2)
     write (k, (c, h)) = do
-      let path = moduleNameToFilePath k
-      writeFile (F.addExtension path "c") $ T.pack $ P.render c
-      writeFile (F.addExtension path "h") $ T.pack $ P.render h
+      let
+        path = moduleNameToFilePath k
+        style = P.Style P.PageMode maxBound 1
+      writeFile (F.addExtension path "c") $ T.pack $ P.renderStyle style c
+      writeFile (F.addExtension path "h") $ T.pack $ P.renderStyle style h
 
 readRecursively :: MonadThrow m => (FilePath -> m Text) -> FilePath -> m (G.AdjacencyMap KS.ModuleName, Map KS.ModuleName (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped))
 readRecursively readFile =
@@ -105,9 +109,9 @@ typeCheck module' types = do
         go _                                                   = Nothing
   pure (types', module'')
 
-build :: Monad m => KC.Config -> (Text -> m ()) -> KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed -> m (P.Doc, P.Doc)
-build config@KC.Config { KC.headers } writeLog m@(KS.Module n@(KS.ModuleName i) ms _) = do
-  (hs, c, h) <- buildC config writeLog m
+build2 :: Monad m => (Text -> m ()) -> Map KS.QualifiedIdentifier KBCI.TypeOrigin -> KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed -> m (P.Doc, P.Doc)
+build2 writeLog typeOrigins m@(KS.Module n@(KS.ModuleName i) ms _) = do
+  (hs, c, h) <- build2' writeLog typeOrigins m
   let
     key = P.text $ T.unpack $ T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
     newline = P.char '\n'
@@ -116,7 +120,7 @@ build config@KC.Config { KC.headers } writeLog m@(KS.Module n@(KS.ModuleName i) 
   pure
     ( mconcat $
         (include . moduleNameToHeaderPath <$> n : ms) ++
-        (include <$> headers ++ hs) ++
+        (include <$> hs) ++
         [ C.pretty c
         , newline
         ]
@@ -128,7 +132,7 @@ build config@KC.Config { KC.headers } writeLog m@(KS.Module n@(KS.ModuleName i) 
         , key
         , newline
         ] ++
-        (include <$> headers ++ hs) ++
+        (include <$> hs) ++
         (include . moduleNameToHeaderPath <$> ms) ++
         [ C.pretty h
         , newline
@@ -137,8 +141,12 @@ build config@KC.Config { KC.headers } writeLog m@(KS.Module n@(KS.ModuleName i) 
         ]
     )
 
-buildC :: Applicative m => KC.Config -> (Text -> m ()) -> KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed -> m ([KS.CHeader], CTranslUnit, CTranslUnit)
-buildC config writeLog m2 = do
+build1
+  :: Applicative m
+  => (Text -> m ())
+  -> KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed
+  -> m (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed)
+build1 writeLog m2 = do
   writeLog $ "typed module: " <> T.pack (show m2)
   let m3 = KBU.uncurry m2
   writeLog $ "uncurried module: " <> T.pack (show m3)
@@ -148,14 +156,23 @@ buildC config writeLog m2 = do
   writeLog $ "lambda-lifted module: " <> T.pack (show m5)
   let m6 = KBCT.thunk m5
   writeLog $ "thunk module: " <> T.pack (show m6)
-  let m7 = KBCI.translate config m6
+  pure m6
+
+build2'
+  :: Applicative m
+  => (Text -> m ())
+  -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
+  -> KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed
+  -> m ([KS.CHeader], CTranslUnit, CTranslUnit)
+build2' writeLog typeOrigins m6 = do
+  let m7 = KBCI.translate typeOrigins m6
   writeLog $ "abstract C file: " <> T.pack (show $ snd m7)
   let (hs, c) = second KBCS.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
   pure (hs, KBCC.translate c, KBCC.translate $ KBCD.declare c)
 
 filePathToModuleName :: FilePath -> KS.ModuleName
-filePathToModuleName path = KS.ModuleName $ N.fromList $ T.split isPathSeparator $ T.pack path -- N.fromList never fail
+filePathToModuleName path = KS.ModuleName $ fromMaybe X.unreachable $ N.nonEmpty $ T.split isPathSeparator $ T.pack path
 
 moduleNameToFilePath :: KS.ModuleName -> FilePath
 moduleNameToFilePath (KS.ModuleName n) = T.unpack $ T.intercalate (T.singleton pathSeparator) $ N.toList n

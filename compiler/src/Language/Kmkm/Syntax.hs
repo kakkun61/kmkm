@@ -74,8 +74,8 @@ data Definition n c l t
   = DataDefinition (BindIdentifier n) [(BindIdentifier n, [(BindIdentifier n, Type n c)])]
   | TypeBind (BindIdentifier n) (Type n c)
   | ValueBind (ValueBind n c l t)
-  | ForeignValueBind (BindIdentifier n) [CHeader] CDefinition (Type n c)
   | ForeignTypeBind (BindIdentifier n) [CHeader] CDefinition
+  | ForeignValueBind (BindIdentifier n) [CHeader] CDefinition (Type n c)
   deriving Generic
 
 type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Constraint
@@ -192,8 +192,8 @@ newtype instance Value n c l 'Untyped =
   UntypedValue (Value' n c l 'Untyped)
   deriving Generic
 
-type TermConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Constraint
-type TermConstraint cls n c l t =
+type ValueConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Constraint
+type ValueConstraint cls n c l t =
   ( cls (Value' n c l t)
   , cls (ReferenceIdentifier n)
   , cls (Type n c)
@@ -201,15 +201,15 @@ type TermConstraint cls n c l t =
   , cls (Literal n c l t)
   )
 
-deriving instance TermConstraint Show n c l 'Untyped => Show (Value n c l 'Untyped)
-deriving instance TermConstraint Read n c l 'Untyped => Read (Value n c l 'Untyped)
-deriving instance TermConstraint Eq n c l 'Untyped => Eq (Value n c l 'Untyped)
-deriving instance TermConstraint Ord n c l 'Untyped => Ord (Value n c l 'Untyped)
+deriving instance ValueConstraint Show n c l 'Untyped => Show (Value n c l 'Untyped)
+deriving instance ValueConstraint Read n c l 'Untyped => Read (Value n c l 'Untyped)
+deriving instance ValueConstraint Eq n c l 'Untyped => Eq (Value n c l 'Untyped)
+deriving instance ValueConstraint Ord n c l 'Untyped => Ord (Value n c l 'Untyped)
 
-deriving instance TermConstraint Show n c l 'Typed => Show (Value n c l 'Typed)
-deriving instance TermConstraint Read n c l 'Typed => Read (Value n c l 'Typed)
-deriving instance TermConstraint Eq n c l 'Typed => Eq (Value n c l 'Typed)
-deriving instance TermConstraint Ord n c l 'Typed => Ord (Value n c l 'Typed)
+deriving instance ValueConstraint Show n c l 'Typed => Show (Value n c l 'Typed)
+deriving instance ValueConstraint Read n c l 'Typed => Read (Value n c l 'Typed)
+deriving instance ValueConstraint Eq n c l 'Typed => Eq (Value n c l 'Typed)
+deriving instance ValueConstraint Ord n c l 'Typed => Ord (Value n c l 'Typed)
 
 data Value' n c l t
   = Variable (ReferenceIdentifier n)
@@ -236,9 +236,6 @@ type Value'Constraint cls n c l t =
 deriving instance Value'Constraint Show n c l t => Show (Value' n c l t)
 deriving instance Value'Constraint Eq n c l t => Eq (Value' n c l t)
 deriving instance Value'Constraint Ord n c l t => Ord (Value' n c l t)
--- deriving instance (Show (Application n c l t), Show (Literal n c l t), Show (ProcedureStep n c l t), Show (TypeAnnotation n c l t), Show (ValueBind n c l t), Show (Value n c l t), Show (FunctionType n c), Show (BindIdentifier n), Show (ReferenceIdentifier n)) => Show (Value' n c l t)
--- deriving instance (Eq (Application n c l t), Eq (Literal n c l t), Eq (ProcedureStep n c l t), Eq (TypeAnnotation n c l t), Eq (ValueBind n c l t), Eq (Value n c l t), Eq (FunctionType n c), Eq (BindIdentifier n), Eq (ReferenceIdentifier n)) => Eq (Value' n c l t)
--- deriving instance (Ord (Application n c l t), Ord (Literal n c l t), Ord (ProcedureStep n c l t), Ord (TypeAnnotation n c l t), Ord (ValueBind n c l t), Ord (Value n c l t), Ord (FunctionType n c), Ord (BindIdentifier n), Ord (ReferenceIdentifier n)) => Ord (Value' n c l t)
 
 type TypeAnnotation :: NameResolving -> Currying -> LambdaLifting -> Typing -> K.Type
 data family TypeAnnotation
@@ -267,16 +264,6 @@ deriving instance TypeAnnotationConstraint Show n c l 'Typed => Show (TypeAnnota
 deriving instance TypeAnnotationConstraint Eq n c l 'Typed => Eq (TypeAnnotation n c l 'Typed)
 deriving instance TypeAnnotationConstraint Ord n c l 'Typed => Ord (TypeAnnotation n c l 'Typed)
 
--- deriving instance (Show (FunctionType n c), Show (Value n c l 'Untyped), Show (ReferenceIdentifier n)) => Show (TypeAnnotation n c l 'Untyped)
--- deriving instance (Read (FunctionType n c), Read (Value n c l 'Untyped), Read (ReferenceIdentifier n)) => Read (TypeAnnotation n c l 'Untyped)
--- deriving instance (Eq (FunctionType n c), Eq (Value n c l 'Untyped), Eq (ReferenceIdentifier n)) => Eq (TypeAnnotation n c l 'Untyped)
--- deriving instance (Ord (FunctionType n c), Ord (Value n c l 'Untyped), Ord (ReferenceIdentifier n)) => Ord (TypeAnnotation n c l 'Untyped)
-
--- deriving instance (Show (FunctionType n c), Show (Value n c l 'Untyped)) => Show (TypeAnnotation n c l 'Typed)
--- deriving instance (Read (FunctionType n c), Read (Value n c l 'Untyped)) => Read (TypeAnnotation n c l 'Typed)
--- deriving instance (Eq (FunctionType n c), Eq (Value n c l 'Untyped)) => Eq (TypeAnnotation n c l 'Typed)
--- deriving instance (Ord (FunctionType n c), Ord (Value n c l 'Untyped)) => Ord (TypeAnnotation n c l 'Typed)
-
 data ProcedureStep n c l t
   = BindProcedure (BindIdentifier n) (Value n c l t)
   | TermProcedure (Value n c l t)
@@ -288,7 +275,6 @@ type ProcedureStepConstraint cls n c l t =
   )
 
 deriving instance ProcedureStepConstraint Show n c l t => Show (ProcedureStep n c l t)
--- deriving instance Read (Value n c l t) => Read (ProcedureStep n c l t)
 deriving instance ProcedureStepConstraint Eq n c l t => Eq (ProcedureStep n c l t)
 deriving instance ProcedureStepConstraint Ord n c l t => Ord (ProcedureStep n c l t)
 
@@ -305,9 +291,6 @@ type LiteralConstraint cls n c l t = cls (Function n c l t)
 deriving instance LiteralConstraint Show n c l t => Show (Literal n c l t)
 deriving instance LiteralConstraint Eq n c l t => Eq (Literal n c l t)
 deriving instance LiteralConstraint Ord n c l t => Ord (Literal n c l t)
--- deriving instance Read (Function n c l t) => Read (Literal n c l t)
--- deriving instance Eq (Function n c l t) => Eq (Literal n c l t)
--- deriving instance Ord (Function n c l t) => Ord (Literal n c l t)
 
 type Application :: NameResolving -> Currying -> LambdaLifting -> Typing -> K.Type
 data family Application
@@ -331,16 +314,6 @@ deriving instance ApplicationConstraint Show n 'Uncurried l t => Show (Applicati
 deriving instance ApplicationConstraint Eq n 'Uncurried l t => Eq (Application n 'Uncurried l t)
 deriving instance ApplicationConstraint Ord n 'Uncurried l t => Ord (Application n 'Uncurried l t)
 
--- deriving instance Show (Value n 'Curried l t) => Show (Application n 'Curried l t)
--- deriving instance Read (Value n 'Curried l t) => Read (Application n 'Curried l t)
--- deriving instance Eq (Value n 'Curried l t) => Eq (Application n 'Curried l t)
--- deriving instance Ord (Value n 'Curried l t) => Ord (Application n 'Curried l t)
-
--- deriving instance Show (Value n 'Uncurried l t) => Show (Application n 'Uncurried l t)
--- deriving instance Read (Value n 'Uncurried l t) => Read (Application n 'Uncurried l t)
--- deriving instance Eq (Value n 'Uncurried l t) => Eq (Application n 'Uncurried l t)
--- deriving instance Ord (Value n 'Uncurried l t) => Ord (Application n 'Uncurried l t)
-
 type Function :: NameResolving -> Currying -> LambdaLifting -> Typing -> K.Type
 data family Function
 
@@ -351,6 +324,8 @@ data instance Function n 'Curried 'LambdaUnlifted t =
 data instance Function n 'Uncurried 'LambdaUnlifted t =
   FunctionN [(BindIdentifier n, Type n 'Uncurried)] (Value n 'Uncurried 'LambdaUnlifted t)
   deriving Generic
+
+data instance Function n c 'LambdaLifted t deriving (Show, Read, Eq, Ord, Generic)
 
 type FunctionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Constraint
 type FunctionConstraint cls n c l t =
@@ -366,18 +341,6 @@ deriving instance FunctionConstraint Ord n 'Curried 'LambdaUnlifted t => Ord (Fu
 deriving instance FunctionConstraint Show n 'Uncurried 'LambdaUnlifted t => Show (Function n 'Uncurried 'LambdaUnlifted t)
 deriving instance FunctionConstraint Eq n 'Uncurried 'LambdaUnlifted t => Eq (Function n 'Uncurried 'LambdaUnlifted t)
 deriving instance FunctionConstraint Ord n 'Uncurried 'LambdaUnlifted t => Ord (Function n 'Uncurried 'LambdaUnlifted t)
-
--- deriving instance (Show (Value n 'Curried 'LambdaUnlifted t), Show (BindIdentifier n), Show (ReferenceIdentifier n)) => Show (Function n 'Curried 'LambdaUnlifted t)
--- deriving instance (Read (Value n 'Curried 'LambdaUnlifted t), Read (BindIdentifier n), Read (ReferenceIdentifier n)) => Read (Function n 'Curried 'LambdaUnlifted t)
--- deriving instance (Eq (Value n 'Curried 'LambdaUnlifted t), Eq (BindIdentifier n), Eq (ReferenceIdentifier n)) => Eq (Function n 'Curried 'LambdaUnlifted t)
--- deriving instance (Ord (Value n 'Curried 'LambdaUnlifted t), Ord (BindIdentifier n), Ord (ReferenceIdentifier n)) => Ord (Function n 'Curried 'LambdaUnlifted t)
-
--- deriving instance (Show (Value n 'Uncurried 'LambdaUnlifted t), Show (BindIdentifier n), Show (ReferenceIdentifier n)) => Show (Function n 'Uncurried 'LambdaUnlifted t)
--- deriving instance (Read (Value n 'Uncurried 'LambdaUnlifted t), Read (BindIdentifier n), Read (ReferenceIdentifier n)) => Read (Function n 'Uncurried 'LambdaUnlifted t)
--- deriving instance (Eq (Value n 'Uncurried 'LambdaUnlifted t), Eq (BindIdentifier n), Eq (ReferenceIdentifier n)) => Eq (Function n 'Uncurried 'LambdaUnlifted t)
--- deriving instance (Ord (Value n 'Uncurried 'LambdaUnlifted t), Ord (BindIdentifier n), Ord (ReferenceIdentifier n)) => Ord (Function n 'Uncurried 'LambdaUnlifted t)
-
-data instance Function n c 'LambdaLifted t deriving Show
 
 data Identifier
   = UserIdentifier Text
@@ -408,8 +371,8 @@ instance IsList QualifiedIdentifier where
     in GlobalIdentifier n i
 
   toList (GlobalIdentifier (ModuleName n) (UserIdentifier t)) = N.toList n ++ [t]
-  toList (LocalIdentifier (UserIdentifier t)) = [t]
-  toList _ = error "system identifiers are not acceptable"
+  toList (LocalIdentifier (UserIdentifier t))                 = [t]
+  toList _                                                    = error "system identifiers are not acceptable"
 
 data EitherIdentifier
   = UnqualifiedIdentifier Identifier
@@ -423,13 +386,13 @@ instance IsString EitherIdentifier where
 instance IsList EitherIdentifier where
   type Item EitherIdentifier = Text
 
-  fromList [] = error "more than 1 items necessary"
+  fromList []  = error "more than 1 items necessary"
   fromList [t] = UnqualifiedIdentifier $ UserIdentifier t
-  fromList ts = QualifiedIdentifier $ E.fromList ts
+  fromList ts  = QualifiedIdentifier $ E.fromList ts
 
-  toList (QualifiedIdentifier i) = E.toList i
+  toList (QualifiedIdentifier i)                    = E.toList i
   toList (UnqualifiedIdentifier (UserIdentifier t)) = [t]
-  toList _ = error "system identifiers are not acceptable"
+  toList _                                          = error "system identifiers are not acceptable"
 
 type BindIdentifier :: NameResolving -> K.Type
 type family BindIdentifier n

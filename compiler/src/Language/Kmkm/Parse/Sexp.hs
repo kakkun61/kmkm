@@ -54,6 +54,7 @@ import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 import qualified Text.PrettyPrint           as R
+import Data.Maybe (fromMaybe)
 
 type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
@@ -111,7 +112,7 @@ list1 p =
   M.label "list1" $
     P.parens $ do
       void $ P.textSymbol "list"
-      N.fromList <$> P.some p -- never empty list.
+      fromMaybe X.unreachable . N.nonEmpty <$> P.some p
 
 definition :: Parser Definition
 definition =

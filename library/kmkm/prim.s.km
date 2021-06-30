@@ -5,4 +5,8 @@
     (bind-type-foreign
       int
       (list)
-      "typedef int kmkm_prim_int;")))
+      "typedef int kmkm_prim_int;")
+    (bind-type-foreign
+      uint
+      (list)
+      "typedef unsigned int kmkm_prim_uint;")))

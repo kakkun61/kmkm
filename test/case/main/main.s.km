@@ -1,9 +1,10 @@
 (module
   main
-  (list)
+  (list
+    kmkm.prim)
   (list
     (bind-value
       main
       (procedure
         (list
-          (term 0))))))
+          (term 1))))))

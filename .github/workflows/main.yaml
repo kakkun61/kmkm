@@ -9,19 +9,8 @@ jobs:
     strategy:
       matrix:
         ghc: ['8.10']
-        test: [doctest, spec, batch]
-        continue-on-error: [false]
-        # include:
-        #   - ghc: latest
-        #     test: doctest
-        #     continue-on-error: true
-        #   - ghc: latest
-        #     test: spec
-        #     continue-on-error: true
 
-    runs-on: ubuntu-latest
-
-    continue-on-error: ${{ matrix.continue-on-error }}
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v2
@@ -30,12 +19,31 @@ jobs:
           ghc-version: ${{ matrix.ghc }}
       - uses: actions/cache@v2
         with:
-          path: $HOME/.cabal/packages
-          key: packages-${{ runner.os }}-${{ matrix.ghc }}
+          path: |
+            $HOME/.cabal/packages
+            $HOME/.cabal/store
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}
+      - run: make test
+
+  compiler:
+    strategy:
+      matrix:
+        ghc: ['8.10']
+        test: [doctest, spec]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: haskell/actions/setup@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
       - uses: actions/cache@v2
         with:
-          path: $HOME/.cabal/store
-          key: store-${{ runner.os }}-${{ matrix.ghc }}
+          path: |
+            $HOME/.cabal/packages
+            $HOME/.cabal/store
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}
       - run: '"package kmkm`n  tests: true`n  ghc-options: -Werror -fno-ignore-asserts`n  test-show-details: direct`n" | Out-File cabal.project.local'
         shell: pwsh
         working-directory: compiler

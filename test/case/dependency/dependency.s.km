@@ -1,0 +1,20 @@
+(module
+  dependency
+  (list
+    kmkm.prim)
+  (list
+    (bind-value
+      a
+      (type (apply (function x kmkm.prim.int dependency.b) dependency.c) kmkm.prim.int))
+    (bind-value
+      b
+      (type dependency.d kmkm.prim.int))
+    (bind-value
+      c
+      (apply (function x kmkm.prim.int dependency.d) dependency.e))
+    (bind-value
+      d
+      (type dependency.b kmkm.prim.int))
+    (bind-value
+      e
+      1)))

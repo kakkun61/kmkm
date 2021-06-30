@@ -43,79 +43,91 @@ type Function n = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped
 
 type Type n = S.Type n 'S.Curried
 
-nameResolve :: MonadThrow m => Map S.ModuleName (Set S.Identifier) -> Module 'S.NameUnresolved -> m (Module 'S.NameResolved)
-nameResolve identifiers (S.Module moduleName ms ds) = do
+nameResolve :: MonadThrow m => Map S.ModuleName (Set S.Identifier) -> Map S.ModuleName (Set S.Identifier) -> Module 'S.NameUnresolved -> m (Module 'S.NameResolved)
+nameResolve valueIdentifiers typeIdentifiers (S.Module moduleName ms ds) = do
   let
-    identifiers' = M.insert moduleName (S.fromList $ mapMaybe boundIdentifier ds) identifiers
-    affiliations = importedAffiliations identifiers' $ S.fromList ms
-  S.Module moduleName ms <$> sequence (definition affiliations moduleName <$> ds)
+    valueIdentifiers' = M.insert moduleName (S.fromList $ mapMaybe boundValueIdentifier ds) valueIdentifiers
+    valueAffiliations = importedAffiliations valueIdentifiers' $ S.fromList ms
+    typeIdentifiers' = M.insert moduleName (S.fromList $ mapMaybe boundTypeIdentifier ds) typeIdentifiers
+    typeAffiliations = importedAffiliations typeIdentifiers' $ S.fromList ms
+  S.Module moduleName ms <$> sequence (definition valueAffiliations typeAffiliations moduleName <$> ds)
 
-definition :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Definition 'S.NameUnresolved -> m (Definition 'S.NameResolved)
-definition affiliations moduleName (S.ValueBind b) = S.ValueBind <$> valueBind affiliations moduleName b
-definition affiliations moduleName (S.TypeBind i t) = S.TypeBind (S.GlobalIdentifier moduleName i) <$> typ affiliations moduleName t
-definition _ moduleName (S.ForeignTypeBind i hs c) = pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName i) hs c
-definition affiliations moduleName (S.DataDefinition i cs) =
+definition :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Definition 'S.NameUnresolved -> m (Definition 'S.NameResolved)
+definition valueAffiliations typeAffiliations moduleName (S.ValueBind b) = S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName b
+definition _ typeAffiliations moduleName (S.TypeBind i t) = S.TypeBind (S.GlobalIdentifier moduleName i) <$> typ typeAffiliations moduleName t
+definition _ _ moduleName (S.ForeignTypeBind i hs c) = pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName i) hs c
+definition _ typeAffiliations moduleName (S.DataDefinition i cs) =
   S.DataDefinition (S.GlobalIdentifier moduleName i) <$> sequence (constructor <$> cs)
   where
     constructor (i, fs) = (S.GlobalIdentifier moduleName i,) <$> sequence (field <$> fs)
-    field (i, t) = (S.GlobalIdentifier moduleName i,) <$> typ affiliations moduleName t
-definition affiliations moduleName (S.ForeignValueBind i hs c t) = S.ForeignValueBind (S.GlobalIdentifier moduleName i) hs c <$> typ affiliations moduleName t
+    field (i, t) = (S.GlobalIdentifier moduleName i,) <$> typ typeAffiliations moduleName t
+definition _ typeAffiliations moduleName (S.ForeignValueBind i hs c t) = S.ForeignValueBind (S.GlobalIdentifier moduleName i) hs c <$> typ typeAffiliations moduleName t
 
-valueBind :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> ValueBind 'S.NameUnresolved -> m (ValueBind 'S.NameResolved)
-valueBind affiliations moduleName (S.ValueBindU i v) = S.ValueBindU (S.GlobalIdentifier moduleName i) <$> value affiliations moduleName v
+valueBind :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> ValueBind 'S.NameUnresolved -> m (ValueBind 'S.NameResolved)
+valueBind valueAffiliations typeAffiliations moduleName (S.ValueBindU i v) = S.ValueBindU (S.GlobalIdentifier moduleName i) <$> value valueAffiliations typeAffiliations moduleName v
 
-value :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Value 'S.NameUnresolved -> m (Value 'S.NameResolved)
-value affiliations moduleName (S.UntypedValue v) = S.UntypedValue <$> value' affiliations moduleName v
+value :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Value 'S.NameUnresolved -> m (Value 'S.NameResolved)
+value valueAffiliations typeAffiliations moduleName (S.UntypedValue v) = S.UntypedValue <$> value' valueAffiliations typeAffiliations moduleName v
 
-value' :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Value' 'S.NameUnresolved -> m (Value' 'S.NameResolved)
-value' affiliations moduleName (S.Variable i) = S.Variable <$> referenceIdentifier affiliations moduleName i
-value' affiliations moduleName (S.Procedure ss) = S.Procedure <$> sequence (procedureStep affiliations moduleName <$> ss)
-value' affiliations moduleName (S.Literal l) = S.Literal <$> literal affiliations moduleName l
-value' affiliations moduleName (S.TypeAnnotation a) = S.TypeAnnotation <$> typeAnnotation affiliations moduleName a
-value' affiliations moduleName (S.Application a) = S.Application <$> application affiliations moduleName a
-value' affiliations moduleName (S.Let ds v) = S.Let <$> sequence (definition affiliations moduleName <$> ds) <*> value affiliations moduleName v
+value' :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Value' 'S.NameUnresolved -> m (Value' 'S.NameResolved)
+value' valueAffiliations _ moduleName (S.Variable i) = S.Variable <$> referenceIdentifier valueAffiliations moduleName i
+value' valueAffiliations typeAffiliations moduleName (S.Procedure ss) = S.Procedure <$> sequence (procedureStep valueAffiliations typeAffiliations moduleName <$> ss)
+value' valueAffiliations typeAffiliations moduleName (S.Literal l) = S.Literal <$> literal valueAffiliations typeAffiliations moduleName l
+value' valueAffiliations typeAffiliations moduleName (S.TypeAnnotation a) = S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
+value' valueAffiliations typeAffiliations moduleName (S.Application a) = S.Application <$> application valueAffiliations typeAffiliations moduleName a
+value' valueAffiliations typeAffiliations moduleName (S.Let ds v) = S.Let <$> sequence (definition valueAffiliations typeAffiliations moduleName <$> ds) <*> value valueAffiliations typeAffiliations moduleName v
 
-procedureStep :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> ProcedureStep 'S.NameUnresolved -> m (ProcedureStep 'S.NameResolved)
-procedureStep affiliations moduleName (S.TermProcedure v) = S.TermProcedure <$> value affiliations moduleName v
-procedureStep affiliations moduleName (S.BindProcedure i v) = S.BindProcedure (S.GlobalIdentifier moduleName i) <$> value affiliations moduleName v
+procedureStep :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> ProcedureStep 'S.NameUnresolved -> m (ProcedureStep 'S.NameResolved)
+procedureStep valueAffiliations typeAffiliations moduleName (S.TermProcedure v) = S.TermProcedure <$> value valueAffiliations typeAffiliations moduleName v
+procedureStep valueAffiliations typeAffiliations moduleName (S.BindProcedure i v) = S.BindProcedure (S.GlobalIdentifier moduleName i) <$> value valueAffiliations typeAffiliations moduleName v
 
-literal :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Literal 'S.NameUnresolved -> m (Literal 'S.NameResolved)
-literal _ _ (S.Integer v b)                    = pure $ S.Integer v b
-literal _ _ (S.Fraction f s e b)               = pure $ S.Fraction f s e b
-literal _ _ (S.String s)                       = pure $ S.String s
-literal affiliations moduleName (S.Function f) = S.Function <$> function affiliations moduleName f
+literal :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Literal 'S.NameUnresolved -> m (Literal 'S.NameResolved)
+literal _ _ _ (S.Integer v b)                    = pure $ S.Integer v b
+literal _ _ _ (S.Fraction f s e b)               = pure $ S.Fraction f s e b
+literal _ _ _ (S.String s)                       = pure $ S.String s
+literal valueAffiliations typeAffiliations moduleName (S.Function f) = S.Function <$> function valueAffiliations typeAffiliations moduleName f
 
-typeAnnotation :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> TypeAnnotation 'S.NameUnresolved -> m (TypeAnnotation 'S.NameResolved)
-typeAnnotation affiliations moduleName (S.TypeAnnotation' v t) = S.TypeAnnotation' <$> value affiliations moduleName v <*> typ affiliations moduleName t
+typeAnnotation :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> TypeAnnotation 'S.NameUnresolved -> m (TypeAnnotation 'S.NameResolved)
+typeAnnotation valueAffiliations typeAffiliations moduleName (S.TypeAnnotation' v t) = S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ valueAffiliations moduleName t
 
-application :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Application 'S.NameUnresolved -> m (Application 'S.NameResolved)
-application affiliations moduleName (S.ApplicationC v1 v2) = S.ApplicationC <$> value affiliations moduleName v1 <*> value affiliations moduleName v2
+application :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Application 'S.NameUnresolved -> m (Application 'S.NameResolved)
+application valueAffiliations typeAffiliations moduleName (S.ApplicationC v1 v2) = S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
 
-function :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Function 'S.NameUnresolved -> m (Function 'S.NameResolved)
-function affiliations moduleName (S.FunctionC i t v) = S.FunctionC (S.LocalIdentifier i) <$> typ affiliations moduleName t <*> value affiliations moduleName v
+function :: MonadThrow m => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Function 'S.NameUnresolved -> m (Function 'S.NameResolved)
+function valueAffiliations typeAffiliations moduleName (S.FunctionC i t v) = S.FunctionC (S.LocalIdentifier i) <$> typ valueAffiliations moduleName t <*> value valueAffiliations typeAffiliations moduleName v
 
 typ :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> Type 'S.NameUnresolved -> m (Type 'S.NameResolved)
-typ affiliations moduleName (S.TypeVariable i)  = S.TypeVariable <$> referenceIdentifier affiliations moduleName i
-typ affiliations moduleName (S.ProcedureType t) = S.ProcedureType <$> typ affiliations moduleName t
+typ typeAffiliations moduleName (S.TypeVariable i)  = S.TypeVariable <$> referenceIdentifier typeAffiliations moduleName i
+typ typeAffiliations moduleName (S.ProcedureType t) = S.ProcedureType <$> typ typeAffiliations moduleName t
 typ _ _ v                                       = error $ show v
 
 referenceIdentifier :: MonadThrow m => Map S.Identifier Affiliation -> S.ModuleName -> S.ReferenceIdentifier 'S.NameUnresolved -> m (S.ReferenceIdentifier 'S.NameResolved)
-referenceIdentifier affiliations _ i@(S.UnqualifiedIdentifier i') =
-  case M.lookup i' affiliations of
+referenceIdentifier valueAffiliations _ i@(S.UnqualifiedIdentifier i') =
+  case M.lookup i' valueAffiliations of
     Just (Global n) -> pure $ S.GlobalIdentifier n i'
     Just Local      -> pure $ S.LocalIdentifier i'
-    Nothing         -> throwM $ UnknownException i
+    Nothing         -> throwM $ UnknownIdentifierException i
+referenceIdentifier valueAffiliations _ i@(S.QualifiedIdentifier i'@(S.GlobalIdentifier n i'')) =
+  case M.lookup i'' valueAffiliations of
+    Just (Global n') | n == n' -> pure i'
+    _ -> throwM $ UnknownIdentifierException i
 referenceIdentifier _ _ (S.QualifiedIdentifier i) = pure i
 
-boundIdentifiers :: Functor f => f (Module 'S.NameUnresolved) -> f (Set S.Identifier)
+boundIdentifiers :: Functor f => f (Module 'S.NameUnresolved) -> (f (Set S.Identifier), f (Set S.Identifier))
 boundIdentifiers modules =
-  eachModule <$> modules
+  (eachModule boundValueIdentifier <$> modules, eachModule boundTypeIdentifier <$> modules)
   where
-    eachModule (S.Module _ _ ds) = S.fromList $ mapMaybe boundIdentifier ds
+    eachModule f (S.Module _ _ ds) = S.fromList $ mapMaybe f ds
 
-boundIdentifier :: Definition 'S.NameUnresolved -> Maybe S.Identifier
-boundIdentifier (S.ValueBind (S.ValueBindU i _)) = Just i
-boundIdentifier _                                = Nothing
+boundValueIdentifier :: Definition 'S.NameUnresolved -> Maybe S.Identifier
+boundValueIdentifier (S.ValueBind (S.ValueBindU i _)) = Just i
+boundValueIdentifier (S.ForeignValueBind i _ _ _) = Just i
+boundValueIdentifier _                                = Nothing
+
+boundTypeIdentifier :: Definition 'S.NameUnresolved -> Maybe S.Identifier
+boundTypeIdentifier (S.TypeBind i _) = Just i
+boundTypeIdentifier (S.ForeignTypeBind i _ _) = Just i
+boundTypeIdentifier _                                = Nothing
 
 importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =
@@ -127,7 +139,7 @@ data Affiliation
   deriving (Show, Read, Eq, Ord, Generic)
 
 newtype Exception
-  = UnknownException S.EitherIdentifier
+  = UnknownIdentifierException S.EitherIdentifier
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where
