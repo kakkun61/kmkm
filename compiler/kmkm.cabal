@@ -108,7 +108,7 @@ test-suite spec
                  Language.Kmkm.Build.TypeCheckSpec
                  Language.Kmkm.Parse.SexpSpec
   build-depends: kmkm == 0.1.0.0,
-                 data-default-class,
+                 containers,
                  megaparsec,
                  hspec
   ghc-options: -threaded
