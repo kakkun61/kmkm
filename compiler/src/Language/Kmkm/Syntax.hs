@@ -136,6 +136,7 @@ data instance ValueBind n c 'LambdaUnlifted t f =
 data instance ValueBind n c 'LambdaLifted t f
   = ValueBindV (f (BindIdentifier n)) (f (Value n c 'LambdaLifted t f))
   | ValueBindN (f (BindIdentifier n)) [(f (BindIdentifier n), f (Type n c f))] (f (Value n c 'LambdaLifted t f))
+  deriving Generic
 
 type ValueBindLambdaUnliftedConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> K.Type) -> K.Constraint
 type ValueBindLambdaUnliftedConstraint cls n c l t f =
@@ -293,8 +294,10 @@ data family TypeAnnotation
 
 data instance TypeAnnotation n c l 'Untyped f =
   TypeAnnotation' (f (Value n c l 'Untyped f)) (f (Type n c f))
+  deriving Generic
 
 data instance TypeAnnotation n c l 'Typed f
+  deriving Generic
 
 type TypeAnnotationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> K.Type) -> K.Constraint
 type TypeAnnotationConstraint cls n c l t f =
