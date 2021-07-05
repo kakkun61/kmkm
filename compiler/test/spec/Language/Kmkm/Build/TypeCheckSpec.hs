@@ -16,12 +16,12 @@ spec = do
         it "10" $ do
           typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedTerm (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])]
+              Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedValue (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])]
 
         it "0x10" $ do
           typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedTerm (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])]
+              Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedValue (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])]
 
     describe "application" $ do
       describe "succ" $ do
@@ -57,17 +57,17 @@ spec = do
                 []
                 [ ValueBind $
                     ValueBindU ["spec", "succ"] $
-                      TypedTerm
+                      TypedValue
                         ( Literal $
                             Function $
                               FunctionC
                                 "a"
                                 (TypeVariable ["kmkm", "prim", "int"])
-                                $ TypedTerm
+                                $ TypedValue
                                     (Application $
                                       ApplicationC
-                                        (TypedTerm (Variable ["spec", "succ"]) (FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) (TypeVariable ["kmkm", "prim", "int"])))
-                                        (TypedTerm (Variable "a") (TypeVariable ["kmkm", "prim", "int"]))
+                                        (TypedValue (Variable ["spec", "succ"]) (FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) (TypeVariable ["kmkm", "prim", "int"])))
+                                        (TypedValue (Variable "a") (TypeVariable ["kmkm", "prim", "int"]))
                                     )
                                     $ TypeVariable ["kmkm", "prim", "int"]
                         )

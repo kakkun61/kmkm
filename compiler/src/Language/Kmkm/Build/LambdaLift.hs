@@ -13,75 +13,81 @@ import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
 import qualified Data.List.NonEmpty         as N
 
-type Module l = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed
+type Module l f = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
-type Definition l = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed
+type Definition l f = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
-type Value l = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed
+type Value l f = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
-type Value' l = S.Value' 'S.NameResolved 'S.Uncurried l 'S.Typed
+type Value' l f = S.Value' 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
-type ProcedureStep l = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed
+type ProcedureStep l f = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
-type Literal l = S.Literal 'S.NameResolved 'S.Uncurried l 'S.Typed
+type Literal l f = S.Literal 'S.NameResolved 'S.Uncurried l 'S.Typed f
 
 type Pass = State Word
 
-lambdaLift :: Module 'S.LambdaUnlifted -> Module 'S.LambdaLifted
+lambdaLift :: S.HasPosition f => S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f -> S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed f
 lambdaLift = flip evalState 0 . module'
 
-module' :: Module 'S.LambdaUnlifted -> Pass (Module 'S.LambdaLifted)
-module' (S.Module mn ms ds) = S.Module mn ms <$> sequence (definition <$> ds)
+module' :: S.HasPosition f => Module 'S.LambdaUnlifted f -> Pass (Module 'S.LambdaLifted f)
+module' (S.Module mn ms ds) = do
+  ds' <- sequence $ traverse definition <$> ds
+  pure $ S.Module mn ms ds'
 
-definition :: Definition 'S.LambdaUnlifted -> Pass (Definition 'S.LambdaLifted)
+definition :: S.HasPosition f => Definition 'S.LambdaUnlifted f -> Pass (Definition 'S.LambdaLifted f)
 definition (S.DataDefinition i cs) = pure $ S.DataDefinition i cs
 definition (S.TypeBind i t) = pure $ S.TypeBind i t
 definition (S.ForeignTypeBind i hs c) = pure $ S.ForeignTypeBind i hs c
-definition (S.ValueBind (S.ValueBindU i (S.TypedTerm (S.Literal (S.Function (S.FunctionN is v))) _))) =
-  scope $ do
-    (v'@(S.TypedTerm _ t), ds) <- term v
-    pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedTerm (S.Let ds v') t
 definition (S.ValueBind (S.ValueBindU i v)) =
-  scope $ do
-    (v'@(S.TypedTerm _ t), ds) <- term v
-    pure $ S.ValueBind $ S.ValueBindV i $ S.TypedTerm (S.Let ds v') t
+  scope $
+    case S.item v of
+      S.TypedValue v1 _
+        | S.Literal (S.Function (S.FunctionN is v2)) <- S.item v1 -> do
+            (v'@(S.TypedValue _ t), ds) <- term $ S.item v2
+            pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedValue (S.Let ds (v' <$ v2) <$ v1) t <$ v
+      _ -> do
+        (v'@(S.TypedValue _ t), ds) <- term $ S.item v
+        pure $ S.ValueBind $ S.ValueBindV i $ S.TypedValue (S.Let ds (v' <$ v) <$ v) t <$ v
 definition (S.ForeignValueBind i hs c t) = pure $ S.ForeignValueBind i hs c t
 
-term :: Value 'S.LambdaUnlifted -> Pass (Value 'S.LambdaLifted, [Definition 'S.LambdaLifted])
-term (S.TypedTerm (S.Variable i) t) = pure (S.TypedTerm (S.Variable i) t, [])
-term (S.TypedTerm (S.Literal l) t) = do
-  (l, ds) <- literal l
-  pure (S.TypedTerm l t, ds)
-term (S.TypedTerm (S.Application (S.ApplicationN v vs)) t) = do
-  (v', ds) <- term v
-  (vs', dss) <- unzip <$> sequence (term <$> vs)
-  pure (S.TypedTerm (S.Application (S.ApplicationN v' vs')) t, mconcat $ ds : dss)
-term (S.TypedTerm (S.Procedure ps) t) = do
-  (ps', dss) <- N.unzip <$> sequence (procedureStep <$> ps)
-  pure (S.TypedTerm (S.Procedure ps') t, mconcat $ N.toList dss)
-term (S.TypedTerm S.TypeAnnotation {} _) = unreachable
-term (S.TypedTerm (S.Let ds v) t) = do
-  ds' <- sequence (definition <$> ds)
-  (v', vds) <- term v
-  pure (S.TypedTerm (S.Let ds' v') t, vds)
+term :: S.HasPosition f => Value 'S.LambdaUnlifted f -> Pass (Value 'S.LambdaLifted f, [f (Definition 'S.LambdaLifted f)])
+term (S.TypedValue v t) =
+  case S.item v of
+    S.Variable i -> pure (S.TypedValue (S.Variable i <$ v) t, [])
+    S.Literal l -> do
+      (l', ds) <- literal l
+      pure (S.TypedValue (l' <$ v) t, ds)
+    S.Application (S.ApplicationN v1 vs) -> do
+      (v1', ds) <- term $ S.item v1
+      (vs', dss) <- unzip <$> sequence (term . S.item <$> vs)
+      pure (S.TypedValue (S.Application (S.ApplicationN (v1' <$ v1) $ zipWith (<$) vs' vs) <$ v) t, mconcat $ ds : dss)
+    S.Procedure ps -> do
+      (ps', dss) <- N.unzip <$> sequence (procedureStep . S.item <$> ps)
+      pure (S.TypedValue (S.Procedure (N.zipWith (<$) ps' ps) <$ v) t, mconcat $ N.toList dss)
+    S.TypeAnnotation {} -> unreachable
+    S.Let ds v1 -> do
+      ds' <- sequence (traverse definition <$> ds)
+      (v1', vds) <- term $ S.item v1
+      pure (S.TypedValue (S.Let ds' (v1' <$ v1) <$ v) t, vds)
 
-procedureStep :: ProcedureStep 'S.LambdaUnlifted -> Pass (ProcedureStep 'S.LambdaLifted, [Definition 'S.LambdaLifted])
+procedureStep :: S.HasPosition f => ProcedureStep 'S.LambdaUnlifted f -> Pass (ProcedureStep 'S.LambdaLifted f, [f (Definition 'S.LambdaLifted f)])
 procedureStep (S.BindProcedure i v) = do
-  (v', ds) <- term v
-  pure (S.BindProcedure i v', ds)
+  (v', ds) <- term $ S.item v
+  pure (S.BindProcedure i $ v' <$ v, ds)
 procedureStep (S.TermProcedure v) = do
-  (v', ds) <- term v
-  pure (S.TermProcedure v', ds)
+  (v', ds) <- term $ S.item v
+  pure (S.TermProcedure $ v' <$ v, ds)
 
-literal :: Literal 'S.LambdaUnlifted -> Pass (Value' 'S.LambdaLifted, [Definition 'S.LambdaLifted])
+literal :: S.HasPosition f => Literal 'S.LambdaUnlifted f -> Pass (Value' 'S.LambdaLifted f, [f (Definition 'S.LambdaLifted f)])
 literal (S.Integer v b) = pure (S.Literal $ S.Integer v b, [])
 literal (S.Fraction s f e b) = pure (S.Literal $ S.Fraction s f e b, [])
 literal (S.String t) = pure (S.Literal $ S.String t, [])
 literal (S.Function (S.FunctionN is v)) = do
   i <- newIdentifier
-  (v', ds) <- term v
-  let m = S.ValueBind (S.ValueBindN i is v')
-  pure (S.Variable i, ds ++ [m])
+  (v', ds) <- term $ S.item v
+  let m = S.ValueBind (S.ValueBindN (i <$ v) is $ v' <$ v) -- i <$ ? は literal 全体がいいかも → 引数も f a
+  pure (S.Variable i, ds ++ [m <$ v])
 
 newIdentifier :: Pass S.QualifiedIdentifier
 newIdentifier = do

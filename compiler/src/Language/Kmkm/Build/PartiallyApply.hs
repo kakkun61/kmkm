@@ -3,7 +3,6 @@
 -- | “Partial application” pass.
 module Language.Kmkm.Build.PartiallyApply
   ( partiallyApply
-  , Module
   ) where
 
 import           Language.Kmkm.Exception (unreachable)
@@ -13,56 +12,64 @@ import           Control.Monad              (replicateM)
 import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
 
-type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed
+type Module f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f
 
-type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed
+type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f
 
-type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed
+type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f
 
-type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed
+type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f
 
 type Pass = State Word
 
-partiallyApply :: Module -> Module
-partiallyApply = flip evalState 0 . module'
+partiallyApply :: S.HasPosition f => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed f)
+partiallyApply = fmap $ flip evalState 0 . module'
 
-module' :: Module -> Pass Module
-module' (S.Module mn ds ms) = S.Module mn ds <$> sequence (definition mn <$> ms)
+module' :: S.HasPosition f => Module f -> Pass (Module f)
+module' (S.Module mn ms ds) = do
+  ds' <- sequence $ traverse definition <$> ds
+  pure $ S.Module mn ms ds'
 
-definition :: S.ModuleName -> Definition -> Pass Definition
-definition mn (S.ValueBind (S.ValueBindU i v)) =
+definition :: S.HasPosition f => Definition f -> Pass (Definition f)
+definition (S.ValueBind (S.ValueBindU i v)) =
   scope $ do
-    v' <- term mn v
-    pure $ S.ValueBind (S.ValueBindU i v')
-definition _ d = pure d
+    v' <- term $ S.item v
+    pure $ S.ValueBind (S.ValueBindU i $ v' <$ v)
+definition d = pure d
 
-term :: S.ModuleName -> Value -> Pass Value
-term mn (S.TypedTerm (S.Application (S.ApplicationN v@(S.TypedTerm _ (S.FunctionType (S.FunctionTypeN t0s t0))) vs)) t) = do
-  let
-    nApp = length vs
-    nFun = length t0s
-  if nFun < nApp
-    then unreachable
-    else do
-      v' <- term mn v
-      vs' <- sequence $ term mn <$> vs
-      if nApp == nFun
-        then
-          pure $ S.TypedTerm (S.Application (S.ApplicationN v' vs')) t
-        else do -- nApp < nFun
-          let nCls = nFun - nApp
-          is <- replicateM nCls newIdentifier
+term :: S.HasPosition f => Value f -> Pass (Value f)
+term v@(S.TypedValue v1 t) =
+  case S.item v1 of
+    S.Application (S.ApplicationN v2 vs)
+      | S.TypedValue _ t' <- S.item v2
+      , S.FunctionType (S.FunctionTypeN t0s t0) <- S.item t' -> do
           let
-            t0s' = drop nApp t0s
-            vs'' = vs' ++ (S.TypedTerm . S.Variable <$> (S.LocalIdentifier <$> is) <*> t0s')
-          pure $ S.TypedTerm (S.Literal $ S.Function $ S.FunctionN (zip (S.LocalIdentifier <$> is) t0s') (S.TypedTerm (S.Application (S.ApplicationN v' vs'')) t0)) t
-term mn (S.TypedTerm (S.Procedure ps) t) =
-  flip S.TypedTerm t . S.Procedure <$> sequence (procedureStep mn <$> ps)
-term _ v = pure v
+            nApp = length vs
+            nFun = length t0s
+          if nFun < nApp
+            then unreachable
+            else do
+              v2' <- traverse term v2
+              vs' <- sequence $ traverse term <$> vs
+              if nApp == nFun
+                then
+                  pure $ S.TypedValue (S.Application (S.ApplicationN v2' vs') <$ v1) t
+                else do -- nApp < nFun
+                  let nCls = nFun - nApp
+                  is <- replicateM nCls newIdentifier
+                  let
+                    t0s' = drop nApp t0s
+                    vs'' = vs' ++ ((<$ v1) <$> (S.TypedValue <$> ((<$ v1) . S.Variable . S.LocalIdentifier <$> is) <*> t0s'))
+                  pure $
+                    S.TypedValue
+                      (S.Literal (S.Function $ S.FunctionN (zip ((<$ v1) . S.LocalIdentifier <$> is) t0s') (S.TypedValue (S.Application (S.ApplicationN v2' vs'') <$ v1) t0 <$ v1)) <$ v1)
+                      t
+    S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> sequence (traverse procedureStep <$> ps)
+    _ -> pure v
 
-procedureStep :: S.ModuleName -> ProcedureStep -> Pass ProcedureStep
-procedureStep mn (S.BindProcedure i v) = S.BindProcedure i <$> term mn v
-procedureStep mn (S.TermProcedure v)   = S.TermProcedure <$> term mn v
+procedureStep :: S.HasPosition f => ProcedureStep f -> Pass (ProcedureStep f)
+procedureStep (S.BindProcedure i v) = S.BindProcedure i <$> traverse term v
+procedureStep (S.TermProcedure v)   = S.TermProcedure <$> traverse term v
 
 newIdentifier :: Pass S.Identifier
 newIdentifier = do

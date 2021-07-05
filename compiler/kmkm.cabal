@@ -80,6 +80,7 @@ executable kmkm
   hs-source-dirs: app
   main-is: kmkm.hs
   build-depends: kmkm == 0.1.0.0,
+                 ansi-terminal,
                  directory,
                  filepath,
                  optparse-declarative >= 0.4.2,

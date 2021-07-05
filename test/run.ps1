@@ -28,12 +28,18 @@ function Compare-Result {
   )
 
   Write-Host "`t$filePath " -NoNewline
-  if (Compare-Object (Normalize (Get-Content $filePath)) (Normalize (Get-Content "$testOut\$case\$filePath"))) {
-    Write-Host "FAIL" -ForegroundColor Red
-    $fail = $true
+  try {
+    if (Compare-Object (Normalize (Get-Content $filePath)) (Normalize (Get-Content "$testOut\$case\$filePath"))) {
+      Write-Host "FAIL" -ForegroundColor Red
+      $fail = $true
+    }
+    else {
+      Write-Host "OK" -ForegroundColor Green
+    }
   }
-  else {
-    Write-Host "OK" -ForegroundColor Green
+  catch {
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Host $_
   }
 }
 
@@ -41,7 +47,7 @@ function Normalize {
   param (
     [string[]] $lines
   )
-  $lines | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+  $lines | ForEach-Object { if ($_ -ne $null) { $_.Trim() } else { $_ } } | Where-Object { $_ -ne "" }
 }
 
 $cases = Get-ChildItem -Path "$test\case" | ForEach-Object { $_.Name }

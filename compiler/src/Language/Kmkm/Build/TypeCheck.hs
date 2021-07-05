@@ -18,8 +18,6 @@
 -- | \"Type check\" pass.
 module Language.Kmkm.Build.TypeCheck
   ( typeCheck
-  , Module
-  , Type
   , Exception (..)
   ) where
 
@@ -46,140 +44,218 @@ import qualified Data.Set                             as S
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-type Module t = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t
+type Module t f = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t f
 
-type Definition t = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t
+type Definition t f = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t f
 
-type Type = S.Type 'S.NameResolved 'S.Curried
+type Type f = S.Type 'S.NameResolved 'S.Curried f
 
-type Value t = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t
+type Value t f = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t f
 
-type ProcedureStep t = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t
+type Value' t f = S.Value' 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t f
 
-typeCheck :: (MonadThrow m, MonadCatch m) => Map S.QualifiedIdentifier Type -> Module 'S.Untyped -> m (Module 'S.Typed)
-typeCheck ctx (S.Module mn ds ms) = S.Module mn ds <$> definitions ctx ms
+type ProcedureStep t f = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t f
 
-definitions :: (MonadThrow m, MonadCatch m) => Map S.QualifiedIdentifier Type -> [Definition 'S.Untyped] -> m [Definition 'S.Typed]
+typeCheck
+  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (S.Type 'S.NameResolved 'S.Curried f))
+     , Show (f (S.Type 'S.NameResolved 'S.Curried f))
+     , Show (f S.QualifiedIdentifier)
+     )
+  => Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried f))
+  -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped f)
+  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed f))
+typeCheck = traverse . typeCheck'
+
+typeCheck'
+  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (Type f))
+     , Show (f (Type f))
+     , Show (f S.QualifiedIdentifier)
+     )
+  => Map S.QualifiedIdentifier (f (Type f))
+  -> Module 'S.Untyped f
+  -> m (Module 'S.Typed f)
+typeCheck' ctx (S.Module mn ms ds) = do
+  ds' <- definitions ctx $ S.item <$> ds
+  pure $ S.Module mn ms $ zipWith (<$) ds' ds
+
+definitions  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (Type f))
+     , Show (f (Type f))
+     , Show (f S.QualifiedIdentifier)
+     ) => Map S.QualifiedIdentifier (f (Type f)) -> [Definition 'S.Untyped f] -> m [Definition 'S.Typed f]
 definitions context definitions' = do
   let
     valueBinds = M.fromList $ mapMaybe valueBind definitions'
     dependencyGraph = G.overlays $ dependency (M.keysSet valueBinds) <$> definitions'
     sortedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencyGraph
-    context' = M.mapMaybe annotatedType valueBinds `M.union` context
+    context' = M.mapMaybe annotatedType (S.item <$> valueBinds) `M.union` context
   typedValueBinds <- foldr (typeBind context' valueBinds) (pure M.empty) sortedIdentifiers
   pure $ replaceTerm typedValueBinds <$> definitions'
 
-dependency :: Set S.QualifiedIdentifier -> Definition 'S.Untyped -> G.AdjacencyMap S.QualifiedIdentifier
-dependency valueBinds (S.ValueBind (S.ValueBindU i v)) = G.vertex i `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
+dependency :: S.HasPosition f => Set S.QualifiedIdentifier -> Definition 'S.Untyped f -> G.AdjacencyMap S.QualifiedIdentifier
+dependency valueBinds (S.ValueBind (S.ValueBindU i v)) = G.vertex (S.item i) `G.connect` G.overlays (G.vertex <$> dep valueBinds (S.item v))
 dependency _ _                                    = G.empty
 
 typeBind
-  :: (MonadThrow m, MonadCatch m)
-  => Map S.QualifiedIdentifier Type
-  -> Map S.QualifiedIdentifier (Value 'S.Untyped)
+  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (Type f))
+     , Show (f (Type f))
+     , Show (f S.QualifiedIdentifier)
+     )
+  => Map S.QualifiedIdentifier (f (Type f))
+  -> Map S.QualifiedIdentifier (f (Value 'S.Untyped f))
   -> GN.AdjacencyMap S.QualifiedIdentifier
-  -> m (Map S.QualifiedIdentifier (Value 'S.Typed))
-  -> m (Map S.QualifiedIdentifier (Value 'S.Typed))
+  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed f)))
+  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed f)))
 typeBind context valueBinds recursionIdentifiers typedValueBinds =
   catchJust
-    (\e -> case e of { NotFoundException i -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
+    (\e -> case e of { NotFoundException i _ -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
     do
       typedValueBinds' <- typedValueBinds
       let
-        context' = ((\(S.TypedTerm _ t) -> t) <$> typedValueBinds') `M.union` context
+        context' = ((\v -> let S.TypedValue _ t = S.item v in t) <$> typedValueBinds') `M.union` context
         recursionValueBinds = M.filterWithKey (const . flip GN.hasVertex recursionIdentifiers) valueBinds
-      recursionTypedValueBinds <- sequence $ typeOfTerm context' <$> recursionValueBinds
+      recursionTypedValueBinds <- sequence $ traverse (typeOfTerm context') <$> recursionValueBinds
       pure $ recursionTypedValueBinds `M.union` typedValueBinds'
     $ const $ throwM $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
 
-annotatedType :: Value 'S.Untyped -> Maybe Type
-annotatedType (S.UntypedValue (S.TypeAnnotation (S.TypeAnnotation' _ t))) = Just t
+annotatedType :: S.HasPosition f => Value 'S.Untyped f -> Maybe (f (Type f))
+annotatedType (S.UntypedValue v)
+  | S.TypeAnnotation (S.TypeAnnotation' _ t) <- S.item v = Just t
 annotatedType _                                                           = Nothing
 
-replaceTerm :: Map S.QualifiedIdentifier (Value 'S.Typed) -> Definition 'S.Untyped -> Definition 'S.Typed
+replaceTerm :: S.HasPosition f => Map S.QualifiedIdentifier (f (Value 'S.Typed f)) -> Definition 'S.Untyped f -> Definition 'S.Typed f
 replaceTerm _ (S.DataDefinition i cs) = S.DataDefinition i cs
 replaceTerm _ (S.TypeBind i t) = S.TypeBind i t
 replaceTerm _ (S.ForeignTypeBind i hs c) = S.ForeignTypeBind i hs c
 replaceTerm typedValueBinds (S.ValueBind (S.ValueBindU i _)) =
-  S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup i typedValueBinds)
+  S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup (S.item i) typedValueBinds)
 replaceTerm _ (S.ForeignValueBind i hs c t) = S.ForeignValueBind i hs c t
 
-valueBind :: Definition t -> Maybe (S.QualifiedIdentifier, Value t)
-valueBind (S.ValueBind (S.ValueBindU i v)) = Just (i, v)
+valueBind :: S.HasPosition f => Definition t f -> Maybe (S.QualifiedIdentifier, f (Value t f))
+valueBind (S.ValueBind (S.ValueBindU i v)) = Just (S.item i, v)
 valueBind _                                = Nothing
 
-dep :: Set S.QualifiedIdentifier -> Value 'S.Untyped -> [S.QualifiedIdentifier]
-dep identifiers (S.UntypedValue (S.Variable i))
-  | i `S.member` identifiers = [i]
-  | otherwise                = []
-dep identifiers (S.UntypedValue (S.Literal (S.Function (S.FunctionC i _ v)))) = dep (S.delete i identifiers) v
-dep _ (S.UntypedValue (S.Literal _)) = []
-dep identifiers (S.UntypedValue (S.Application (S.ApplicationC v1 v2))) = mconcat $ dep identifiers <$> [v1, v2]
-dep identifiers (S.UntypedValue (S.Procedure ps)) =
-  fst $ foldl' go ([], identifiers) ps
+dep :: S.HasPosition f => Set S.QualifiedIdentifier -> Value 'S.Untyped f -> [S.QualifiedIdentifier]
+dep identifiers =
+  liftValue $ dep' . S.item
   where
-    go (is, ss) (S.BindProcedure i v) = (dep ss v ++ is, S.delete i ss)
-    go (is, ss) (S.TermProcedure v)   = (dep ss v ++ is, ss)
-dep identifiers (S.UntypedValue (S.TypeAnnotation (S.TypeAnnotation' v _))) = dep identifiers v
-dep identifiers (S.UntypedValue (S.Let ds v)) =
-  let
-    valueBinds = M.fromList $ mapMaybe valueBind ds
-    identifiers' = identifiers S.\\ M.keysSet valueBinds
-  in dep identifiers' =<< v : M.elems valueBinds
+    dep' (S.Variable i)
+      | i `S.member` identifiers = [i]
+      | otherwise = []
+    dep' (S.Literal (S.Function (S.FunctionC i _ v'))) = dep (S.delete (S.item i) identifiers) $ S.item v'
+    dep' (S.Literal _) = []
+    dep' (S.Application (S.ApplicationC v1 v2)) = mconcat $ dep identifiers . S.item <$> [v1, v2]
+    dep' (S.Procedure ps) =
+      fst $ foldl' go ([], identifiers) ps
+      where
+        go (is, ss) v =
+          case S.item v of
+            S.BindProcedure i v' -> (dep ss (S.item v') ++ is, S.delete (S.item i) ss)
+            S.TermProcedure v'   -> (dep ss (S.item v') ++ is, ss)
+    dep' (S.TypeAnnotation (S.TypeAnnotation' v' _)) = dep identifiers $ S.item v'
+    dep' (S.Let ds v) =
+      let
+        valueBinds = M.fromList $ mapMaybe (valueBind . S.item) ds
+        identifiers' = identifiers S.\\ M.keysSet valueBinds
+      in dep identifiers' . S.item =<< v : M.elems valueBinds
 
-typeOfTerm :: (MonadThrow m, MonadCatch m) => Map S.QualifiedIdentifier Type -> Value 'S.Untyped -> m (Value 'S.Typed)
-typeOfTerm ctx (S.UntypedValue (S.Variable i)) =
-  case M.lookup i ctx of
-    Nothing -> throwM $ NotFoundException i
-    Just t  -> pure $ S.TypedTerm (S.Variable i) t
-typeOfTerm _ (S.UntypedValue (S.Literal (S.Integer v b))) = pure $ S.TypedTerm (S.Literal (S.Integer v b)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "int"))
-typeOfTerm _ (S.UntypedValue (S.Literal (S.Fraction s d e b))) = pure $ S.TypedTerm (S.Literal (S.Fraction s d e b)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "frac2"))
-typeOfTerm _ (S.UntypedValue (S.Literal (S.String t))) = pure $ S.TypedTerm (S.Literal (S.String t)) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "string"))
-typeOfTerm ctx (S.UntypedValue (S.Literal (S.Function (S.FunctionC i t v)))) = do
-  v'@(S.TypedTerm _ t') <- typeOfTerm (M.insert i t ctx) v
-  pure $ S.TypedTerm (S.Literal (S.Function (S.FunctionC i t v'))) (S.FunctionType $ S.FunctionTypeC t t')
-typeOfTerm ctx (S.UntypedValue (S.Application (S.ApplicationC v0 v1))) = do
-  v0'@(S.TypedTerm _ t0) <- typeOfTerm ctx v0
-  v1'@(S.TypedTerm _ t1) <- typeOfTerm ctx v1
-  case t0 of
-    S.FunctionType (S.FunctionTypeC t00 t01)
-      | t1 == t00 -> pure $ S.TypedTerm (S.Application (S.ApplicationC v0' v1')) t01
-      | otherwise -> throwM $ MismatchException (show t00) $ show t1
-    _ -> throwM $ MismatchException "function" $ show t0
-typeOfTerm ctx (S.UntypedValue (S.Procedure (p:|ps))) = do
-  (ctx', p') <- typeOfProcedure ctx p
-  (_, ps') <- foldr go (pure (ctx', [])) ps
-  let ps'' = p':|ps'
-  case N.last ps'' of
-    S.TermProcedure (S.TypedTerm _ t) -> pure $ S.TypedTerm (S.Procedure ps'') t
-    S.BindProcedure {}                -> throwM BindProcedureEndException
+typeOfTerm
+  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (Type f))
+     , Show (f (Type f))
+     , Show (f S.QualifiedIdentifier)
+     )
+  => Map S.QualifiedIdentifier (f (Type f))
+  -> Value 'S.Untyped f
+  -> m (Value 'S.Typed f)
+typeOfTerm ctx =
+  liftValue typeOfTerm'
   where
-    go p acc = do
-      (ctx, ps) <- acc
-      (ctx', p') <- typeOfProcedure ctx p
-      pure (ctx', p':ps)
-typeOfTerm ctx (S.UntypedValue (S.TypeAnnotation (S.TypeAnnotation' v t))) = do
-  v'@(S.TypedTerm _ t') <- typeOfTerm ctx v
-  if t == t'
-    then pure v'
-    else throwM $ MismatchException (show t) (show t')
-typeOfTerm ctx (S.UntypedValue (S.Let ds v)) = do
-  ds' <- definitions ctx ds
-  let ctx' = ((\(S.TypedTerm _ t) -> t) <$> M.fromList (mapMaybe valueBind ds')) `M.union` ctx
-  v'@(S.TypedTerm _ t') <- typeOfTerm ctx' v
-  pure $ S.TypedTerm (S.Let ds' v') t'
+    typeOfTerm' v =
+      case S.item v of
+        S.Variable i ->
+          case M.lookup i ctx of
+            Nothing -> throwM $ NotFoundException i $ S.range v
+            Just t  -> pure $ S.TypedValue (S.Variable i <$ v) t
+        S.Literal (S.Integer v' b) ->
+          pure $ S.TypedValue (S.Literal (S.Integer v' b) <$ v) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "int" <$ v) <$ v)
+        S.Literal (S.Fraction s d e b) ->
+          pure $ S.TypedValue (S.Literal (S.Fraction s d e b) <$ v) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "frac2" <$ v) <$ v)
+        S.Literal (S.String t) ->
+          pure $ S.TypedValue (S.Literal (S.String t) <$ v) (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "string" <$ v) <$ v)
+        S.Literal (S.Function (S.FunctionC i t v')) -> do
+          v''@(S.TypedValue _ t') <- typeOfTerm (M.insert (S.item i) t ctx) (S.item v')
+          pure $ S.TypedValue (S.Literal (S.Function (S.FunctionC i t (v'' <$ v'))) <$ v) (S.FunctionType (S.FunctionTypeC t t') <$ v)
+        S.Application (S.ApplicationC v0 v1) -> do
+          v0'@(S.TypedValue _ t0) <- typeOfTerm ctx $ S.item v0
+          v1'@(S.TypedValue _ t1) <- typeOfTerm ctx $ S.item v1
+          case S.item t0 of
+            S.FunctionType (S.FunctionTypeC t00 t01)
+              | t1 == t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC (v0' <$ v0) $ v1' <$ v1) <$ v) t01
+              | otherwise -> throwM $ MismatchException (show $ S.item t00) $ show t1
+            _ -> throwM $ MismatchException "function" $ show t0
+        S.Procedure (p:|ps) -> do
+          (ctx', p') <- typeOfProcedure ctx $ S.item p
+          (_, ps') <- foldr go (pure (ctx', [])) ps
+          let ps'' = (p' <$ p):|ps'
+          case S.item $ N.last ps'' of
+            S.TermProcedure v ->
+              let S.TypedValue _ t = S.item v
+              in pure $ S.TypedValue (S.Procedure ps'' <$ v) t
+            S.BindProcedure {} -> throwM BindProcedureEndException
+          where
+            go p acc = do
+              (ctx, ps) <- acc
+              (ctx', p') <- typeOfProcedure ctx $ S.item p
+              pure (ctx', (p' <$ p):ps)
+        S.TypeAnnotation (S.TypeAnnotation' v' t) -> do
+          v''@(S.TypedValue _ t') <- typeOfTerm ctx $ S.item v'
+          if t == t'
+            then pure v''
+            else throwM $ MismatchException (show t) (show t')
+        S.Let ds v' -> do
+          ds' <- definitions ctx $ S.item <$> ds
+          let ctx' = ((\(S.TypedValue _ t) -> t) . S.item <$> M.fromList (mapMaybe valueBind ds')) `M.union` ctx
+          v''@(S.TypedValue _ t') <- typeOfTerm ctx' $ S.item v'
+          pure $ S.TypedValue (S.Let (zipWith (<$) ds' ds) (v'' <$ v') <$ v) t'
 
-typeOfProcedure :: (MonadThrow m, MonadCatch m) => Map S.QualifiedIdentifier Type -> ProcedureStep 'S.Untyped -> m (Map S.QualifiedIdentifier Type, ProcedureStep 'S.Typed)
+typeOfProcedure
+  :: ( MonadThrow m
+     , MonadCatch m
+     , S.HasPosition f
+     , Eq (f (Type f))
+     , Show (f (Type f))
+     , Show (f S.QualifiedIdentifier)
+  )
+  => Map S.QualifiedIdentifier (f (Type f))
+  -> ProcedureStep 'S.Untyped f
+  -> m (Map S.QualifiedIdentifier (f (Type f)), ProcedureStep 'S.Typed f)
 typeOfProcedure ctx (S.BindProcedure i v) = do
-  v'@(S.TypedTerm _ t) <- typeOfTerm ctx v
-  let ctx' = M.insert i t ctx
-  pure (ctx', S.BindProcedure i v')
+  v'@(S.TypedValue _ t) <- typeOfTerm ctx $ S.item v
+  let ctx' = M.insert (S.item i) t ctx
+  pure (ctx', S.BindProcedure i (v' <$ v))
 typeOfProcedure ctx (S.TermProcedure v) = do
-  v' <- typeOfTerm ctx v
-  pure (ctx, S.TermProcedure v')
+  v' <- typeOfTerm ctx $ S.item v
+  pure (ctx, S.TermProcedure (v' <$ v))
+
+liftValue :: (f (Value' 'S.Untyped f) -> a) -> Value 'S.Untyped f -> a
+liftValue f (S.UntypedValue v) = f v
 
 data Exception
-  = NotFoundException S.QualifiedIdentifier
+  = NotFoundException S.QualifiedIdentifier (Maybe (S.Position, S.Position))
   | MismatchException { expected :: String, actual :: String}
   | BindProcedureEndException
   | RecursionException (Set S.QualifiedIdentifier)
