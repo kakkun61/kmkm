@@ -4,3 +4,6 @@ write-ghc-environment-files: ghc8.4.4+
 
 package parsers
   flags: -binary -parsec -attoparsec
+
+package pointed
+  flags: -comonad -kan-extensions -semigroupoids -stm -tagged -unordered-containers

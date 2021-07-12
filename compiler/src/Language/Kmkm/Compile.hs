@@ -1,7 +1,9 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Language.Kmkm.Compile
   ( compile
@@ -24,10 +26,12 @@ import qualified Language.Kmkm.Syntax                as KS
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
+import qualified Barbies.Bare                         as B
 import qualified Control.Exception                    as E
 import           Control.Monad                        (when)
 import           Control.Monad.Catch                  (MonadCatch, MonadThrow (throwM))
 import           Data.Bifunctor                       (Bifunctor (second))
+import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
@@ -47,7 +51,13 @@ import           System.FilePath                      (isPathSeparator, pathSepa
 import qualified System.FilePath                      as F
 import qualified Text.PrettyPrint                     as P
 
-compile :: MonadCatch m => (FilePath -> m Text) -> (FilePath -> Text -> m ()) -> (Text -> m ()) -> FilePath -> m ()
+compile
+  :: MonadCatch m
+  => (FilePath -> m Text)
+  -> (FilePath -> Text -> m ())
+  -> (Text -> m ())
+  -> FilePath
+  -> m ()
 compile _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
 compile readFile writeFile writeLog src = do
   let src' = F.normalise src
@@ -76,77 +86,77 @@ compile readFile writeFile writeLog src = do
       writeFile (F.addExtension path "c") $ T.pack $ P.renderStyle style c
       writeFile (F.addExtension path "h") $ T.pack $ P.renderStyle style h
     build2_ typeOrigins m =
-      let KS.Module n _ _ = KS.item m
+      let KS.Module n _ _ = copoint m
       in do
         ds <- build2 writeLog typeOrigins m
-        pure (KS.item n, ds)
+        pure (copoint n, ds)
 
 readRecursively
   :: MonadThrow m
   => (FilePath -> m Text)
   -> FilePath
-  -> m (G.AdjacencyMap KS.ModuleName, Map KS.ModuleName (KS.AttachPosition (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped KS.AttachPosition)))
+  -> m (G.AdjacencyMap KS.ModuleName, Map KS.ModuleName (KS.WithPosition (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)))
 readRecursively readFile =
   go (pure (G.empty, M.empty))
   where
     go acc path = do
       module' <- KP.parse path =<< readFile (F.addExtension path "s.km")
       let
-        KS.Module moduleName deps _ = KS.item module'
-        moduleName' = KS.item moduleName
+        KS.Module moduleName deps _ = copoint module'
+        moduleName' = copoint moduleName
         moduleName'' = filePathToModuleName path
-        deps' = KS.item <$> deps
+        deps' = copoint <$> copoint deps
       when (moduleName' /= moduleName'') $ throwM $ ModuleNameMismatchException path moduleName' $ KS.range moduleName
       (g, m) <- acc
       let
         m' = M.insert moduleName' module' m
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
-        depSet = KS.map (moduleNameToFilePath . KS.item) $ KS.fromList deps
+        depSet = KS.map (moduleNameToFilePath . copoint) $ KS.fromList $ copoint deps
         readSet = KS.map moduleNameToFilePath $ M.keysSet m'
       foldl go (pure (g', m')) $ depSet KS.\\ readSet
 
 sortModules
   :: MonadThrow m
-  => G.AdjacencyMap (KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped KS.AttachPosition))
-  -> m [KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped KS.AttachPosition)]
+  => G.AdjacencyMap (KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition))
+  -> m [KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)]
 sortModules deps =
   sequence $ go . GN.vertexList1 <$> fromRight KE.unreachable (G.topSort $ G.scc deps)
   where
-    go ms@(m :| ms') = if null ms' then pure m else throwM $ RecursionException $ (\(KS.Module n _ _) -> KS.item n) . KS.item <$> ms
+    go ms@(m :| ms') = if null ms' then pure m else throwM $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
 
 typeCheck
   :: MonadCatch m
-  => KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped KS.AttachPosition)
-  -> Map KS.QualifiedIdentifier (KS.AttachPosition (KS.Type 'KS.NameResolved 'KS.Curried KS.AttachPosition))
-  -> m (Map KS.QualifiedIdentifier (KS.AttachPosition (KS.Type 'KS.NameResolved 'KS.Curried KS.AttachPosition)), KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed KS.AttachPosition))
+  => KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)
+  -> Map KS.QualifiedIdentifier (KS.WithPosition (KS.Type 'KS.NameResolved 'KS.Curried B.Covered KS.WithPosition))
+  -> m (Map KS.QualifiedIdentifier (KS.WithPosition (KS.Type 'KS.NameResolved 'KS.Curried B.Covered KS.WithPosition)), KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed B.Covered KS.WithPosition))
 typeCheck module' types = do
   module'' <- KBT.typeCheck types module'
   let
-    KS.Module _ _ ms = KS.item module''
+    KS.Module _ _ ms = copoint module''
     types' =
-      M.fromList $ mapMaybe go ms
+      M.fromList $ mapMaybe go $ copoint ms
       where
         go m =
-          case KS.item m of
+          case copoint m of
             KS.ValueBind (KS.ValueBindU i v)
-              | KS.TypedValue _ t <- KS.item v -> Just (i, t)
+              | KS.TypedValue _ t <- copoint v -> Just (i, t)
             _                                                   -> Nothing
-  pure (M.mapKeys KS.item types', module'')
+  pure (M.mapKeys copoint types', module'')
 
 build2
   :: ( Monad m
-     , KS.HasPosition f
+     , Copointed f
      )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed f)
+  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered f)
   -> m (P.Doc, P.Doc)
 build2 writeLog typeOrigins m = do
-  let KS.Module n ms _ = KS.item m
+  let KS.Module n ms _ = copoint m
   (hs, c, h) <- build2' writeLog typeOrigins m
   let
-    n'@(KS.ModuleName i) = KS.item n
-    ms' = KS.item <$> ms
+    n'@(KS.ModuleName i) = copoint n
+    ms' = copoint <$> copoint ms
     key = P.text $ T.unpack $ T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
     newline = P.char '\n'
     include (KS.SystemHeader h) = P.text $ T.unpack $ "#include <" <> h <> ">\n"
@@ -178,25 +188,26 @@ build2 writeLog typeOrigins m = do
 build1
   :: Applicative m
   => (Text -> m ())
-  -> KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed KS.AttachPosition)
-  -> m (KS.AttachPosition (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.AttachPosition))
+  -> KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed B.Covered KS.WithPosition)
+  -> m (KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered KS.WithPosition))
 build1 writeLog m2 = do
   let m3 = KBU.uncurry m2
   writeLog $ "uncurried module: " <> T.pack (show m3)
   let m4 = KBP.partiallyApply m3
   writeLog $ "non-partial-application module: " <> T.pack (show m4)
-  let m5 = KBL.lambdaLift <$> m4
+  let m5 = KBL.lambdaLift m4
   writeLog $ "lambda-lifted module: " <> T.pack (show m5)
-  let m6 = KBCT.thunk <$> m5
+  let m6 = KBCT.thunk m5
   writeLog $ "thunk module: " <> T.pack (show m6)
   pure m6
 
 build2'
   :: ( Applicative m
-     , KS.HasPosition f)
+     , Copointed f
+     )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed f)
+  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered f)
   -> m ([KS.CHeader], CTranslUnit, CTranslUnit)
 build2' writeLog typeOrigins m6 = do
   let m7 = KBCI.translate typeOrigins m6

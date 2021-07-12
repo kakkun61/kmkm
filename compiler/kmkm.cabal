@@ -58,6 +58,7 @@ library
                    Language.Kmkm.Parse.Sexp
                    Language.Kmkm.Syntax
   build-depends: algebraic-graphs,
+                 barbies,
                  containers,
                  data-default-class,
                  exceptions,
@@ -68,6 +69,7 @@ library
                  mtl,
                  parsers,
                  parsers-megaparsec,
+                 pointed,
                  pretty,
                  safe-exceptions,
                  text

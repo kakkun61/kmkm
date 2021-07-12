@@ -3,7 +3,6 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections     #-}
 
 module Language.Kmkm.Parse.Sexp
   ( parse
@@ -25,6 +24,7 @@ module Language.Kmkm.Parse.Sexp
 import qualified Language.Kmkm.Exception as X
 import qualified Language.Kmkm.Syntax    as S
 
+import qualified Barbies.Bare               as B
 import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
 import           Control.Monad              (void)
@@ -56,30 +56,30 @@ import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 import qualified Text.PrettyPrint           as R
 
-type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Definition = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Definition = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Type = S.Type 'S.NameUnresolved 'S.Curried S.AttachPosition
+type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered S.WithPosition
 
-type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried S.AttachPosition
+type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered S.WithPosition
 
-type Value = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Value = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Literal = S.Literal 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Literal = S.Literal 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Function = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Function = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type TypeAnnotation = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type TypeAnnotation = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type ProcedureStep = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped S.AttachPosition
+type ProcedureStep = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
 type Parser = ParsecT Void Text Identity
 
-parse :: MonadThrow m => String -> Text -> m (S.AttachPosition Module)
-parse = parse' (position module' <* P.eof)
+parse :: MonadThrow m => String -> Text -> m (S.WithPosition Module)
+parse = parse' $ module' <* P.eof
 
 parse' :: MonadThrow m => Parser a -> String -> Text -> m a
 parse' (ParsecT p) n s =
@@ -93,72 +93,77 @@ parse'' (ParsecT p) n s =
     Right a -> pure a
     Left e  -> fail $ M.errorBundlePretty e
 
-module' :: Parser Module
+module' :: Parser (S.WithPosition Module)
 module' =
   M.label "module" $
-    P.parens $ do
-      void $ P.textSymbol "module"
-      S.Module <$> position moduleName <*> list (position moduleName) <*> list (position definition)
+    withPosition $
+      P.parens $ do
+        void $ P.textSymbol "module"
+        S.Module <$> moduleName <*> list moduleName <*> list definition
 
-list :: Parser a -> Parser [a]
+list :: Parser a -> Parser (S.WithPosition [a])
 list p =
   M.label "list" $
-    P.parens $ do
-      void $ P.textSymbol "list"
-      P.many p
+    withPosition $
+      P.parens $ do
+        void $ P.textSymbol "list"
+        P.many p
 
-list1 :: Parser a -> Parser (NonEmpty a)
+list1 :: Parser a -> Parser (S.WithPosition (NonEmpty a))
 list1 p =
   M.label "list1" $
-    P.parens $ do
-      void $ P.textSymbol "list"
-      fromMaybe X.unreachable . N.nonEmpty <$> P.some p
+    withPosition $
+      P.parens $ do
+        void $ P.textSymbol "list"
+        fromMaybe X.unreachable . N.nonEmpty <$> P.some p
 
-definition :: Parser Definition
+definition :: Parser (S.WithPosition Definition)
 definition =
   M.label "definition" $
-    P.parens $
-      P.choice
-        [ dataDefinition
-        , foreignValueBind
-        , valueBind
-        , foreignTypeBind
-        ]
+    withPosition $
+      P.parens $
+        P.choice
+          [ dataDefinition
+          , foreignValueBind
+          , valueBind
+          , foreignTypeBind
+          ]
 
 dataDefinition :: Parser Definition
 dataDefinition =
   M.label "dataDefinition" $ do
     void $ P.textSymbol "define"
-    S.DataDefinition <$> position identifier <*> list valueConstructor
+    S.DataDefinition <$> identifier <*> list valueConstructor
 
-valueConstructor :: Parser (S.AttachPosition S.Identifier, [(S.AttachPosition S.Identifier, S.AttachPosition Type)])
+valueConstructor :: Parser (S.WithPosition (S.WithPosition S.Identifier, S.WithPosition [S.WithPosition (S.WithPosition S.Identifier, S.WithPosition Type)]))
 valueConstructor =
   M.label "valueConstructor" $
-    P.choice
-      [ (, []) <$> position identifier
-      , P.parens $ (,) <$> position identifier <*> list field
-      ]
+    withPosition $
+      P.choice
+        [ (,) <$> identifier <*> withPosition (pure [])
+        , P.parens $ (,) <$> identifier <*> list field
+        ]
 
-field :: Parser (S.AttachPosition S.Identifier, S.AttachPosition Type)
-field = M.label "field" $ P.parens $ (,) <$> position identifier <*> position typ
+field :: Parser (S.WithPosition (S.WithPosition S.Identifier, S.WithPosition Type))
+field = M.label "field" $ withPosition $ P.parens $ (,) <$> identifier <*> typ
 
 valueBind :: Parser Definition
 valueBind =
   M.label "valueBind" $ do
     void $ P.textSymbol "bind-value"
-    S.ValueBind <$> (S.ValueBindU <$> position identifier <*> position value)
+    S.ValueBind <$> (S.ValueBindU <$> identifier <*> value)
 
 foreignValueBind :: Parser Definition
 foreignValueBind =
   M.label "foreignValueBind" $ do
     void $ P.textSymbol "bind-value-foreign"
-    S.ForeignValueBind <$> position identifier <*> list cHeader <*> position (S.CDefinition <$> cExternalDeclaration) <*> position typ
+    S.ForeignValueBind <$> identifier <*> list cHeader <*> withPosition (S.CDefinition <$> cExternalDeclaration) <*> typ
 
 foreignTypeBind :: Parser Definition
 foreignTypeBind =
   M.label "foreignTypeBind" $ do
     void $ P.textSymbol "bind-type-foreign"
-    S.ForeignTypeBind <$> position identifier <*> list cHeader <*> position (S.CDefinition <$> (check =<< cExternalDeclaration))
+    S.ForeignTypeBind <$> identifier <*> list cHeader <*> withPosition (S.CDefinition <$> (check =<< cExternalDeclaration))
   where
     check declExt@(C.CDeclExt (C.CDecl declSpecs [(Just (C.CDeclr (Just C.Ident {}) [] Nothing [] _), Nothing, Nothing)] _)) =
       case foldr declSpecAcc (pure (False, False)) declSpecs of
@@ -172,26 +177,28 @@ foreignTypeBind =
     declSpecAcc (C.CStorageSpec C.CTypedef {}) acc = acc >>= \(_, ts) -> pure (True, ts)
     declSpecAcc s _                                = Left s
 
-identifier :: Parser S.Identifier
+identifier :: Parser (S.WithPosition S.Identifier)
 identifier =
   M.label "identifier" $
-    P.token $ do
-      a <- asciiAlphabet
-      b <- many $ P.choice [asciiAlphabet, P.digit]
-      pure $ S.UserIdentifier $ T.pack $ a : b
+    P.token $
+      withPosition $ do
+        a <- asciiAlphabet
+        b <- many $ P.choice [asciiAlphabet, P.digit]
+        pure $ S.UserIdentifier $ T.pack $ a : b
 
-eitherIdentifier :: Parser S.EitherIdentifier
+eitherIdentifier :: Parser (S.WithPosition S.EitherIdentifier)
 eitherIdentifier =
   M.label "eitherIdentifier" $
-    P.token $ do
-      is <- dotSeparatedIdentifier
-      let n = S.UserIdentifier $ N.last is
-      case N.nonEmpty (N.init is) of
-        Nothing -> pure $ S.UnqualifiedIdentifier n
-        Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
+    P.token $
+      withPosition $ do
+        is <- dotSeparatedIdentifier
+        let n = S.UserIdentifier $ N.last is
+        case N.nonEmpty (N.init is) of
+          Nothing -> pure $ S.UnqualifiedIdentifier n
+          Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
 
-moduleName :: Parser S.ModuleName
-moduleName = M.label "moduleName" $ S.ModuleName <$> P.token dotSeparatedIdentifier
+moduleName :: Parser (S.WithPosition S.ModuleName)
+moduleName = M.label "moduleName" $ fmap S.ModuleName <$> P.token (withPosition dotSeparatedIdentifier)
 
 dotSeparatedIdentifier :: Parser (N.NonEmpty Text)
 dotSeparatedIdentifier =
@@ -203,23 +210,24 @@ identifierSegment = do
   b <- many $ P.choice [asciiAlphabet, P.digit]
   pure $ T.pack $ a : b
 
-value :: Parser Value
+value :: Parser (S.WithPosition Value)
 value =
   M.label "value'" $
-    fmap S.UntypedValue $
-      position $
-        P.choice
-          [ S.Variable <$> eitherIdentifier
-          , S.Literal <$> literal
-          , P.parens $
-              P.choice
-                [ S.Literal . S.Function <$> function
-                , S.Application <$> application
-                , S.Procedure <$> procedure
-                , S.TypeAnnotation <$> typeAnnotation
-                , S.Let <$> (P.textSymbol "let" *> list (position definition)) <*> position value
-                ]
-          ]
+    withPosition $
+      fmap S.UntypedValue $
+        withPosition $
+          P.choice
+            [ S.Variable <$> eitherIdentifier
+            , S.Literal <$> literal
+            , P.parens $
+                P.choice
+                  [ S.Literal . S.Function <$> function
+                  , S.Application <$> application
+                  , S.Procedure <$> procedure
+                  , S.TypeAnnotation <$> typeAnnotation
+                  , S.Let <$> (P.textSymbol "let" *> list definition) <*> value
+                  ]
+            ]
 
 literal :: Parser Literal
 literal =
@@ -234,31 +242,33 @@ application :: Parser Application
 application =
   M.label "application" $ do
     void $ P.textSymbol "apply"
-    S.ApplicationC <$> position value <*> position value
+    S.ApplicationC <$> value <*> value
 
-procedure :: Parser (NonEmpty (S.AttachPosition ProcedureStep))
+procedure :: Parser (S.WithPosition (NonEmpty (S.WithPosition ProcedureStep)))
 procedure =
   M.label "procedure" $ do
     void $ P.textSymbol "procedure"
-    list1 $ position p
+    list1 step
   where
-    p =
+    step :: Parser (S.WithPosition ProcedureStep)
+    step =
       M.label "procedure.p" $
-        P.parens $
-          P.choice
-            [ do
-                void $ P.textSymbol "bind"
-                S.BindProcedure <$> position identifier <*> position value
-            , do
-                void $ P.textSymbol "term"
-                S.TermProcedure <$> position value
-            ]
+        withPosition $
+          P.parens $
+            P.choice
+              [ do
+                  void $ P.textSymbol "bind"
+                  S.BindProcedure <$> identifier <*> value
+              , do
+                  void $ P.textSymbol "term"
+                  S.TermProcedure <$> value
+              ]
 
 typeAnnotation :: Parser TypeAnnotation
 typeAnnotation =
   M.label "typeAnnotation" $ do
     void $ P.textSymbol "type"
-    S.TypeAnnotation' <$> position value <*> position typ
+    S.TypeAnnotation' <$> value <*> typ
 
 integer :: Parser Literal
 integer =
@@ -354,34 +364,35 @@ function :: Parser Function
 function =
   M.label "function" $ do
     void $ P.textSymbol "function"
-    S.FunctionC <$> position identifier <*> position typ <*> position value
+    S.FunctionC <$> identifier <*> typ <*> value
 
-typ :: Parser Type
+typ :: Parser (S.WithPosition Type)
 typ =
-  M.label "type" $ do
-    P.choice
-      [ S.TypeVariable <$> position eitherIdentifier
-      , P.parens $
-          P.choice
-            [ S.FunctionType <$> functionType
-            , uncurry S.TypeApplication <$> typeApplication
-            , S.ProcedureType <$> position procedureStep
-            ]
-      ]
+  M.label "type" $
+    withPosition $
+      P.choice
+        [ S.TypeVariable <$> eitherIdentifier
+        , P.parens $
+            P.choice
+              [ S.FunctionType <$> functionType
+              , uncurry S.TypeApplication <$> typeApplication
+              , S.ProcedureType <$> procedureStep
+              ]
+        ]
 
 functionType :: Parser FunctionType
 functionType =
   M.label "functionType" $ do
     void $ P.textSymbol "function"
-    S.FunctionTypeC <$> position typ <*> position typ
+    S.FunctionTypeC <$> typ <*> typ
 
-typeApplication :: Parser (S.AttachPosition Type, S.AttachPosition Type)
+typeApplication :: Parser (S.WithPosition Type, S.WithPosition Type)
 typeApplication =
   M.label "typeApplication" $ do
     void $ P.textSymbol "apply"
-    (,) <$> position typ <*> position typ
+    (,) <$> typ <*> typ
 
-procedureStep :: Parser Type
+procedureStep :: Parser (S.WithPosition Type)
 procedureStep =
   M.label "procedureStep" $ do
     void $ P.textSymbol "procedure"
@@ -394,17 +405,18 @@ cExternalDeclaration = do
     Left (C.ParseError (m, _)) -> fail $ unlines m
     Right c                    -> pure c
 
-cHeader :: Parser S.CHeader
+cHeader :: Parser (S.WithPosition S.CHeader)
 cHeader =
-  P.parens $
-    P.choice
-      [ do
-          void $ P.textSymbol "system-header"
-          S.SystemHeader <$> string
-      , do
-          void $ P.textSymbol "local-header"
-          S.LocalHeader <$> string
-      ]
+  withPosition $
+    P.parens $
+      P.choice
+        [ do
+            void $ P.textSymbol "system-header"
+            S.SystemHeader <$> string
+        , do
+            void $ P.textSymbol "local-header"
+            S.LocalHeader <$> string
+        ]
 
 doubleQuote :: Parser a -> Parser a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")
@@ -418,14 +430,14 @@ asciiUpper = P.choice $ P.char <$> ['A' .. 'Z']
 asciiLower :: Parser Char
 asciiLower = P.choice $ P.char <$> ['a' .. 'z']
 
-position :: Parser a -> Parser (S.AttachPosition a)
-position p =
-  M.label "position" $ do
+withPosition :: Parser a -> Parser (S.WithPosition a)
+withPosition p =
+  M.label "withPosition" $ do
     M.SourcePos _ beginLine beginColumn <- M.getSourcePos
     a <- p
     M.SourcePos _ endLine endColumn <- M.getSourcePos
     pure $
-      S.AttachPosition
+      S.WithPosition
         (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
         (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
         a

@@ -39,8 +39,8 @@ pattern TypeCheckNotFoundException i r = BT.NotFoundException i r
 pattern TypeCheckMismatchException :: String -> String -> TypeCheckException
 pattern TypeCheckMismatchException expected actual = BT.MismatchException expected actual
 
-pattern TypeCheckBindProcedureEndException :: TypeCheckException
-pattern TypeCheckBindProcedureEndException = BT.BindProcedureEndException
+pattern TypeCheckBindProcedureEndException :: Maybe (S.Position, S.Position) -> TypeCheckException
+pattern TypeCheckBindProcedureEndException r = BT.BindProcedureEndException r
 
 pattern TypeCheckRecursionException :: Set S.QualifiedIdentifier -> TypeCheckException
 pattern TypeCheckRecursionException is = BT.RecursionException is
