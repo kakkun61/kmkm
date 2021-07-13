@@ -116,7 +116,7 @@ definitions context =
 
 dependency :: (Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped f) -> G.AdjacencyMap S.QualifiedIdentifier
 dependency valueBinds d | S.ValueBind (S.ValueBindU i v) <- copoint d = G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
-dependency _ _                                    = G.empty
+dependency _ _                                                        = G.empty
 
 typeBind
   :: ( MonadThrow m
@@ -174,7 +174,7 @@ dep identifiers v =
           | i' <- copoint i
           , i' `S.member` identifiers -> [i']
           | otherwise -> []
-        S.Literal (S.Function (S.FunctionC i _ v')) -> dep (S.delete (copoint i) identifiers) v'
+        S.Function (S.FunctionC i _ v') -> dep (S.delete (copoint i) identifiers) v'
         S.Literal _ -> []
         S.Application (S.ApplicationC v1 v2) -> mconcat $ dep identifiers <$> [v1, v2]
         S.Procedure ps ->
@@ -220,10 +220,10 @@ typeOfTerm ctx v =
           pure $ S.TypedValue (S.Literal (S.Fraction s d e b) <$ v') (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "frac2" <$ v) <$ v) <$ v
         S.Literal (S.String t) ->
           pure $ S.TypedValue (S.Literal (S.String t) <$ v') (S.TypeVariable (S.GlobalIdentifier ["kmkm", "prim"] "string" <$ v) <$ v) <$ v
-        S.Literal (S.Function (S.FunctionC i t v'')) -> do
+        S.Function (S.FunctionC i t v'') -> do
           v''' <- typeOfTerm (M.insert (copoint i) t ctx) v''
           let S.TypedValue _ t' = copoint v'''
-          pure $ S.TypedValue (S.Literal (S.Function (S.FunctionC i t v''')) <$ v') (S.FunctionType (S.FunctionTypeC t t') <$ v) <$ v
+          pure $ S.TypedValue (S.Function (S.FunctionC i t v''') <$ v') (S.FunctionType (S.FunctionTypeC t t') <$ v) <$ v
         S.Application (S.ApplicationC v0 v1) -> do
           v0' <- typeOfTerm ctx v0
           v1' <- typeOfTerm ctx v1

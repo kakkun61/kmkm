@@ -145,6 +145,7 @@ typeCheck module' types = do
 
 build2
   :: ( Monad m
+     , Functor f
      , Copointed f
      )
   => (Text -> m ())
@@ -203,6 +204,7 @@ build1 writeLog m2 = do
 
 build2'
   :: ( Applicative m
+     , Functor f
      , Copointed f
      )
   => (Text -> m ())

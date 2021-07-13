@@ -13,13 +13,12 @@ module Language.Kmkm.Build.C.IntermediateC
   ) where
 
 import qualified Language.Kmkm.Build.C.Syntax as I
-import           Language.Kmkm.Exception      (unreachable)
 import qualified Language.Kmkm.Exception      as X
 import           Language.Kmkm.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
                                                QualifiedIdentifier)
 import qualified Language.Kmkm.Syntax         as S
 
-import qualified Barbies.Bare          as B
+import qualified Barbies.Bare.Layered  as B
 import           Data.Copointed        (Copointed (copoint))
 import           Data.Functor.Identity (Identity)
 import qualified Data.List.NonEmpty    as N
@@ -38,12 +37,12 @@ type Type = S.Type 'S.NameResolved 'S.Uncurried B.Bare Identity
 
 type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
 
-type Literal = S.Literal 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
-
 type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
 
 translate
-  :: Copointed f
+  :: ( Functor f
+     , Copointed f
+     )
   => Map QualifiedIdentifier TypeOrigin
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
   -> ([S.CHeader], I.File)
@@ -151,12 +150,11 @@ value _ _ (S.TypedValue (S.Variable i) _) = I.Variable $ qualifiedIdentifier i
 value _ _ (S.TypedValue (S.Literal l) _) = I.Literal $ literal l
 value typeOrigins n (S.TypedValue (S.Application (S.ApplicationN v vs)) _) = I.Call (value typeOrigins n v) $ value typeOrigins n <$> vs
 value typeOrigins n (S.TypedValue (S.Procedure ps) _) = I.StatementExpression $ I.Block $ procedureStep typeOrigins n =<< N.toList ps
-value _ _ (S.TypedValue (S.TypeAnnotation _) _) = unreachable
 value typeOrigins n (S.TypedValue (S.Let ds v) _) =
   let typeOrigins' = M.fromList (mapMaybe typeOrigin ds) `M.union` typeOrigins
   in I.StatementExpression $ I.Block $ (elementStatement <$> (definition typeOrigins' n =<< ds)) ++ [I.BlockStatement (I.ExpressionStatement $ value typeOrigins' n v)]
 
-literal :: Literal -> I.Literal
+literal :: S.Literal -> I.Literal
 literal (S.Integer i b) =
   I.Integer i $
     case b of
@@ -212,7 +210,9 @@ data TypeOrigin
   deriving (Show, Read, Eq, Ord, Generic)
 
 typeOrigins
-  :: Copointed f
+  :: ( Functor f
+     , Copointed f
+     )
   => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
   -> Map QualifiedIdentifier TypeOrigin
 typeOrigins m =

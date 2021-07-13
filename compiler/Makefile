@@ -9,7 +9,7 @@ build-deps:
 	cabal v2-build --only-dependencies
 
 .PHONY: test
-test: doctest spec batch
+test: doctest spec
 
 .PHONY: doctest
 doctest: build-deps

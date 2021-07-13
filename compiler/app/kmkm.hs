@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 
@@ -19,6 +20,7 @@ import qualified Options.Declarative    as O
 import           System.Console.ANSI    (Color (Red), ColorIntensity (Vivid), ConsoleLayer (Foreground),
                                          SGR (Reset, SetColor), hSetSGR)
 import           System.Directory       (createDirectoryIfMissing, doesFileExist)
+import           System.Exit            (exitFailure)
 import           System.FilePath        ((</>))
 import qualified System.FilePath        as F
 import           System.IO              (Handle, IOMode (ReadMode), hPutStrLn, openFile, stderr)
@@ -59,17 +61,19 @@ main' output libraries dryRun src =
         liftIO $ do
           hPutStrLn stderr "Parse error:"
           hPutStrLn stderr m
+          exitFailure
     , Handler $ \(NameResolveUnknownIdentifierException i r) ->
         liftIO $ do
           T.hPutStrLn stderr $ "Unknown identifier error: " <> pretty i
           maybe (pure ()) (printRange stderr (O.get src)) r
-    , Handler $ \e ->
-        case e of
-          TypeCheckNotFoundException i r ->
-            liftIO $ do
-              T.hPutStrLn stderr $ "Not found error: " <> pretty i
-              maybe (pure ()) (printRange stderr (O.get src)) r
-          _ -> undefined
+          exitFailure
+    , Handler $ \case
+        TypeCheckNotFoundException i r ->
+          liftIO $ do
+            T.hPutStrLn stderr $ "Not found error: " <> pretty i
+            maybe (pure ()) (printRange stderr (O.get src)) r
+            exitFailure
+        _ -> undefined
     ]
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath

@@ -6,8 +6,7 @@ module Language.Kmkm.Build.LambdaLift
   ( lambdaLift
   ) where
 
-import           Language.Kmkm.Exception (unreachable)
-import qualified Language.Kmkm.Syntax    as S
+import qualified Language.Kmkm.Syntax as S
 
 import qualified Barbies.Bare               as B
 import           Control.Monad.State.Strict (State, evalState)
@@ -21,11 +20,7 @@ type Definition l f = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed B.Cov
 
 type Value l f = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
 
-type Value' l f = S.Value' 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
-
 type ProcedureStep l f = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
-
-type Literal l f = S.Literal 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
 
 type Pass = State Word
 
@@ -48,7 +43,7 @@ definition =
       scope $
         case copoint v of
           S.TypedValue v1 _
-            | S.Literal (S.Function (S.FunctionN is v2)) <- copoint v1 -> do
+            | S.Function (S.FunctionN is v2) <- copoint v1 -> do
                 (v', ds) <- term v2
                 let S.TypedValue _ t = copoint v'
                 pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v
@@ -65,8 +60,12 @@ term v =
       case copoint v' of
         S.Variable i -> pure (S.TypedValue (S.Variable i <$ v') t <$ v, [])
         S.Literal l -> do
-          (l', ds) <- literal l v'
-          pure (S.TypedValue l' t <$ v, ds)
+          pure (S.TypedValue (S.Literal l <$ v') t <$ v, [])
+        S.Function (S.FunctionN is v'') -> do
+          i <- (<$ v) <$> newIdentifier
+          (v''', ds) <- term v''
+          let m = S.ValueBind (S.ValueBindN i is v''')
+          pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
         S.Application (S.ApplicationN v1 vs) -> do
           (v1', ds) <- term v1
           (vs', dss) <- unzip <$> sequence (term <$> copoint vs)
@@ -74,7 +73,6 @@ term v =
         S.Procedure ps -> do
           (ps', dss) <- N.unzip <$> sequence (procedureStep <$> copoint ps)
           pure (S.TypedValue (S.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)
-        S.TypeAnnotation {} -> unreachable
         S.Let ds v1 -> do
           ds' <- sequence (traverse definition <$> ds)
           (v1', vds) <- term v1
@@ -89,16 +87,6 @@ procedureStep s =
     S.TermProcedure v -> do
       (v', ds) <- term v
       pure (S.TermProcedure v' <$ v, ds)
-
-literal :: (Traversable f, Copointed f, S.HasPosition f) => Literal 'S.LambdaUnlifted f -> f a -> Pass (f (Value' 'S.LambdaLifted f), [f (Definition 'S.LambdaLifted f)])
-literal (S.Integer v_ b) v = pure (S.Literal (S.Integer v_ b) <$ v, [])
-literal (S.Fraction s f e b) v = pure (S.Literal (S.Fraction s f e b) <$ v, [])
-literal (S.String t) v = pure (S.Literal (S.String t) <$ v, [])
-literal (S.Function (S.FunctionN is v')) v = do
-  i <- (<$ v) <$> newIdentifier
-  (v'', ds) <- term v'
-  let m = S.ValueBind (S.ValueBindN i is v'') -- i <$ ? は literal 全体がいいかも → 引数も f a
-  pure (S.Variable i <$ v, ds ++ [m <$ v])
 
 newIdentifier :: Pass S.QualifiedIdentifier
 newIdentifier = do

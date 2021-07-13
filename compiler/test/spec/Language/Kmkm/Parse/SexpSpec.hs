@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Parse.SexpSpec where
@@ -5,8 +6,10 @@ module Language.Kmkm.Parse.SexpSpec where
 import Language.Kmkm.Parse.Sexp
 import Language.Kmkm.Syntax
 
+import           Barbies.Bare.Layered (bstripFrom)
+import           Data.Copointed       (Copointed (copoint))
 import           Test.Hspec
-import qualified Text.Megaparsec as M
+import qualified Text.Megaparsec      as M
 
 spec :: Spec
 spec = do
@@ -58,32 +61,52 @@ spec = do
 
     describe "identifier" $ do
       it "foo" $ do
-        parse' (identifier <* M.eof) "spec" "foo" `shouldReturn` "foo"
+        parse' (identifier <* M.eof) "spec" "foo"
+          `shouldSatisfy`
+            (\case
+              Right i -> copoint i == "foo"
+              Left _  -> False
+            )
 
     describe "valueBind" $ do
       it "bind-value foo 123" $ do
         parse' (valueBind <* M.eof) "spec" "bind-value foo 123"
-          `shouldReturn`
-            ValueBind (ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10)
+          `shouldSatisfy`
+            (\case
+              Right b -> bstripFrom copoint b == ValueBind (ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10)
+              Left _  -> False
+            )
 
     describe "dataDefinition" $ do
       it "define bool (false true)" $ do
         parse' (dataDefinition <* M.eof) "spec" "define bool (list false true)"
-          `shouldReturn`
-            DataDefinition "bool" [("false", []), ("true", [])]
+          `shouldSatisfy`
+            (\case
+              Right b -> bstripFrom copoint b == DataDefinition "bool" [("false", []), ("true", [])]
+              Left _  -> False
+            )
 
       it "define book (list book (list (title string) (author string)))" $ do
         parse' (dataDefinition <* M.eof) "spec" "define book (list (book (list (title string) (author string))))"
-          `shouldReturn`
-            DataDefinition "book" [("book", [("title", TypeVariable "string"), ("author", TypeVariable "string")])]
+          `shouldSatisfy`
+            (\case
+              Right b -> bstripFrom copoint b == DataDefinition "book" [("book", [("title", TypeVariable "string"), ("author", TypeVariable "string")])]
+              Left _ -> False
+            )
 
     describe "module" $ do
       it "(module math (list) (list (bind-value foo 123)" $ do
         parse' (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123)))"
-          `shouldReturn`
-            Module "math" [] [ValueBind $ ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10]
+          `shouldSatisfy`
+            (\case
+              Right m -> bstripFrom copoint (copoint m) == Module "math" [] [ValueBind $ ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10]
+              Left _ -> False
+            )
 
       it "(module math (list) (list (define bool (false true)))" $ do
         parse' (module' <* M.eof) "spec" "(module math (list) (list (define bool (list false true))))"
-          `shouldReturn`
-            Module "math" [] [DataDefinition "bool" [("false", []), ("true", [])]]
+          `shouldSatisfy`
+            (\case
+              Right m -> bstripFrom copoint (copoint m) == Module "math" [] [DataDefinition "bool" [("false", []), ("true", [])]]
+              Left _ -> False
+            )

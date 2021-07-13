@@ -10,8 +10,7 @@ module Language.Kmkm.Build.Uncurry
   ( uncurry
   ) where
 
-import           Language.Kmkm.Exception (unreachable)
-import qualified Language.Kmkm.Syntax    as S
+import qualified Language.Kmkm.Syntax as S
 
 import qualified Barbies.Bare       as B
 import           Data.Copointed     (Copointed (copoint))
@@ -28,8 +27,6 @@ type Value c f = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed B.Covered 
 type Value' c f = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed B.Covered f
 
 type ProcedureStep c f = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed B.Covered f
-
-type Literal c f = S.Literal 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed B.Covered f
 
 type Application c f = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed B.Covered f
 
@@ -83,18 +80,17 @@ typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t
 value' :: (Functor f, Copointed f, S.HasPosition f) => f (Value' 'S.Curried f) -> f (Value' 'S.Uncurried f)
 value' v =
   flip fmap v $ \case
-    S.Variable i       -> S.Variable i
-    S.Literal l        -> S.Literal $ literal l v
-    S.Application a    -> S.Application $ application a v
-    S.Procedure ps     -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
-    S.TypeAnnotation _ -> unreachable
-    S.Let ds v         -> S.Let (fmap definition <$> ds) $ typedValue v
+    S.Variable i    -> S.Variable i
+    S.Literal l     -> S.Literal $ literal l
+    S.Function f    -> S.Function $ function f v
+    S.Application a -> S.Application $ application a v
+    S.Procedure ps  -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
+    S.Let ds v      -> S.Let (fmap definition <$> ds) $ typedValue v
 
-literal :: (Functor f, Copointed f, S.HasPosition f) => Literal 'S.Curried f -> f a -> Literal 'S.Uncurried f
-literal (S.Integer v b) _      = S.Integer v b
-literal (S.Fraction s f e b) _ = S.Fraction s f e b
-literal (S.String t) _         = S.String t
-literal (S.Function f) v       = S.Function $ function f v
+literal :: S.Literal -> S.Literal
+literal (S.Integer v b)      = S.Integer v b
+literal (S.Fraction s f e b) = S.Fraction s f e b
+literal (S.String t)         = S.String t
 
 functionType :: (Functor f, Copointed f, S.HasPosition f) => FunctionType 'S.Curried f -> FunctionType 'S.Uncurried f
 functionType (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t =
@@ -121,7 +117,7 @@ procedureStep (S.TermProcedure v)   = S.TermProcedure $ typedValue v
 function :: (Functor f, Copointed f, S.HasPosition f) => Function 'S.Curried f -> f a -> Function 'S.Uncurried f
 function (S.FunctionC i t v') v
   | S.TypedValue v'' _ <- copoint v'
-  , S.Literal (S.Function f) <- copoint v'' =
+  , S.Function f <- copoint v'' =
   let
     t' = typ t
     S.FunctionN ps v''' = function f v''

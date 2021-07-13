@@ -57,6 +57,8 @@ library
                    Language.Kmkm.Exception
                    Language.Kmkm.Parse.Sexp
                    Language.Kmkm.Syntax
+                   Barbies.Bare.Layered
+                   Data.Functor.Barbie.Layered
   build-depends: algebraic-graphs,
                  barbies,
                  containers,
@@ -73,6 +75,7 @@ library
                  pretty,
                  safe-exceptions,
                  text
+  default-extensions: Strict
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
 
@@ -110,10 +113,12 @@ test-suite spec
   other-modules: Language.Kmkm.Build.C.IntermediateCSpec
                  Language.Kmkm.Build.TypeCheckSpec
                  Language.Kmkm.Parse.SexpSpec
+                 Language.Kmkm.SyntaxSpec
   build-depends: kmkm == 0.1.0.0,
                  containers,
+                 hspec,
                  megaparsec,
-                 hspec
+                 pointed
   ghc-options: -threaded
                -rtsopts
                -with-rtsopts=-N

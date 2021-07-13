@@ -66,8 +66,6 @@ type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered S.With
 
 type Value = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
-type Literal = S.Literal 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
-
 type Function = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
 type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
@@ -221,7 +219,7 @@ value =
             , S.Literal <$> literal
             , P.parens $
                 P.choice
-                  [ S.Literal . S.Function <$> function
+                  [ S.Function <$> function
                   , S.Application <$> application
                   , S.Procedure <$> procedure
                   , S.TypeAnnotation <$> typeAnnotation
@@ -229,7 +227,7 @@ value =
                   ]
             ]
 
-literal :: Parser Literal
+literal :: Parser S.Literal
 literal =
   M.label "literal" $
     P.choice
@@ -270,7 +268,7 @@ typeAnnotation =
     void $ P.textSymbol "type"
     S.TypeAnnotation' <$> value <*> typ
 
-integer :: Parser Literal
+integer :: Parser S.Literal
 integer =
   M.label "integer" $ do
     P.token $
@@ -281,7 +279,7 @@ integer =
         , flip S.Integer 10 <$> M.decimal
         ]
 
-fraction :: Parser Literal
+fraction :: Parser S.Literal
 fraction =
   M.label "fraction" $ do P.token $ hexadecimal <|> decimal
   where

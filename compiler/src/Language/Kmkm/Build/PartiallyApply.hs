@@ -70,7 +70,7 @@ term v =
                       vs'' = vs1 ++ ((<$ v) <$> (S.TypedValue <$> ((<$ v1) . S.Variable . (<$ v) . S.LocalIdentifier <$> is) <*> t0s1))
                     pure $
                       S.TypedValue
-                        (S.Literal (S.Function $ S.FunctionN (zipWith (\i t -> (i, t) <$ v) ((<$ v) . S.LocalIdentifier <$> is) t0s1 <$ v) (S.TypedValue (S.Application (S.ApplicationN v2' (vs'' <$ vs)) <$ v) t0 <$ v)) <$ v)
+                        (S.Function (S.FunctionN (zipWith (\i t -> (i, t) <$ v) ((<$ v) . S.LocalIdentifier <$> is) t0s1 <$ v) (S.TypedValue (S.Application (S.ApplicationN v2' (vs'' <$ vs)) <$ v) t0 <$ v)) <$ v)
                         t
       S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> sequence (traverse procedureStep <$> ps)
       _ -> pure v'

@@ -5,6 +5,8 @@ module Language.Kmkm.Build.TypeCheckSpec where
 
 import Language.Kmkm.Build.TypeCheck
 
+import Barbies.Bare.Layered
+import Data.Functor.Identity
 import Language.Kmkm.Syntax
 import Test.Hspec
 
@@ -14,14 +16,14 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
+          typeCheck mempty (cover $ Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedValue (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])]
+              cover (Module "spec" [] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedValue (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])])
 
         it "0x10" $ do
-          typeCheck mempty (Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
+          typeCheck mempty (cover $ Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
             `shouldReturn`
-              Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedValue (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])]
+              cover (Module "spec" [] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedValue (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])])
 
     describe "application" $ do
       describe "succ" $ do
@@ -38,16 +40,15 @@ spec = do
                           TypeAnnotation $
                             TypeAnnotation'
                               ( UntypedValue $
-                                  Literal $
-                                      Function $
-                                        FunctionC
-                                          "a"
-                                          (TypeVariable ["kmkm", "prim", "int"])
-                                          $ UntypedValue $
-                                              Application $
-                                                ApplicationC
-                                                  (UntypedValue $ Variable ["spec", "succ"])
-                                                  (UntypedValue $ Variable "a")
+                                  Function $
+                                    FunctionC
+                                      "a"
+                                      (TypeVariable ["kmkm", "prim", "int"])
+                                      $ UntypedValue $
+                                          Application $
+                                            ApplicationC
+                                              (UntypedValue $ Variable ["spec", "succ"])
+                                              (UntypedValue $ Variable "a")
                               )
                               $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
@@ -58,22 +59,21 @@ spec = do
                 [ ValueBind $
                     ValueBindU ["spec", "succ"] $
                       TypedValue
-                        ( Literal $
-                            Function $
-                              FunctionC
-                                "a"
-                                (TypeVariable ["kmkm", "prim", "int"])
-                                $ TypedValue
-                                    (Application $
-                                      ApplicationC
-                                        (TypedValue (Variable ["spec", "succ"]) (FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) (TypeVariable ["kmkm", "prim", "int"])))
-                                        (TypedValue (Variable "a") (TypeVariable ["kmkm", "prim", "int"]))
-                                    )
-                                    $ TypeVariable ["kmkm", "prim", "int"]
+                        ( Function $
+                            FunctionC
+                              "a"
+                              (TypeVariable ["kmkm", "prim", "int"])
+                              $ TypedValue
+                                  (Application $
+                                    ApplicationC
+                                      (TypedValue (Variable ["spec", "succ"]) (FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) (TypeVariable ["kmkm", "prim", "int"])))
+                                      (TypedValue (Variable "a") (TypeVariable ["kmkm", "prim", "int"]))
+                                  )
+                                  $ TypeVariable ["kmkm", "prim", "int"]
                         )
                         $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
-          typeCheck mempty source `shouldReturn` result
+          typeCheck mempty (cover source) `shouldReturn` cover result
 
         it "fail" $ do
           let
@@ -88,13 +88,15 @@ spec = do
                           TypeAnnotation $
                             TypeAnnotation'
                               ( UntypedValue $
-                                  Literal $
-                                    Function $
-                                      FunctionC
-                                        "a"
-                                        (TypeVariable ["kmkm", "prim", "int"])
-                                        (UntypedValue $ Variable ["spec", "succ"])
+                                  Function $
+                                    FunctionC
+                                      "a"
+                                      (TypeVariable ["kmkm", "prim", "int"])
+                                      (UntypedValue $ Variable ["spec", "succ"])
                               )
                               $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
-          typeCheck mempty source `shouldThrow` \MismatchException {} -> True
+          typeCheck mempty (cover source) `shouldThrow` \MismatchException {} -> True
+
+cover :: BareB b => b Bare Identity -> Identity (b Covered Identity)
+cover = Identity . bcoverWith Identity

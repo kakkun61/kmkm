@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version 3
 
 $dir = Split-Path -Path $(Split-Path -Path $PSCommandPath)
 $out = "$dir\out"
@@ -31,7 +32,7 @@ function Compare-Result {
   try {
     if (Compare-Object (Normalize (Get-Content $filePath)) (Normalize (Get-Content "$testOut\$case\$filePath"))) {
       Write-Host "FAIL" -ForegroundColor Red
-      $fail = $true
+      $script:fail = $true
     }
     else {
       Write-Host "OK" -ForegroundColor Green

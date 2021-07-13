@@ -20,6 +20,7 @@ import qualified Data.Map.Strict         as M
 import           Data.Maybe              (mapMaybe)
 import           Data.Set                (Set)
 import qualified Data.Set                as S
+import           Data.Traversable        (for)
 import qualified Data.Typeable           as Y
 import           GHC.Generics            (Generic)
 import qualified Language.Kmkm.Exception as X
@@ -35,8 +36,6 @@ type Value n f = S.Value n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
 type Value' n f = S.Value' n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
 
 type ProcedureStep n f = S.ProcedureStep n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
-
-type Literal n f = S.Literal n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
 
 type TypeAnnotation n f = S.TypeAnnotation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
 
@@ -125,14 +124,14 @@ value valueAffiliations typeAffiliations moduleName v =
 
 value' :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> f (Value' 'S.NameUnresolved f) -> m (f (Value' 'S.NameResolved f))
 value' valueAffiliations typeAffiliations moduleName v =
-  traverse go v
-  where
-    go (S.Variable i) = S.Variable <$> referenceIdentifier valueAffiliations moduleName i
-    go (S.Procedure ss) = S.Procedure <$> sequence (traverse (procedureStep valueAffiliations typeAffiliations moduleName) <$> ss)
-    go (S.Literal l) = S.Literal <$> literal valueAffiliations typeAffiliations moduleName l
-    go (S.TypeAnnotation a) = S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
-    go (S.Application a) = S.Application <$> application valueAffiliations typeAffiliations moduleName a
-    go (S.Let ds v) = S.Let <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName) <$> ds) <*> value valueAffiliations typeAffiliations moduleName v
+  for v $ \case
+    S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations moduleName i
+    S.Procedure ss -> S.Procedure <$> sequence (traverse (procedureStep valueAffiliations typeAffiliations moduleName) <$> ss)
+    S.Literal l -> pure $ S.Literal $ literal l
+    S.Function f -> S.Function <$> function valueAffiliations typeAffiliations moduleName f
+    S.TypeAnnotation a -> S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
+    S.Application a -> S.Application <$> application valueAffiliations typeAffiliations moduleName a
+    S.Let ds v -> S.Let <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName) <$> ds) <*> value valueAffiliations typeAffiliations moduleName v
 
 procedureStep :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> f (ProcedureStep 'S.NameUnresolved f) -> m (f (ProcedureStep 'S.NameResolved f))
 procedureStep valueAffiliations typeAffiliations moduleName =
@@ -140,11 +139,10 @@ procedureStep valueAffiliations typeAffiliations moduleName =
     S.TermProcedure v -> S.TermProcedure <$> value valueAffiliations typeAffiliations moduleName v
     S.BindProcedure i v -> S.BindProcedure (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
-literal :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Literal 'S.NameUnresolved f -> m (Literal 'S.NameResolved f)
-literal _ _ _ (S.Integer v b)                    = pure $ S.Integer v b
-literal _ _ _ (S.Fraction f s e b)               = pure $ S.Fraction f s e b
-literal _ _ _ (S.String s)                       = pure $ S.String s
-literal valueAffiliations typeAffiliations moduleName (S.Function f) = S.Function <$> function valueAffiliations typeAffiliations moduleName f
+literal :: S.Literal -> S.Literal
+literal (S.Integer v b)      = S.Integer v b
+literal (S.Fraction f s e b) = S.Fraction f s e b
+literal (S.String s)         = S.String s
 
 typeAnnotation :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> TypeAnnotation 'S.NameUnresolved f -> m (TypeAnnotation 'S.NameResolved f)
 typeAnnotation valueAffiliations typeAffiliations moduleName (S.TypeAnnotation' v t) = S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ valueAffiliations moduleName t
