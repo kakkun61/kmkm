@@ -9,4 +9,8 @@
     (bind-type-foreign
       uint
       (list)
-      "typedef unsigned int kmkm_prim_uint;")))
+      "typedef unsigned int kmkm_prim_uint;")
+    (bind-type-foreign
+      frac2
+      (list)
+      "typedef double kmkm_prim_frac2;")))
