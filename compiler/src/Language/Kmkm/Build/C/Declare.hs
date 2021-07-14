@@ -22,4 +22,6 @@ cExternalDeclaration (C.CDeclExt (C.CDecl specs opts pos)) =
   where
     f (Just d, _, _)  = Just (Just d, Nothing, Nothing)
     f (Nothing, _, _) = Nothing
+cExternalDeclaration (C.CFDefExt (C.CFunDef specs declr _ _ pos)) =
+  Just $ C.CDeclExt $ C.CDecl specs [(Just declr, Nothing, Nothing)] pos
 cExternalDeclaration _ = Nothing

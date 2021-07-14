@@ -1,7 +1,8 @@
-{-# LANGUAGE DataKinds     #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE TypeFamilies  #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE DeriveGeneric    #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE TypeFamilies     #-}
 
 module Language.Kmkm.Build.NameResolve
   ( nameResolve
@@ -17,7 +18,6 @@ import           Control.Monad.Catch     (MonadThrow (throwM))
 import           Data.Copointed          (Copointed (copoint))
 import           Data.Map.Strict         (Map)
 import qualified Data.Map.Strict         as M
-import           Data.Maybe              (mapMaybe)
 import           Data.Set                (Set)
 import qualified Data.Set                as S
 import           Data.Traversable        (for)
@@ -72,9 +72,9 @@ module' valueIdentifiers typeIdentifiers =
     let
       moduleName' = copoint moduleName
       ms' = moduleName' : (copoint <$> copoint ms)
-      valueIdentifiers' = M.insert moduleName' (S.fromList $ mapMaybe boundValueIdentifier $ copoint ds) valueIdentifiers
+      valueIdentifiers' = M.insert moduleName' (S.unions $ boundValueIdentifier <$> copoint ds) valueIdentifiers
       valueAffiliations = importedAffiliations valueIdentifiers' $ S.fromList ms'
-      typeIdentifiers' = M.insert moduleName' (S.fromList $ mapMaybe boundTypeIdentifier $ copoint ds) typeIdentifiers
+      typeIdentifiers' = M.insert moduleName' (S.unions $ boundTypeIdentifier <$> copoint ds) typeIdentifiers
       typeAffiliations = importedAffiliations typeIdentifiers' $ S.fromList ms'
     S.Module moduleName ms <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName') <$> ds)
 
@@ -168,27 +168,29 @@ referenceIdentifier affiliations i =
         _                          -> throwM $ UnknownIdentifierException (copoint i) $ S.range i
     S.QualifiedIdentifier i' -> pure $ i' <$ i
 
-boundIdentifiers :: (Functor f, Copointed g) => f (g (Module 'S.NameUnresolved g)) -> (f (Set S.Identifier), f (Set S.Identifier))
+boundIdentifiers :: (Functor f, Functor g, Copointed g) => f (g (Module 'S.NameUnresolved g)) -> (f (Set S.Identifier), f (Set S.Identifier))
 boundIdentifiers modules =
   (eachModule boundValueIdentifier <$> modules, eachModule boundTypeIdentifier <$> modules)
   where
-    eachModule f m = let S.Module _ _ ds = copoint m in S.fromList $ mapMaybe f $ copoint ds
+    eachModule f m = let S.Module _ _ ds = copoint m in S.unions $ f <$> copoint ds
 
-boundValueIdentifier :: Copointed f => f (Definition 'S.NameUnresolved f) -> Maybe S.Identifier
-boundValueIdentifier d =
-  boundValueIdentifier' $ copoint d
+boundValueIdentifier :: (Functor f, Copointed f) => f (Definition 'S.NameUnresolved f) -> Set S.Identifier
+boundValueIdentifier =
+  boundValueIdentifier' . S.strip
   where
-    boundValueIdentifier' (S.ValueBind (S.ValueBindU i _)) = Just $ copoint i
-    boundValueIdentifier' (S.ForeignValueBind i _ _ _)     = Just $ copoint i
-    boundValueIdentifier' _                                = Nothing
+    boundValueIdentifier' (S.DataDefinition _ cs)          = S.fromList $ fst <$> cs
+    boundValueIdentifier' (S.ValueBind (S.ValueBindU i _)) = S.singleton i
+    boundValueIdentifier' (S.ForeignValueBind i _ _ _)     = S.singleton i
+    boundValueIdentifier' _                                = S.empty
 
-boundTypeIdentifier :: Copointed f => f (Definition 'S.NameUnresolved f) -> Maybe S.Identifier
-boundTypeIdentifier d =
-  boundTypeIdentifier' $ copoint d
+boundTypeIdentifier :: (Functor f, Copointed f) => f (Definition 'S.NameUnresolved f) -> Set S.Identifier
+boundTypeIdentifier =
+  boundTypeIdentifier' . S.strip
   where
-    boundTypeIdentifier' (S.TypeBind i _)          = Just $ copoint i
-    boundTypeIdentifier' (S.ForeignTypeBind i _ _) = Just $ copoint i
-    boundTypeIdentifier' _                         = Nothing
+    boundTypeIdentifier' (S.DataDefinition i _)    = S.singleton i
+    boundTypeIdentifier' (S.TypeBind i _)          = S.singleton i
+    boundTypeIdentifier' (S.ForeignTypeBind i _ _) = S.singleton i
+    boundTypeIdentifier' _                         = S.empty
 
 importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =

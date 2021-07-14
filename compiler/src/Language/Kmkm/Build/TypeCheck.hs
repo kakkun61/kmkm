@@ -31,7 +31,6 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
 import qualified Barbies.Bare                         as B
-import           Barbies.Bare.Layered                 (BareB, bstripFrom)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch)
 import           Control.Monad.Catch                  (MonadThrow (throwM), catchJust)
@@ -235,9 +234,9 @@ typeOfTerm ctx v =
             S.TypedValue _ t1 = copoint v1'
           case copoint t0 of
             S.FunctionType (S.FunctionTypeC t00 t01)
-              | strip t1 == strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
-              | otherwise -> throwM $ MismatchException (Right $ strip t00) (strip t1) $ S.range t1
-            _ -> throwM $ MismatchException (Left "function") (strip t0) $ S.range t0
+              | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
+              | otherwise -> throwM $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.range t1
+            _ -> throwM $ MismatchException (Left "function") (S.strip t0) $ S.range t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (ctx', p') <- typeOfProcedure ctx p
@@ -257,9 +256,9 @@ typeOfTerm ctx v =
         S.TypeAnnotation (S.TypeAnnotation' v' t) -> do
           v'' <- typeOfTerm ctx v'
           let S.TypedValue _ t' = copoint v''
-          if strip t == strip t'
+          if S.strip t == S.strip t'
             then pure v''
-            else throwM $ MismatchException (Right $ strip t) (strip t') $ S.range t'
+            else throwM $ MismatchException (Right $ S.strip t) (S.strip t') $ S.range t'
         S.Let ds v' -> do
           ds' <- definitions ctx ds
           let ctx' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` ctx
@@ -291,9 +290,6 @@ typeOfProcedure ctx s =
     S.TermProcedure v -> do
       v' <- typeOfTerm ctx v
       pure (ctx, S.TermProcedure v' <$ v)
-
-strip :: (Functor f, Copointed f, BareB b) => f (b B.Covered f) -> b B.Bare Identity
-strip = bstripFrom copoint . copoint
 
 data Exception
   = NotFoundException S.QualifiedIdentifier (Maybe (S.Position, S.Position))

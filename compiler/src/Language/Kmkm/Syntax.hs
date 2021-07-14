@@ -56,13 +56,15 @@ module Language.Kmkm.Syntax
   , Typing (..)
   , LambdaLifting (..)
   , NameResolving (..)
+    -- * Higher kinded data
+  , strip
     -- * Pretty printing
   , Pretty (..)
   ) where
 
 import qualified Language.Kmkm.Exception as X
 
-import           Barbies.Bare.Layered        (BareB (bcover, bstrip))
+import           Barbies.Bare.Layered        (BareB (bcover, bstrip), bstripFrom)
 import qualified Barbies.Bare.Layered        as B
 import           Data.Bifunctor              (Bifunctor (bimap))
 import           Data.Copointed              (Copointed (copoint))
@@ -876,6 +878,11 @@ data NameResolving
   = NameResolved
   | NameUnresolved
   deriving (Show, Read, Eq, Ord, Generic)
+
+-- Higher kinded data
+
+strip :: (Functor f, Copointed f, BareB b) => f (b B.Covered f) -> b B.Bare Identity
+strip = bstripFrom copoint . copoint
 
 -- Pretty
 
