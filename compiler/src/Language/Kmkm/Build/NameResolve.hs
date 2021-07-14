@@ -45,6 +45,8 @@ type Function n f = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Cover
 
 type Type n f = S.Type n 'S.Curried B.Covered f
 
+type FunctionType n f = S.FunctionType n 'S.Curried B.Covered f
+
 nameResolve
   :: ( MonadThrow m
      , Traversable f
@@ -107,16 +109,46 @@ definition valueAffiliations typeAffiliations moduleName =
             pure (S.GlobalIdentifier moduleName <$> i, t')
     S.ForeignValueBind i hs c t -> S.ForeignValueBind (S.GlobalIdentifier moduleName <$> i) hs c <$> typ typeAffiliations moduleName t
 
-valueBind :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> ValueBind 'S.NameUnresolved f -> m (ValueBind 'S.NameResolved f)
+valueBind
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> ValueBind 'S.NameUnresolved f
+  -> m (ValueBind 'S.NameResolved f)
 valueBind valueAffiliations typeAffiliations moduleName (S.ValueBindU i v) = S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
-value :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> f (Value 'S.NameUnresolved f) -> m (f (Value 'S.NameResolved f))
+value
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> f (Value 'S.NameUnresolved f)
+  -> m (f (Value 'S.NameResolved f))
 value valueAffiliations typeAffiliations moduleName v =
   traverse go v
   where
     go (S.UntypedValue v) = S.UntypedValue <$> value' valueAffiliations typeAffiliations moduleName v
 
-value' :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> f (Value' 'S.NameUnresolved f) -> m (f (Value' 'S.NameResolved f))
+value'
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> f (Value' 'S.NameUnresolved f)
+  -> m (f (Value' 'S.NameResolved f))
 value' valueAffiliations typeAffiliations moduleName v =
   for v $ \case
     S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations i
@@ -127,7 +159,17 @@ value' valueAffiliations typeAffiliations moduleName v =
     S.Application a -> S.Application <$> application valueAffiliations typeAffiliations moduleName a
     S.Let ds v -> S.Let <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName) <$> ds) <*> value valueAffiliations typeAffiliations moduleName v
 
-procedureStep :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> f (ProcedureStep 'S.NameUnresolved f) -> m (f (ProcedureStep 'S.NameResolved f))
+procedureStep
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> f (ProcedureStep 'S.NameUnresolved f)
+  -> m (f (ProcedureStep 'S.NameResolved f))
 procedureStep valueAffiliations typeAffiliations moduleName =
   traverse $ \case
     S.TermProcedure v -> S.TermProcedure <$> value valueAffiliations typeAffiliations moduleName v
@@ -138,23 +180,88 @@ literal (S.Integer v b)      = S.Integer v b
 literal (S.Fraction f s e b) = S.Fraction f s e b
 literal (S.String s)         = S.String s
 
-typeAnnotation :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> TypeAnnotation 'S.NameUnresolved f -> m (TypeAnnotation 'S.NameResolved f)
-typeAnnotation valueAffiliations typeAffiliations moduleName (S.TypeAnnotation' v t) = S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
+typeAnnotation
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> TypeAnnotation 'S.NameUnresolved f
+  -> m (TypeAnnotation 'S.NameResolved f)
+typeAnnotation valueAffiliations typeAffiliations moduleName (S.TypeAnnotation' v t) =
+  S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
 
-application :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Application 'S.NameUnresolved f -> m (Application 'S.NameResolved f)
-application valueAffiliations typeAffiliations moduleName (S.ApplicationC v1 v2) = S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
+application
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> Application 'S.NameUnresolved f
+  -> m (Application 'S.NameResolved f)
+application valueAffiliations typeAffiliations moduleName (S.ApplicationC v1 v2) =
+  S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
 
-function :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> Map S.Identifier Affiliation -> S.ModuleName -> Function 'S.NameUnresolved f -> m (Function 'S.NameResolved f)
-function valueAffiliations typeAffiliations moduleName (S.FunctionC i t v) = S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations typeAffiliations moduleName v
+function
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> Function 'S.NameUnresolved f
+  -> m (Function 'S.NameResolved f)
+function valueAffiliations typeAffiliations moduleName (S.FunctionC i t v) =
+  let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
+  in S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
 
-typ :: (MonadThrow m, Traversable f, Copointed f, S.HasPosition f) => Map S.Identifier Affiliation -> S.ModuleName -> f (Type 'S.NameUnresolved f) -> m (f (Type 'S.NameResolved f))
+typ
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> f (Type 'S.NameUnresolved f)
+  -> m (f (Type 'S.NameResolved f))
 typ typeAffiliations moduleName =
   traverse $ \case
     S.TypeVariable i  -> S.TypeVariable <$> referenceIdentifier typeAffiliations i
     S.ProcedureType t -> S.ProcedureType <$> typ typeAffiliations moduleName t
-    _                 -> undefined
+    S.TypeApplication t1 t2 -> S.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+    S.FunctionType f -> S.FunctionType <$> functionType typeAffiliations moduleName f
 
-referenceIdentifier :: (MonadThrow m, Functor f, Copointed f) => S.HasPosition f => Map S.Identifier Affiliation -> f (S.ReferenceIdentifier 'S.NameUnresolved) -> m (f (S.ReferenceIdentifier 'S.NameResolved))
+functionType
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> FunctionType 'S.NameUnresolved f
+  -> m (FunctionType 'S.NameResolved f)
+functionType typeAffiliations moduleName (S.FunctionTypeC t1 t2) =
+  S.FunctionTypeC <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+
+referenceIdentifier
+  :: ( MonadThrow m
+     , Functor f
+     , Copointed f
+     , S.HasPosition f
+     )
+  => Map S.Identifier Affiliation
+  -> f (S.ReferenceIdentifier 'S.NameUnresolved)
+  -> m (f (S.ReferenceIdentifier 'S.NameResolved))
 referenceIdentifier affiliations i =
   case copoint i of
     S.UnqualifiedIdentifier i' ->
