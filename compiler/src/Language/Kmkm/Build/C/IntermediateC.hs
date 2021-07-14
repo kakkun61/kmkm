@@ -216,7 +216,7 @@ typeOrigins
   => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
   -> Map QualifiedIdentifier TypeOrigin
 typeOrigins m =
-  let S.Module _ _ ds = B.bstripFrom copoint $ copoint m
+  let S.Module _ _ ds = S.strip m
   in M.fromList $ mapMaybe typeOrigin ds
 
 typeOrigin :: S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare f -> Maybe (S.QualifiedIdentifier, TypeOrigin)

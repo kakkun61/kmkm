@@ -83,7 +83,7 @@ term tids v =
         in S.TypedValue (S.Procedure (p' :| ps'' <$ ps) <$ v1) t <$ v
       S.Let ds v ->
         let
-          tids' = thunkIdentifiers ds `S.union` (tids S.\\ identifiers ds)
+          tids' = tids S.\\ identifiers ds
           ds'' = fmap (definition' tids') <$> ds
           v' = term tids' v
         in S.TypedValue (S.Let ds'' v' <$ v1) t <$ v

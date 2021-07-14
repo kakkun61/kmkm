@@ -78,7 +78,7 @@ module' valueIdentifiers typeIdentifiers =
       valueAffiliations = importedAffiliations valueIdentifiers' $ S.fromList ms'
       typeIdentifiers' = M.insert moduleName' (S.unions $ boundTypeIdentifier <$> copoint ds) typeIdentifiers
       typeAffiliations = importedAffiliations typeIdentifiers' $ S.fromList ms'
-    S.Module moduleName ms <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName') <$> ds)
+    S.Module moduleName ms <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName' $ Global moduleName') <$> ds)
 
 definition
   :: ( MonadThrow m
@@ -89,11 +89,12 @@ definition
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
+  -> Affiliation
   -> f (Definition 'S.NameUnresolved f)
   -> m (f (Definition 'S.NameResolved f))
-definition valueAffiliations typeAffiliations moduleName =
+definition valueAffiliations typeAffiliations moduleName affiliation =
   traverse $ \case
-    S.ValueBind b -> S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName b
+    S.ValueBind b -> S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName affiliation b
     S.TypeBind i t -> S.TypeBind (S.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
     S.ForeignTypeBind i hs c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) hs c
     S.DataDefinition i cs ->
@@ -118,9 +119,13 @@ valueBind
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
+  -> Affiliation
   -> ValueBind 'S.NameUnresolved f
   -> m (ValueBind 'S.NameResolved f)
-valueBind valueAffiliations typeAffiliations moduleName (S.ValueBindU i v) = S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+valueBind valueAffiliations typeAffiliations moduleName (Global _) (S.ValueBindU i v) =
+  S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+valueBind valueAffiliations typeAffiliations moduleName Local (S.ValueBindU i v) =
+  S.ValueBindU (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
 value
   :: ( MonadThrow m
@@ -157,7 +162,15 @@ value' valueAffiliations typeAffiliations moduleName v =
     S.Function f -> S.Function <$> function valueAffiliations typeAffiliations moduleName f
     S.TypeAnnotation a -> S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
     S.Application a -> S.Application <$> application valueAffiliations typeAffiliations moduleName a
-    S.Let ds v -> S.Let <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName) <$> ds) <*> value valueAffiliations typeAffiliations moduleName v
+    S.Let ds v ->
+      let
+        localIdentifiers = S.unions $ boundValueIdentifier <$> copoint ds
+        localAffiliations = M.fromSet (const Local) localIdentifiers
+        valueAffiliations' = localAffiliations `M.union` valueAffiliations
+      in
+        S.Let
+          <$> sequence (traverse (definition valueAffiliations' typeAffiliations moduleName Local) <$> ds)
+          <*> value valueAffiliations' typeAffiliations moduleName v
 
 procedureStep
   :: ( MonadThrow m

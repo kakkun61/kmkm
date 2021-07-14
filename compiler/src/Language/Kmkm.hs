@@ -1,5 +1,5 @@
+{-# LANGUAGE DataKinds       #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns    #-}
 
 module Language.Kmkm
   ( compile
@@ -13,6 +13,7 @@ module Language.Kmkm
   , pattern TypeCheckMismatchException
   , pattern TypeCheckBindProcedureEndException
   , pattern TypeCheckRecursionException
+  , pattern TypeCheckPrimitiveTypeException
   , NameResolveException
   , pattern NameResolveUnknownIdentifierException
   ) where
@@ -24,8 +25,10 @@ import           Language.Kmkm.Exception         (Exception (Exception))
 import qualified Language.Kmkm.Parse.Sexp        as P
 import qualified Language.Kmkm.Syntax            as S
 
-import Data.Set  (Set)
-import Data.Text (Text)
+import qualified Barbies.Bare.Layered   as B
+import           Control.Monad.Identity (Identity)
+import           Data.Set               (Set)
+import           Data.Text              (Text)
 
 type ParseException = P.Exception
 
@@ -39,8 +42,8 @@ type TypeCheckException = BT.Exception
 pattern TypeCheckNotFoundException :: S.QualifiedIdentifier -> Maybe (S.Position, S.Position) -> TypeCheckException
 pattern TypeCheckNotFoundException i r = BT.NotFoundException i r
 
-pattern TypeCheckMismatchException :: Text -> Text -> Maybe (S.Position, S.Position) -> TypeCheckException
-pattern TypeCheckMismatchException expected actual range <- (\(BT.MismatchException expected actual range) -> (either id S.pretty expected, S.pretty actual, range) -> (expected, actual, range))
+pattern TypeCheckMismatchException :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity) -> S.Type 'S.NameResolved 'S.Curried B.Bare Identity -> Maybe (S.Position, S.Position) -> TypeCheckException
+pattern TypeCheckMismatchException expected actual range = BT.MismatchException expected actual range
 
 pattern TypeCheckBindProcedureEndException :: Maybe (S.Position, S.Position) -> TypeCheckException
 pattern TypeCheckBindProcedureEndException r = BT.BindProcedureEndException r
@@ -48,7 +51,10 @@ pattern TypeCheckBindProcedureEndException r = BT.BindProcedureEndException r
 pattern TypeCheckRecursionException :: Set S.QualifiedIdentifier -> TypeCheckException
 pattern TypeCheckRecursionException is = BT.RecursionException is
 
-{-# COMPLETE TypeCheckNotFoundException, TypeCheckMismatchException, TypeCheckBindProcedureEndException, TypeCheckRecursionException #-}
+pattern TypeCheckPrimitiveTypeException :: S.QualifiedIdentifier -> Maybe (S.Position, S.Position) -> TypeCheckException
+pattern TypeCheckPrimitiveTypeException identifier range = BT.PrimitiveTypeException identifier range
+
+{-# COMPLETE TypeCheckNotFoundException, TypeCheckMismatchException, TypeCheckBindProcedureEndException, TypeCheckRecursionException, TypeCheckPrimitiveTypeException #-}
 
 type NameResolveException = BN.Exception
 

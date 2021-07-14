@@ -1,6 +1,7 @@
 (module
   number
-  (list)
+  (list
+    kmkm.prim)
   (list
     (bind-value piIntDecimal 3)
     (bind-value piIntBinary 0b11)

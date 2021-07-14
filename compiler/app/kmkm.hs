@@ -5,7 +5,8 @@
 {-# LANGUAGE PatternSynonyms   #-}
 
 import Language.Kmkm (Position (Position), Pretty (pretty), compile, pattern NameResolveUnknownIdentifierException,
-                      pattern ParseException, pattern TypeCheckMismatchException, pattern TypeCheckNotFoundException)
+                      pattern ParseException, pattern TypeCheckMismatchException, pattern TypeCheckNotFoundException,
+                      pattern TypeCheckPrimitiveTypeException)
 
 import           Control.Exception.Safe (Handler (Handler), catches)
 import           Control.Monad          (replicateM)
@@ -75,7 +76,12 @@ main' output libraries dryRun src =
             exitFailure
         TypeCheckMismatchException e a r ->
           liftIO $ do
-            T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
+            T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> either id pretty e <> " actual: " <> pretty a
+            maybe (pure ()) (printRange stderr (O.get src)) r
+            exitFailure
+        TypeCheckPrimitiveTypeException i r ->
+          liftIO $ do
+            T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> pretty i
             maybe (pure ()) (printRange stderr (O.get src)) r
             exitFailure
         _ -> undefined

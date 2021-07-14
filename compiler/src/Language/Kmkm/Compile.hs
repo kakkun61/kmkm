@@ -62,14 +62,14 @@ compile _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
 compile readFile writeFile writeLog src = do
   let src' = F.normalise src
   (nameDeps, modules1) <- readRecursively readFile src'
-  sequence_ $ writeLog . ("original module: " <>) . T.pack . show <$> M.toList modules1
+  sequence_ $ writeLog . ("original module: " <>) . T.pack . show . second KS.strip <$> M.toList modules1
   let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
   modules2 <- sequence $ KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers <$> modules1
-  sequence_ $ writeLog . ("name resolved: " <>) . T.pack . show <$> M.toList modules2
+  sequence_ $ writeLog . ("name resolved: " <>) . T.pack . show . second KS.strip <$> M.toList modules2
   let deps = G.gmap (fromMaybe X.unreachable . flip M.lookup modules2) nameDeps
   sortedModules <- sortModules deps
-  modules3 <- snd <$> foldr (accumulate typeCheck) (pure mempty) sortedModules
-  sequence_ $ writeLog . ("typed module: " <>) . T.pack . show <$> S.toList modules3
+  modules3 <- snd <$> foldr (accumulate $ flip typeCheck) (pure mempty) sortedModules
+  sequence_ $ writeLog . ("typed module: " <>) . T.pack . show . KS.strip <$> S.toList modules3
   modules4 <- sequence $ build1 writeLog <$> S.toList modules3
   let typeOrigins = M.unions $ KBCI.typeOrigins <$> modules4
   docs <- sequence $ build2_ typeOrigins <$> modules4
@@ -126,10 +126,10 @@ sortModules deps =
 
 typeCheck
   :: MonadCatch m
-  => KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)
-  -> Map KS.QualifiedIdentifier (KS.WithPosition (KS.Type 'KS.NameResolved 'KS.Curried B.Covered KS.WithPosition))
+  => Map KS.QualifiedIdentifier (KS.WithPosition (KS.Type 'KS.NameResolved 'KS.Curried B.Covered KS.WithPosition))
+  -> KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)
   -> m (Map KS.QualifiedIdentifier (KS.WithPosition (KS.Type 'KS.NameResolved 'KS.Curried B.Covered KS.WithPosition)), KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed B.Covered KS.WithPosition))
-typeCheck module' types = do
+typeCheck types module' = do
   module'' <- KBT.typeCheck types module'
   let
     KS.Module _ _ ms = copoint module''
@@ -193,13 +193,13 @@ build1
   -> m (KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered KS.WithPosition))
 build1 writeLog m2 = do
   let m3 = KBU.uncurry m2
-  writeLog $ "uncurried module: " <> T.pack (show m3)
+  writeLog $ "uncurried module: " <> T.pack (show $ KS.strip m3)
   let m4 = KBP.partiallyApply m3
-  writeLog $ "non-partial-application module: " <> T.pack (show m4)
+  writeLog $ "non-partial-application module: " <> T.pack (show $ KS.strip m4)
   let m5 = KBL.lambdaLift m4
-  writeLog $ "lambda-lifted module: " <> T.pack (show m5)
+  writeLog $ "lambda-lifted module: " <> T.pack (show $ KS.strip m5)
   let m6 = KBCT.thunk m5
-  writeLog $ "thunk module: " <> T.pack (show m6)
+  writeLog $ "thunk module: " <> T.pack (show $ KS.strip m6)
   pure m6
 
 build2'

@@ -1,6 +1,7 @@
 (module
   let
-  (list)
+  (list
+    kmkm.prim)
   (list
     (bind-value
       a
