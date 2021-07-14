@@ -5,7 +5,7 @@
 {-# LANGUAGE PatternSynonyms   #-}
 
 import Language.Kmkm (Position (Position), Pretty (pretty), compile, pattern NameResolveUnknownIdentifierException,
-                      pattern ParseException, pattern TypeCheckNotFoundException)
+                      pattern ParseException, pattern TypeCheckMismatchException, pattern TypeCheckNotFoundException)
 
 import           Control.Exception.Safe (Handler (Handler), catches)
 import           Control.Monad          (replicateM)
@@ -59,18 +59,23 @@ main' output libraries dryRun src =
       compile readFile writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
     [ Handler $ \(ParseException m) ->
         liftIO $ do
-          hPutStrLn stderr "Parse error:"
+          hPutStrLn stderr "parsing error:"
           hPutStrLn stderr m
           exitFailure
     , Handler $ \(NameResolveUnknownIdentifierException i r) ->
         liftIO $ do
-          T.hPutStrLn stderr $ "Unknown identifier error: " <> pretty i
+          T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> pretty i
           maybe (pure ()) (printRange stderr (O.get src)) r
           exitFailure
     , Handler $ \case
         TypeCheckNotFoundException i r ->
           liftIO $ do
-            T.hPutStrLn stderr $ "Not found error: " <> pretty i
+            T.hPutStrLn stderr $ "type-checking error: not found error: " <> pretty i
+            maybe (pure ()) (printRange stderr (O.get src)) r
+            exitFailure
+        TypeCheckMismatchException e a r ->
+          liftIO $ do
+            T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
             maybe (pure ()) (printRange stderr (O.get src)) r
             exitFailure
         _ -> undefined

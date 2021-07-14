@@ -287,6 +287,18 @@ instance BareB (FunctionType n c) => BareB (Type n c) where
   bcover (FunctionType f)        = FunctionType $ bcover f
   bcover (ProcedureType t)       = ProcedureType $ Identity $ bcover t
 
+instance
+  ( Pretty (B.Wear b f (Type n c b f))
+  , Pretty (B.Wear b f (ReferenceIdentifier n))
+  , Pretty (FunctionType n c b f)
+  ) =>
+  Pretty (Type n c b f) where
+
+  pretty (TypeVariable i)        = pretty i
+  pretty (TypeApplication t1 t2) = "(apply " <> pretty t1 <> " " <> pretty t2 <> ")"
+  pretty (FunctionType f)        = pretty f
+  pretty (ProcedureType t)       = "(procedure " <> pretty t <> ")"
+
 -- FunctionType
 
 type FunctionType :: NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Type
@@ -321,6 +333,9 @@ instance BareB (FunctionType n 'Curried) where
   bstrip (FunctionTypeC (Identity t1) (Identity t2)) = FunctionTypeC (bstrip t1) (bstrip t2)
   bcover (FunctionTypeC t1 t2) = FunctionTypeC (Identity $ bcover t1) (Identity $ bcover t2)
 
+instance Pretty (B.Wear b f (Type n 'Curried b f)) => Pretty (FunctionType n 'Curried b f) where
+  pretty (FunctionTypeC t1 t2) = "(function " <> pretty t1 <> " " <> pretty t2 <> ")"
+
 data instance FunctionType n 'Uncurried b f =
   FunctionTypeN (B.Wear b f [B.Wear b f (Type n 'Uncurried b f)]) (B.Wear b f (Type n 'Uncurried b f))
   deriving Generic
@@ -336,6 +351,14 @@ instance FunctorB (FunctionType n 'Uncurried B.Covered) where
 instance BareB (FunctionType n 'Uncurried) where
   bstrip (FunctionTypeN (Identity ts) (Identity t)) = FunctionTypeN (bstrip . runIdentity <$> ts) (bstrip t)
   bcover (FunctionTypeN ts t) = FunctionTypeN (Identity $ Identity . bcover <$> ts) (Identity $ bcover t)
+
+instance
+  ( Pretty (B.Wear b f [B.Wear b f (Type n 'Uncurried b f)])
+  , Pretty (B.Wear b f (Type n 'Uncurried b f))
+  ) =>
+  Pretty (FunctionType n 'Uncurried b f) where
+
+  pretty (FunctionTypeN ts t) = "(function " <> pretty ts <> " " <> pretty t <> ")"
 
 -- Value
 
@@ -829,6 +852,9 @@ instance HasPosition WithPosition where
 instance HasPosition Identity where
   range (Identity _) = Nothing
 
+instance Pretty a => Pretty (WithPosition a) where
+  pretty (WithPosition _ _ a) = pretty a
+
 -- Kinds
 
 data Currying
@@ -855,3 +881,6 @@ data NameResolving
 
 class Pretty a where
   pretty :: a -> Text
+
+instance Pretty a => Pretty [a] where
+  pretty as = "(list " <> T.intercalate " " (pretty <$> as) <> ")"

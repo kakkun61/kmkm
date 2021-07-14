@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns    #-}
 
 module Language.Kmkm
   ( compile
@@ -16,13 +17,15 @@ module Language.Kmkm
   , pattern NameResolveUnknownIdentifierException
   ) where
 
-import           Data.Set                        (Set)
 import qualified Language.Kmkm.Build.NameResolve as BN
 import qualified Language.Kmkm.Build.TypeCheck   as BT
 import           Language.Kmkm.Compile           (compile)
 import           Language.Kmkm.Exception         (Exception (Exception))
 import qualified Language.Kmkm.Parse.Sexp        as P
 import qualified Language.Kmkm.Syntax            as S
+
+import Data.Set  (Set)
+import Data.Text (Text)
 
 type ParseException = P.Exception
 
@@ -36,8 +39,8 @@ type TypeCheckException = BT.Exception
 pattern TypeCheckNotFoundException :: S.QualifiedIdentifier -> Maybe (S.Position, S.Position) -> TypeCheckException
 pattern TypeCheckNotFoundException i r = BT.NotFoundException i r
 
-pattern TypeCheckMismatchException :: String -> String -> TypeCheckException
-pattern TypeCheckMismatchException expected actual = BT.MismatchException expected actual
+pattern TypeCheckMismatchException :: Text -> Text -> Maybe (S.Position, S.Position) -> TypeCheckException
+pattern TypeCheckMismatchException expected actual range <- (\(BT.MismatchException expected actual range) -> (either id S.pretty expected, S.pretty actual, range) -> (expected, actual, range))
 
 pattern TypeCheckBindProcedureEndException :: Maybe (S.Position, S.Position) -> TypeCheckException
 pattern TypeCheckBindProcedureEndException r = BT.BindProcedureEndException r

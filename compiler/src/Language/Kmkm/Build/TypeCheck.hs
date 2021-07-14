@@ -31,11 +31,13 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
 import qualified Barbies.Bare                         as B
+import           Barbies.Bare.Layered                 (BareB, bstripFrom)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch)
 import           Control.Monad.Catch                  (MonadThrow (throwM), catchJust)
 import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
+import           Data.Functor.Identity                (Identity)
 import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
@@ -44,6 +46,7 @@ import qualified Data.Map.Strict                      as M
 import           Data.Maybe                           (fromMaybe, mapMaybe)
 import           Data.Set                             (Set)
 import qualified Data.Set                             as S
+import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
@@ -232,9 +235,9 @@ typeOfTerm ctx v =
             S.TypedValue _ t1 = copoint v1'
           case copoint t0 of
             S.FunctionType (S.FunctionTypeC t00 t01)
-              | t1 == t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
-              | otherwise -> throwM $ MismatchException (show $ copoint t00) $ show t1
-            _ -> throwM $ MismatchException "function" $ show t0
+              | strip t1 == strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
+              | otherwise -> throwM $ MismatchException (Right $ strip t00) (strip t1) $ S.range t1
+            _ -> throwM $ MismatchException (Left "function") (strip t0) $ S.range t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (ctx', p') <- typeOfProcedure ctx p
@@ -254,9 +257,9 @@ typeOfTerm ctx v =
         S.TypeAnnotation (S.TypeAnnotation' v' t) -> do
           v'' <- typeOfTerm ctx v'
           let S.TypedValue _ t' = copoint v''
-          if t == t'
+          if strip t == strip t'
             then pure v''
-            else throwM $ MismatchException (show t) (show t')
+            else throwM $ MismatchException (Right $ strip t) (strip t') $ S.range t'
         S.Let ds v' -> do
           ds' <- definitions ctx ds
           let ctx' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` ctx
@@ -289,9 +292,12 @@ typeOfProcedure ctx s =
       v' <- typeOfTerm ctx v
       pure (ctx, S.TermProcedure v' <$ v)
 
+strip :: (Functor f, Copointed f, BareB b) => f (b B.Covered f) -> b B.Bare Identity
+strip = bstripFrom copoint . copoint
+
 data Exception
   = NotFoundException S.QualifiedIdentifier (Maybe (S.Position, S.Position))
-  | MismatchException { expected :: String, actual :: String}
+  | MismatchException { expected :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity), actual :: S.Type 'S.NameResolved 'S.Curried B.Bare Identity, range :: Maybe (S.Position, S.Position) }
   | BindProcedureEndException (Maybe (S.Position, S.Position))
   | RecursionException (Set S.QualifiedIdentifier)
   deriving (Show, Read, Eq, Ord, Generic)
