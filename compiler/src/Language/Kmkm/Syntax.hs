@@ -16,9 +16,7 @@
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE UndecidableInstances     #-}
 
-#if __GLASGOW_HASKELL__ >= 902
-{-# LANGUAGE NoFieldSelectors         #-}
-#else
+#if __GLASGOW_HASKELL__ < 902
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 #endif
 
@@ -732,6 +730,7 @@ instance BareB (Function n c 'LambdaLifted t) where
 
 -- Identifiers
 
+-- | An identifier.
 data Identifier
   = UserIdentifier Text
   | SystemIdentifier Char Word
@@ -744,6 +743,7 @@ instance Pretty Identifier where
   pretty (UserIdentifier t)     = t
   pretty (SystemIdentifier c n) = "_" <> T.pack [c] <> T.pack (show n)
 
+-- | A qualified identifier.
 data QualifiedIdentifier
   = GlobalIdentifier ModuleName Identifier
   | LocalIdentifier Identifier
@@ -810,6 +810,7 @@ type family ReferenceIdentifier n where
 
 -- ModuleName
 
+-- | A module name.
 newtype ModuleName = ModuleName (N.NonEmpty Text) deriving (Show, Read, Eq, Ord, Generic)
 
 instance IsString ModuleName where
@@ -828,6 +829,7 @@ instance Pretty ModuleName where
 class HasPosition f where
   range :: f a -> Maybe (Position, Position)
 
+-- | A position in a source file.
 data Position =
   Position { line :: Word, column :: Word }
   deriving (Show, Read, Eq, Ord, Generic)
@@ -886,6 +888,7 @@ strip = bstripFrom copoint . copoint
 
 -- Pretty
 
+-- | A pretty-printable class.
 class Pretty a where
   pretty :: a -> Text
 

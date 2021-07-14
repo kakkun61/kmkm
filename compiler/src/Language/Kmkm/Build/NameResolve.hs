@@ -14,7 +14,7 @@ import qualified Language.Kmkm.Syntax as S
 
 import qualified Barbies.Bare            as B
 import qualified Control.Exception       as E
-import           Control.Monad.Catch     (MonadThrow (throwM))
+import           Control.Exception.Safe  (MonadThrow, throw)
 import           Data.Copointed          (Copointed (copoint))
 import           Data.Map.Strict         (Map)
 import qualified Data.Map.Strict         as M
@@ -281,11 +281,11 @@ referenceIdentifier affiliations i =
       case M.lookup i' affiliations of
         Just (Global n) -> pure $ S.GlobalIdentifier n i' <$ i
         Just Local      -> pure $ S.LocalIdentifier i' <$ i
-        Nothing         -> throwM $ UnknownIdentifierException (copoint i) $ S.range i
+        Nothing         -> throw $ UnknownIdentifierException (copoint i) $ S.range i
     S.QualifiedIdentifier i'@(S.GlobalIdentifier n i'') ->
       case M.lookup i'' affiliations of
         Just (Global n') | n == n' -> pure $ i' <$ i
-        _                          -> throwM $ UnknownIdentifierException (copoint i) $ S.range i
+        _                          -> throw $ UnknownIdentifierException (copoint i) $ S.range i
     S.QualifiedIdentifier i' -> pure $ i' <$ i
 
 boundIdentifiers :: (Functor f, Functor g, Copointed g) => f (g (Module 'S.NameUnresolved g)) -> (f (Set S.Identifier), f (Set S.Identifier))

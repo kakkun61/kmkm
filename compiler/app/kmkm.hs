@@ -1,17 +1,15 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms   #-}
 
-import Language.Kmkm (Position (Position), Pretty (pretty), compile, pattern NameResolveUnknownIdentifierException,
-                      pattern ParseException, pattern TypeCheckMismatchException, pattern TypeCheckNotFoundException,
-                      pattern TypeCheckPrimitiveTypeException)
+import Language.Kmkm (Exception (NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
+                      Position (Position), compile)
 
-import           Control.Exception.Safe (Handler (Handler), catches)
+import           Control.Exception.Safe (catch)
 import           Control.Monad          (replicateM)
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import qualified Data.List              as L
+import qualified Data.Set               as S
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 import qualified Data.Text.IO           as T
@@ -36,7 +34,7 @@ main'
   -> O.Arg "SOURCE" String
   -> O.Cmd "Kmkm compiler" ()
 main' output libraries dryRun src =
-  catches
+  catch
     do
       let
         readFile path =
@@ -58,34 +56,30 @@ main' output libraries dryRun src =
               liftIO $ TU.writeFile path' text
         writeLog = O.logStr 1 . T.unpack
       compile readFile writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
-    [ Handler $ \(ParseException m) ->
+    $ \e ->
         liftIO $ do
-          hPutStrLn stderr "parsing error:"
-          hPutStrLn stderr m
+          case e of
+            ParseException m -> do
+              hPutStrLn stderr "parsing error:"
+              hPutStrLn stderr m
+            NameResolveUnknownIdentifierException i r -> do
+              T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> i
+              maybe (pure ()) (printRange stderr (O.get src)) r
+            TypeCheckNotFoundException i r -> do
+              T.hPutStrLn stderr $ "type-checking error: not found error: " <> i
+              maybe (pure ()) (printRange stderr (O.get src)) r
+            TypeCheckMismatchException e a r -> do
+              T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
+              maybe (pure ()) (printRange stderr (O.get src)) r
+            TypeCheckPrimitiveTypeException i r -> do
+              T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> i
+              maybe (pure ()) (printRange stderr (O.get src)) r
+            TypeCheckBindProcedureEndException r -> do
+              T.hPutStrLn stderr "type-checking error: bind procedure end error"
+              maybe (pure ()) (printRange stderr (O.get src)) r
+            TypeCheckRecursionException is -> do
+              T.hPutStrLn stderr $ "type-checking error: recursion error: " <> T.intercalate ", " (S.toList is)
           exitFailure
-    , Handler $ \(NameResolveUnknownIdentifierException i r) ->
-        liftIO $ do
-          T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> pretty i
-          maybe (pure ()) (printRange stderr (O.get src)) r
-          exitFailure
-    , Handler $ \case
-        TypeCheckNotFoundException i r ->
-          liftIO $ do
-            T.hPutStrLn stderr $ "type-checking error: not found error: " <> pretty i
-            maybe (pure ()) (printRange stderr (O.get src)) r
-            exitFailure
-        TypeCheckMismatchException e a r ->
-          liftIO $ do
-            T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> either id pretty e <> " actual: " <> pretty a
-            maybe (pure ()) (printRange stderr (O.get src)) r
-            exitFailure
-        TypeCheckPrimitiveTypeException i r ->
-          liftIO $ do
-            T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> pretty i
-            maybe (pure ()) (printRange stderr (O.get src)) r
-            exitFailure
-        _ -> undefined
-    ]
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath
 removeFileExtension ext path = do

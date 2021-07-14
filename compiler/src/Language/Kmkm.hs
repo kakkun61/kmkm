@@ -1,64 +1,67 @@
+{-# LANGUAGE CPP             #-}
 {-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE PatternSynonyms #-}
+
+#if __GLASGOW_HASKELL__ < 902
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+#endif
 
 module Language.Kmkm
-  ( compile
-  , S.Position (..)
-  , S.Pretty (..)
+  ( -- * Main interface
+    compile
+    -- * Exceptions
   , Exception (..)
-  , ParseException
-  , pattern ParseException
-  , TypeCheckException
-  , pattern TypeCheckNotFoundException
-  , pattern TypeCheckMismatchException
-  , pattern TypeCheckBindProcedureEndException
-  , pattern TypeCheckRecursionException
-  , pattern TypeCheckPrimitiveTypeException
-  , NameResolveException
-  , pattern NameResolveUnknownIdentifierException
+    -- * Position
+  , S.Position (..)
   ) where
 
-import qualified Language.Kmkm.Build.NameResolve as BN
-import qualified Language.Kmkm.Build.TypeCheck   as BT
-import           Language.Kmkm.Compile           (compile)
-import           Language.Kmkm.Exception         (Exception (Exception))
+import qualified Language.Kmkm.Build.NameResolve as N
+import qualified Language.Kmkm.Build.TypeCheck   as T
+import qualified Language.Kmkm.Compile           as C
+import qualified Language.Kmkm.Exception         as X
 import qualified Language.Kmkm.Parse.Sexp        as P
 import qualified Language.Kmkm.Syntax            as S
 
-import qualified Barbies.Bare.Layered   as B
-import           Control.Monad.Identity (Identity)
+import           Control.Exception.Safe (MonadCatch, catch, throw)
+import qualified Control.Exception.Safe as E
 import           Data.Set               (Set)
+import qualified Data.Set               as H
 import           Data.Text              (Text)
 
-type ParseException = P.Exception
+compile
+  :: MonadCatch m
+  => (FilePath -> m Text) -- ^ File reader.
+  -> (FilePath -> Text -> m ()) -- ^ File writer.
+  -> (Text -> m ()) -- ^ Logger.
+  -> FilePath -- ^ Source file path.
+  -> m ()
+compile readFile writeFile writeLog src = do
+  catch
+    (C.compile readFile writeFile writeLog src)
+    (throw . convertException)
 
-pattern ParseException :: String -> ParseException
-pattern ParseException m = P.Exception m
+data Exception
+  = ParseException { message :: String } -- ^ An exception on parsing.
+  | NameResolveUnknownIdentifierException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  | TypeCheckNotFoundException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  | TypeCheckMismatchException { expected :: Text, actual :: Text, range :: Maybe (S.Position, S.Position) }
+  | TypeCheckBindProcedureEndException { range :: Maybe (S.Position, S.Position) }
+  | TypeCheckRecursionException { identifiers :: Set Text }
+  | TypeCheckPrimitiveTypeException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  deriving (Show, Read, Eq, Ord)
 
-{-# COMPLETE ParseException #-}
+instance E.Exception Exception
 
-type TypeCheckException = BT.Exception
-
-pattern TypeCheckNotFoundException :: S.QualifiedIdentifier -> Maybe (S.Position, S.Position) -> TypeCheckException
-pattern TypeCheckNotFoundException i r = BT.NotFoundException i r
-
-pattern TypeCheckMismatchException :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity) -> S.Type 'S.NameResolved 'S.Curried B.Bare Identity -> Maybe (S.Position, S.Position) -> TypeCheckException
-pattern TypeCheckMismatchException expected actual range = BT.MismatchException expected actual range
-
-pattern TypeCheckBindProcedureEndException :: Maybe (S.Position, S.Position) -> TypeCheckException
-pattern TypeCheckBindProcedureEndException r = BT.BindProcedureEndException r
-
-pattern TypeCheckRecursionException :: Set S.QualifiedIdentifier -> TypeCheckException
-pattern TypeCheckRecursionException is = BT.RecursionException is
-
-pattern TypeCheckPrimitiveTypeException :: S.QualifiedIdentifier -> Maybe (S.Position, S.Position) -> TypeCheckException
-pattern TypeCheckPrimitiveTypeException identifier range = BT.PrimitiveTypeException identifier range
-
-{-# COMPLETE TypeCheckNotFoundException, TypeCheckMismatchException, TypeCheckBindProcedureEndException, TypeCheckRecursionException, TypeCheckPrimitiveTypeException #-}
-
-type NameResolveException = BN.Exception
-
-pattern NameResolveUnknownIdentifierException :: S.EitherIdentifier -> Maybe (S.Position, S.Position) -> NameResolveException
-pattern NameResolveUnknownIdentifierException i r = BN.UnknownIdentifierException i r
-
-{-# COMPLETE NameResolveUnknownIdentifierException #-}
+convertException :: X.Exception -> Exception
+convertException e =
+  case (cast e, cast e, cast e) of
+    (Just (P.Exception m), Nothing, Nothing) -> ParseException m
+    (Nothing, Just (N.UnknownIdentifierException i r), Nothing) -> NameResolveUnknownIdentifierException (S.pretty i) r
+    (Nothing, Nothing, Just (T.NotFoundException i r)) -> TypeCheckNotFoundException (S.pretty i) r
+    (Nothing, Nothing, Just (T.MismatchException e a r)) -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
+    (Nothing, Nothing, Just (T.BindProcedureEndException r)) -> TypeCheckBindProcedureEndException r
+    (Nothing, Nothing, Just (T.RecursionException is)) -> TypeCheckRecursionException $ H.map S.pretty is
+    (Nothing, Nothing, Just (T.PrimitiveTypeException i r)) -> TypeCheckPrimitiveTypeException (S.pretty i) r
+    _ -> X.unreachable
+  where
+    cast :: (E.Exception e1, E.Exception e2) => e1 -> Maybe e2
+    cast = E.fromException . E.toException

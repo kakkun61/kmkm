@@ -28,8 +28,8 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Barbies.Bare                         as B
 import qualified Control.Exception                    as E
+import           Control.Exception.Safe               (MonadCatch, MonadThrow, throw)
 import           Control.Monad                        (when)
-import           Control.Monad.Catch                  (MonadCatch, MonadThrow (throwM))
 import           Data.Bifunctor                       (Bifunctor (second))
 import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
@@ -53,12 +53,12 @@ import qualified Text.PrettyPrint                     as P
 
 compile
   :: MonadCatch m
-  => (FilePath -> m Text)
-  -> (FilePath -> Text -> m ())
-  -> (Text -> m ())
-  -> FilePath
+  => (FilePath -> m Text) -- ^ File reader.
+  -> (FilePath -> Text -> m ()) -- ^ File writer.
+  -> (Text -> m ()) -- ^ Logger.
+  -> FilePath -- ^ Source file path.
   -> m ()
-compile _ _ _ src@('.' : '.' : _) = throwM $ DotDotPathException src
+compile _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile readFile writeFile writeLog src = do
   let src' = F.normalise src
   (nameDeps, modules1) <- readRecursively readFile src'
@@ -106,7 +106,7 @@ readRecursively readFile =
         moduleName' = copoint moduleName
         moduleName'' = filePathToModuleName path
         deps' = copoint <$> copoint deps
-      when (moduleName' /= moduleName'') $ throwM $ ModuleNameMismatchException path moduleName' $ KS.range moduleName
+      when (moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.range moduleName
       (g, m) <- acc
       let
         m' = M.insert moduleName' module' m
@@ -122,7 +122,7 @@ sortModules
 sortModules deps =
   sequence $ go . GN.vertexList1 <$> fromRight KE.unreachable (G.topSort $ G.scc deps)
   where
-    go ms@(m :| ms') = if null ms' then pure m else throwM $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
+    go ms@(m :| ms') = if null ms' then pure m else throw $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
 
 typeCheck
   :: MonadCatch m

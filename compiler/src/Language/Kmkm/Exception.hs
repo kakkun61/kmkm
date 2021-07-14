@@ -9,6 +9,7 @@ module Language.Kmkm.Exception
 import qualified Control.Exception as E
 import           GHC.Stack         (HasCallStack)
 
+-- | A root exception.
 data Exception = forall e. E.Exception e => Exception e
 
 deriving instance Show Exception

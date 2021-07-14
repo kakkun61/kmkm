@@ -10,9 +10,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeFamilies          #-}
 
-#if __GLASGOW_HASKELL__ >= 902
-{-# LANGUAGE NoFieldSelectors      #-}
-#else
+#if __GLASGOW_HASKELL__ < 902
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 #endif
 
@@ -32,8 +30,7 @@ import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
 import qualified Barbies.Bare                         as B
 import qualified Control.Exception                    as E
-import           Control.Exception.Safe               (MonadCatch)
-import           Control.Monad.Catch                  (MonadThrow (throwM), catchJust)
+import           Control.Exception.Safe               (MonadCatch, MonadThrow, catchJust, throw)
 import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
 import           Data.Functor.Identity                (Identity)
@@ -148,7 +145,7 @@ typeBind context valueBinds prim recursionIdentifiers typedValueBinds =
         recursionValueBinds = M.filterWithKey (const . flip GN.hasVertex recursionIdentifiers) valueBinds
       recursionTypedValueBinds <- sequence $ typeOfTerm context' prim <$> recursionValueBinds
       pure $ recursionTypedValueBinds `M.union` typedValueBinds'
-    $ const $ throwM $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
+    $ const $ throw $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
 
 annotatedType :: Copointed f => f (Value 'S.Untyped f) -> Maybe (f (Type f))
 annotatedType v
@@ -218,26 +215,26 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           let i' = copoint i
           in
             case M.lookup i' ctx of
-              Nothing -> throwM $ NotFoundException i' $ S.range i
+              Nothing -> throw $ NotFoundException i' $ S.range i
               Just t  -> pure $ S.TypedValue (S.Variable i <$ v') t <$ v
         S.Literal (S.Integer v_ b) ->
           let int = S.GlobalIdentifier ["kmkm", "prim"] "int"
           in
             if primInt
               then pure $ S.TypedValue (S.Literal (S.Integer v_ b) <$ v') (S.TypeVariable (int <$ v) <$ v) <$ v
-              else throwM $ PrimitiveTypeException int $ S.range v
+              else throw $ PrimitiveTypeException int $ S.range v
         S.Literal (S.Fraction s d e b) ->
           let frac2 = S.GlobalIdentifier ["kmkm", "prim"] "frac2"
           in
             if primFrac2
               then pure $ S.TypedValue (S.Literal (S.Fraction s d e b) <$ v') (S.TypeVariable (frac2 <$ v) <$ v) <$ v
-              else throwM $ PrimitiveTypeException frac2 $ S.range v
+              else throw $ PrimitiveTypeException frac2 $ S.range v
         S.Literal (S.String t) ->
           let string = S.GlobalIdentifier ["kmkm", "prim"] "string"
           in
             if primString
               then pure $ S.TypedValue (S.Literal (S.String t) <$ v') (S.TypeVariable (string <$ v) <$ v) <$ v
-              else throwM $ PrimitiveTypeException string $ S.range v
+              else throw $ PrimitiveTypeException string $ S.range v
         S.Function (S.FunctionC i t v'') -> do
           v''' <- typeOfTerm (M.insert (copoint i) t ctx) prim v''
           let S.TypedValue _ t' = copoint v'''
@@ -251,8 +248,8 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           case copoint t0 of
             S.FunctionType (S.FunctionTypeC t00 t01)
               | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
-              | otherwise -> throwM $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.range t1
-            _ -> throwM $ MismatchException (Left "function") (S.strip t0) $ S.range t0
+              | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.range t1
+            _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.range t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (ctx', p') <- typeOfProcedure ctx prim p
@@ -263,7 +260,7 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
               | S.TermProcedure v <- copoint s ->
                   let S.TypedValue _ t = copoint v
                   in pure $ S.TypedValue (S.Procedure (ps''' <$ ps) <$ v') t <$ v
-              | otherwise -> throwM $ BindProcedureEndException $ S.range s
+              | otherwise -> throw $ BindProcedureEndException $ S.range s
           where
             go p acc = do
               (ctx, ps) <- acc
@@ -274,7 +271,7 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           let S.TypedValue _ t' = copoint v''
           if S.strip t == S.strip t'
             then pure v''
-            else throwM $ MismatchException (Right $ S.strip t) (S.strip t') $ S.range t'
+            else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.range t'
         S.Let ds v' -> do
           ds' <- definitions ctx prim ds
           let ctx' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` ctx

@@ -27,8 +27,8 @@ import qualified Language.Kmkm.Syntax    as S
 import qualified Barbies.Bare               as B
 import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
+import           Control.Exception.Safe     (MonadThrow, throw)
 import           Control.Monad              (void)
-import           Control.Monad.Catch        (MonadThrow (throwM))
 import           Data.Bool                  (bool)
 import qualified Data.Char                  as C
 import           Data.Functor               (($>))
@@ -83,7 +83,7 @@ parse' :: MonadThrow m => Parser a -> String -> Text -> m a
 parse' (ParsecT p) n s =
   case M.parse p n s of
     Right a -> pure a
-    Left e  -> throwM $ Exception $ M.errorBundlePretty e
+    Left e  -> throw $ Exception $ M.errorBundlePretty e
 
 parse'' :: MonadFail m => Parser a -> String -> Text -> m a
 parse'' (ParsecT p) n s =
