@@ -65,20 +65,26 @@ main' output libraries dryRun src =
             NameResolveUnknownIdentifierException i r -> do
               T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "\tThe identifier may not imported or may have wrong letters."
             TypeCheckNotFoundException i r -> do
               T.hPutStrLn stderr $ "type-checking error: not found error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "\tThe identifier may not imported or may have wrong letters."
             TypeCheckMismatchException e a r -> do
               T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
               maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "\tThe expected type and actual one are different."
             TypeCheckPrimitiveTypeException i r -> do
               T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "\tA primitive is used but its type is not imported."
             TypeCheckBindProcedureEndException r -> do
               T.hPutStrLn stderr "type-checking error: bind procedure end error"
               maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "\tAn end of a procedure must be a binding step."
             TypeCheckRecursionException is -> do
               T.hPutStrLn stderr $ "type-checking error: recursion error: " <> T.intercalate ", " (S.toList is)
+              T.hPutStrLn stderr "\tSome recursion definitions are found but they have no type annotations."
           exitFailure
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath

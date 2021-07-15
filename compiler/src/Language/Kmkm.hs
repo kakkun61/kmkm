@@ -40,13 +40,20 @@ compile readFile writeFile writeLog src = do
     (throw . convertException)
 
 data Exception
-  = ParseException { message :: String } -- ^ An exception on parsing.
-  | NameResolveUnknownIdentifierException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
-  | TypeCheckNotFoundException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
-  | TypeCheckMismatchException { expected :: Text, actual :: Text, range :: Maybe (S.Position, S.Position) }
-  | TypeCheckBindProcedureEndException { range :: Maybe (S.Position, S.Position) }
-  | TypeCheckRecursionException { identifiers :: Set Text }
-  | TypeCheckPrimitiveTypeException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  = -- | An exception on parsing.
+    ParseException { message :: String }
+  | -- | An identifier is not found while name resolving.
+    NameResolveUnknownIdentifierException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  | -- | A type is not found while type checking.
+    TypeCheckNotFoundException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
+  | -- | Some types are mismatched while type checking.
+    TypeCheckMismatchException { expected :: Text, actual :: Text, range :: Maybe (S.Position, S.Position) }
+  | -- | A last procedure step is binding one while type checking.
+    TypeCheckBindProcedureEndException { range :: Maybe (S.Position, S.Position) }
+  | -- | A recursion is found but they have no type annotations while type checking.
+    TypeCheckRecursionException { identifiers :: Set Text }
+  | -- | A literal is used but its type is not imported while type checking.
+    TypeCheckPrimitiveTypeException { identifier :: Text, range :: Maybe (S.Position, S.Position) }
   deriving (Show, Read, Eq, Ord)
 
 instance E.Exception Exception
