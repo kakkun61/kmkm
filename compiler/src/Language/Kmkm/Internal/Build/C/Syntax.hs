@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Language.Kmkm.Build.C.Syntax
+module Language.Kmkm.Internal.Build.C.Syntax
   ( File (..)
   , Element (..)
   , Definition (..)

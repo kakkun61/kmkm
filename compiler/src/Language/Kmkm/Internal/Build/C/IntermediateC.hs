@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Build.C.IntermediateC
+module Language.Kmkm.Internal.Build.C.IntermediateC
   ( translate
   , typeOrigins
   , Module
@@ -12,11 +12,11 @@ module Language.Kmkm.Build.C.IntermediateC
   , definition
   ) where
 
-import qualified Language.Kmkm.Build.C.Syntax as I
-import qualified Language.Kmkm.Exception      as X
-import           Language.Kmkm.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
+import qualified Language.Kmkm.Internal.Build.C.Syntax as I
+import qualified Language.Kmkm.Internal.Exception      as X
+import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
                                                QualifiedIdentifier)
-import qualified Language.Kmkm.Syntax         as S
+import qualified Language.Kmkm.Internal.Syntax         as S
 
 import qualified Barbies.Bare.Layered  as B
 import           Data.Copointed        (Copointed (copoint))

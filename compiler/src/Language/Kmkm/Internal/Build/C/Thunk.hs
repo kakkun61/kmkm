@@ -3,11 +3,11 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | “top-level thunk / compile-time expression” pass.
-module Language.Kmkm.Build.C.Thunk
+module Language.Kmkm.Internal.Build.C.Thunk
   ( thunk
   ) where
 
-import qualified Language.Kmkm.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax as S
 
 import qualified Barbies.Bare       as B
 import           Data.Copointed     (Copointed (copoint))

@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Build.TypeCheckSpec where
+module Language.Kmkm.Internal.Build.TypeCheckSpec where
 
-import Language.Kmkm.Build.TypeCheck
+import Language.Kmkm.Internal.Build.TypeCheck
 
 import Barbies.Bare.Layered
 import Data.Functor.Identity
-import Language.Kmkm.Syntax
+import Language.Kmkm.Internal.Syntax
 import Test.Hspec
 
 spec :: Spec

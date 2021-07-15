@@ -2,11 +2,11 @@
 {-# LANGUAGE LambdaCase #-}
 
 -- | “Lambda lifting” pass.
-module Language.Kmkm.Build.LambdaLift
+module Language.Kmkm.Internal.Build.LambdaLift
   ( lambdaLift
   ) where
 
-import qualified Language.Kmkm.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax as S
 
 import qualified Barbies.Bare               as B
 import           Control.Monad.State.Strict (State, evalState)

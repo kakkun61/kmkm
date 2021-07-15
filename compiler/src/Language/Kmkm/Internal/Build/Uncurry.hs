@@ -6,11 +6,11 @@
 {-# LANGUAGE TypeFamilies          #-}
 
 -- | \"Uncurry\" pass.
-module Language.Kmkm.Build.Uncurry
+module Language.Kmkm.Internal.Build.Uncurry
   ( uncurry
   ) where
 
-import qualified Language.Kmkm.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax as S
 
 import qualified Barbies.Bare       as B
 import           Data.Copointed     (Copointed (copoint))

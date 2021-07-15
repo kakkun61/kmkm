@@ -1,9 +1,9 @@
 -- | “Redundant statement-expression removal” pass.
-module Language.Kmkm.Build.C.Simplify
+module Language.Kmkm.Internal.Build.C.Simplify
   ( simplify
   ) where
 
-import Language.Kmkm.Build.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
+import Language.Kmkm.Internal.Build.C.Syntax (BlockElement (BlockDefinition, BlockStatement),
                                      Definition (ExpressionDefinition, StatementDefinition),
                                      Element (Declaration, Definition, Embedded, TypeDefinition),
                                      Expression (StatementExpression), File (File),

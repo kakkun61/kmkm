@@ -20,7 +20,7 @@
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 #endif
 
-module Language.Kmkm.Syntax
+module Language.Kmkm.Internal.Syntax
   ( -- * Modules and definitions
     Module (..)
   , Definition (..)
@@ -60,7 +60,7 @@ module Language.Kmkm.Syntax
   , Pretty (..)
   ) where
 
-import qualified Language.Kmkm.Exception as X
+import qualified Language.Kmkm.Internal.Exception as X
 
 import           Barbies.Bare.Layered        (BareB (bcover, bstrip), bstripFrom)
 import qualified Barbies.Bare.Layered        as B

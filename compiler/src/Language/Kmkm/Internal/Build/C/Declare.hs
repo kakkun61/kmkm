@@ -1,8 +1,8 @@
-module Language.Kmkm.Build.C.Declare
+module Language.Kmkm.Internal.Build.C.Declare
   ( declare
   ) where
 
-import qualified Language.Kmkm.Build.C.Syntax as I
+import qualified Language.Kmkm.Internal.Build.C.Syntax as I
 
 import           Data.Maybe            (mapMaybe)
 import qualified Language.C.Syntax.AST as C

@@ -4,13 +4,13 @@
 {-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE TypeFamilies     #-}
 
-module Language.Kmkm.Build.NameResolve
+module Language.Kmkm.Internal.Build.NameResolve
   ( nameResolve
   , boundIdentifiers
   , Exception (..)
   ) where
 
-import qualified Language.Kmkm.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax as S
 
 import qualified Barbies.Bare            as B
 import qualified Control.Exception       as E
@@ -23,7 +23,7 @@ import qualified Data.Set                as S
 import           Data.Traversable        (for)
 import qualified Data.Typeable           as Y
 import           GHC.Generics            (Generic)
-import qualified Language.Kmkm.Exception as X
+import qualified Language.Kmkm.Internal.Exception as X
 
 type Module n f = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
 

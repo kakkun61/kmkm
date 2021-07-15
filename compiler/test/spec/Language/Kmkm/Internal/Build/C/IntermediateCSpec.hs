@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Build.C.IntermediateCSpec where
+module Language.Kmkm.Internal.Build.C.IntermediateCSpec where
 
-import           Language.Kmkm.Build.C.IntermediateC
-import qualified Language.Kmkm.Build.C.Syntax        as C
-import qualified Language.Kmkm.Syntax                as S
+import           Language.Kmkm.Internal.Build.C.IntermediateC
+import qualified Language.Kmkm.Internal.Build.C.Syntax        as C
+import qualified Language.Kmkm.Internal.Syntax                as S
 
 import qualified Data.Map.Strict      as M
-import           Language.Kmkm.Syntax
+import           Language.Kmkm.Internal.Syntax
 import           Test.Hspec
 
 spec :: Spec

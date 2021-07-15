@@ -3,12 +3,12 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | “Partial application remove” pass.
-module Language.Kmkm.Build.PartiallyApply
+module Language.Kmkm.Internal.Build.PartiallyApply
   ( partiallyApply
   ) where
 
-import           Language.Kmkm.Exception (unreachable)
-import qualified Language.Kmkm.Syntax    as S
+import           Language.Kmkm.Internal.Exception (unreachable)
+import qualified Language.Kmkm.Internal.Syntax    as S
 
 import qualified Barbies.Bare               as B
 import           Control.Monad              (replicateM)

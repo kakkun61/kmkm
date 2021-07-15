@@ -5,23 +5,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 
-module Language.Kmkm.Compile
+module Language.Kmkm.Internal.Compile
   ( compile
   ) where
 
-import qualified Language.Kmkm.Build.C.C             as KBCC
-import qualified Language.Kmkm.Build.C.Declare       as KBCD
-import qualified Language.Kmkm.Build.C.IntermediateC as KBCI
-import qualified Language.Kmkm.Build.C.Simplify      as KBCS
-import qualified Language.Kmkm.Build.C.Thunk         as KBCT
-import qualified Language.Kmkm.Build.LambdaLift      as KBL
-import qualified Language.Kmkm.Build.PartiallyApply  as KBP
-import qualified Language.Kmkm.Build.TypeCheck       as KBT
-import qualified Language.Kmkm.Build.Uncurry         as KBU
-import qualified Language.Kmkm.Exception             as KE
-import qualified Language.Kmkm.Exception             as X
-import qualified Language.Kmkm.Parse.Sexp            as KP
-import qualified Language.Kmkm.Syntax                as KS
+import qualified Language.Kmkm.Internal.Build.C.C             as KBCC
+import qualified Language.Kmkm.Internal.Build.C.Declare       as KBCD
+import qualified Language.Kmkm.Internal.Build.C.IntermediateC as KBCI
+import qualified Language.Kmkm.Internal.Build.C.Simplify      as KBCS
+import qualified Language.Kmkm.Internal.Build.C.Thunk         as KBCT
+import qualified Language.Kmkm.Internal.Build.LambdaLift      as KBL
+import qualified Language.Kmkm.Internal.Build.PartiallyApply  as KBP
+import qualified Language.Kmkm.Internal.Build.TypeCheck       as KBT
+import qualified Language.Kmkm.Internal.Build.Uncurry         as KBU
+import qualified Language.Kmkm.Internal.Exception             as KE
+import qualified Language.Kmkm.Internal.Exception             as X
+import qualified Language.Kmkm.Internal.Parse.Sexp            as KP
+import qualified Language.Kmkm.Internal.Syntax                as KS
 
 import qualified Algebra.Graph.AdjacencyMap           as G
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
@@ -46,7 +46,7 @@ import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 import qualified Language.C.Pretty                    as C
 import           Language.C.Syntax.AST                (CTranslUnit)
-import qualified Language.Kmkm.Build.NameResolve      as KBN
+import qualified Language.Kmkm.Internal.Build.NameResolve      as KBN
 import           System.FilePath                      (isPathSeparator, pathSeparator)
 import qualified System.FilePath                      as F
 import qualified Text.PrettyPrint                     as P

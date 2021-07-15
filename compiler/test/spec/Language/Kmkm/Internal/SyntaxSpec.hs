@@ -1,9 +1,9 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.SyntaxSpec where
+module Language.Kmkm.Internal.SyntaxSpec where
 
-import Language.Kmkm.Syntax
+import Language.Kmkm.Internal.Syntax
 
 import Barbies.Bare.Layered
 import Data.Functor.Barbie.Layered

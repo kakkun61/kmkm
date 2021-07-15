@@ -15,14 +15,14 @@
 #endif
 
 -- | \"Type check\" pass.
-module Language.Kmkm.Build.TypeCheck
+module Language.Kmkm.Internal.Build.TypeCheck
   ( typeCheck
   , Exception (..)
   ) where
 
-import           Language.Kmkm.Exception (unreachable)
-import qualified Language.Kmkm.Exception as X
-import qualified Language.Kmkm.Syntax    as S
+import           Language.Kmkm.Internal.Exception (unreachable)
+import qualified Language.Kmkm.Internal.Exception as X
+import qualified Language.Kmkm.Internal.Syntax    as S
 
 import qualified Algebra.Graph.AdjacencyMap           as G hiding (vertexList)
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)

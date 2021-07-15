@@ -1,7 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 
-module Language.Kmkm.Exception
+module Language.Kmkm.Internal.Exception
   ( Exception (..)
   , unreachable
   ) where

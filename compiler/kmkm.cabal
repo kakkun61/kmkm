@@ -44,25 +44,24 @@ library
           warnings
   hs-source-dirs: src
   exposed-modules: Language.Kmkm
-                   Language.Kmkm.Build.C.C
-                   Language.Kmkm.Build.C.Declare
-                   Language.Kmkm.Build.C.IntermediateC
-                   Language.Kmkm.Build.C.Simplify
-                   Language.Kmkm.Build.C.Syntax
-                   Language.Kmkm.Build.C.Thunk
-                   Language.Kmkm.Build.LambdaLift
-                   Language.Kmkm.Build.NameResolve
-                   Language.Kmkm.Build.PartiallyApply
-                   Language.Kmkm.Build.TypeCheck
-                   Language.Kmkm.Build.Uncurry
-                   Language.Kmkm.Compile
-                   Language.Kmkm.Exception
-                   Language.Kmkm.Parse.Sexp
-                   Language.Kmkm.Syntax
-  other-modules: Barbies.Bare.Layered
-                 Data.Functor.Barbie.Layered
+                   Language.Kmkm.Internal.Build.C.C
+                   Language.Kmkm.Internal.Build.C.Declare
+                   Language.Kmkm.Internal.Build.C.IntermediateC
+                   Language.Kmkm.Internal.Build.C.Simplify
+                   Language.Kmkm.Internal.Build.C.Syntax
+                   Language.Kmkm.Internal.Build.C.Thunk
+                   Language.Kmkm.Internal.Build.LambdaLift
+                   Language.Kmkm.Internal.Build.NameResolve
+                   Language.Kmkm.Internal.Build.PartiallyApply
+                   Language.Kmkm.Internal.Build.TypeCheck
+                   Language.Kmkm.Internal.Build.Uncurry
+                   Language.Kmkm.Internal.Compile
+                   Language.Kmkm.Internal.Exception
+                   Language.Kmkm.Internal.Parse.Sexp
+                   Language.Kmkm.Internal.Syntax
   build-depends: algebraic-graphs,
                  barbies,
+                 barbies-layered,
                  containers,
                  data-default-class,
                  filepath,
@@ -112,11 +111,12 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test/spec
-  other-modules: Language.Kmkm.Build.C.IntermediateCSpec
-                 Language.Kmkm.Build.TypeCheckSpec
-                 Language.Kmkm.Parse.SexpSpec
-                 Language.Kmkm.SyntaxSpec
+  other-modules: Language.Kmkm.Internal.Build.C.IntermediateCSpec
+                 Language.Kmkm.Internal.Build.TypeCheckSpec
+                 Language.Kmkm.Internal.Parse.SexpSpec
+                 Language.Kmkm.Internal.SyntaxSpec
   build-depends: kmkm == 0.1.0.0,
+                 barbies-layered,
                  containers,
                  hspec,
                  megaparsec,

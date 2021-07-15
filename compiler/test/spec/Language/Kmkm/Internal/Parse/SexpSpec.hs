@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Parse.SexpSpec where
+module Language.Kmkm.Internal.Parse.SexpSpec where
 
-import Language.Kmkm.Parse.Sexp
-import Language.Kmkm.Syntax
+import Language.Kmkm.Internal.Parse.Sexp
+import Language.Kmkm.Internal.Syntax
 
 import           Barbies.Bare.Layered (bstripFrom)
 import           Data.Copointed       (Copointed (copoint))

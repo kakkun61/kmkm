@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Kmkm.Parse.Sexp
+module Language.Kmkm.Internal.Parse.Sexp
   ( parse
   , parse'
   , module'
@@ -21,8 +21,8 @@ module Language.Kmkm.Parse.Sexp
   , Exception (..)
   ) where
 
-import qualified Language.Kmkm.Exception as X
-import qualified Language.Kmkm.Syntax    as S
+import qualified Language.Kmkm.Internal.Exception as X
+import qualified Language.Kmkm.Internal.Syntax    as S
 
 import qualified Barbies.Bare               as B
 import           Control.Applicative        (Alternative (many, (<|>)))

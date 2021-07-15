@@ -14,12 +14,12 @@ module Language.Kmkm
   , S.Position (..)
   ) where
 
-import qualified Language.Kmkm.Build.NameResolve as N
-import qualified Language.Kmkm.Build.TypeCheck   as T
-import qualified Language.Kmkm.Compile           as C
-import qualified Language.Kmkm.Exception         as X
-import qualified Language.Kmkm.Parse.Sexp        as P
-import qualified Language.Kmkm.Syntax            as S
+import qualified Language.Kmkm.Internal.Build.NameResolve as N
+import qualified Language.Kmkm.Internal.Build.TypeCheck   as T
+import qualified Language.Kmkm.Internal.Compile           as C
+import qualified Language.Kmkm.Internal.Exception         as X
+import qualified Language.Kmkm.Internal.Parse.Sexp        as P
+import qualified Language.Kmkm.Internal.Syntax            as S
 
 import           Control.Exception.Safe (MonadCatch, catch, throw)
 import qualified Control.Exception.Safe as E
