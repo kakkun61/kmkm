@@ -14,8 +14,8 @@ module Language.Kmkm.Internal.Build.C.IntermediateC
 
 import qualified Language.Kmkm.Internal.Build.C.Syntax as I
 import qualified Language.Kmkm.Internal.Exception      as X
-import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdentifier, UserIdentifier), ModuleName (ModuleName),
-                                               QualifiedIdentifier)
+import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdentifier, UserIdentifier),
+                                                        ModuleName (ModuleName), QualifiedIdentifier)
 import qualified Language.Kmkm.Internal.Syntax         as S
 
 import qualified Barbies.Bare.Layered  as B

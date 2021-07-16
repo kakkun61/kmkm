@@ -7,7 +7,7 @@ import           Language.Kmkm.Internal.Build.C.IntermediateC
 import qualified Language.Kmkm.Internal.Build.C.Syntax        as C
 import qualified Language.Kmkm.Internal.Syntax                as S
 
-import qualified Data.Map.Strict      as M
+import qualified Data.Map.Strict               as M
 import           Language.Kmkm.Internal.Syntax
 import           Test.Hspec
 

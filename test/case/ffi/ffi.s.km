@@ -1,8 +1,8 @@
 (module
   ffi
-  (list)
   (list
-    (define unit (list unit))
+    kmkm.unit)
+  (list
     (bind-value-foreign
       hello
       (list (system-header "stdio.h"))
@@ -11,4 +11,4 @@
           printf("hello\n");
         }
       """
-      (procedure unit))))
+      (procedure kmkm.unit.unit))))

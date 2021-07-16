@@ -7,6 +7,7 @@
 
 module Language.Kmkm.Internal.Compile
   ( compile
+  , Exception (..)
   ) where
 
 import qualified Language.Kmkm.Internal.Build.C.C             as KBCC
@@ -23,33 +24,33 @@ import qualified Language.Kmkm.Internal.Exception             as X
 import qualified Language.Kmkm.Internal.Parse.Sexp            as KP
 import qualified Language.Kmkm.Internal.Syntax                as KS
 
-import qualified Algebra.Graph.AdjacencyMap           as G
-import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
-import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
-import qualified Barbies.Bare                         as B
-import qualified Control.Exception                    as E
-import           Control.Exception.Safe               (MonadCatch, MonadThrow, throw)
-import           Control.Monad                        (when)
-import           Data.Bifunctor                       (Bifunctor (second))
-import           Data.Copointed                       (Copointed (copoint))
-import           Data.Either                          (fromRight)
-import           Data.List.NonEmpty                   (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                   as N
-import           Data.Map.Strict                      (Map)
-import qualified Data.Map.Strict                      as M
-import           Data.Maybe                           (fromMaybe, mapMaybe)
-import qualified Data.Set                             as KS
-import qualified Data.Set                             as S
-import           Data.Text                            (Text)
-import qualified Data.Text                            as T
-import qualified Data.Typeable                        as Y
-import           GHC.Generics                         (Generic)
-import qualified Language.C.Pretty                    as C
-import           Language.C.Syntax.AST                (CTranslUnit)
-import qualified Language.Kmkm.Internal.Build.NameResolve      as KBN
-import           System.FilePath                      (isPathSeparator, pathSeparator)
-import qualified System.FilePath                      as F
-import qualified Text.PrettyPrint                     as P
+import qualified Algebra.Graph.AdjacencyMap               as G
+import qualified Algebra.Graph.AdjacencyMap.Algorithm     as G
+import qualified Algebra.Graph.NonEmpty.AdjacencyMap      as GN
+import qualified Barbies.Bare                             as B
+import qualified Control.Exception                        as E
+import           Control.Exception.Safe                   (MonadCatch, MonadThrow, throw)
+import           Control.Monad                            (when)
+import           Data.Bifunctor                           (Bifunctor (second))
+import           Data.Copointed                           (Copointed (copoint))
+import           Data.Either                              (fromRight)
+import           Data.List.NonEmpty                       (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty                       as N
+import           Data.Map.Strict                          (Map)
+import qualified Data.Map.Strict                          as M
+import           Data.Maybe                               (fromMaybe, mapMaybe)
+import qualified Data.Set                                 as KS
+import qualified Data.Set                                 as S
+import           Data.Text                                (Text)
+import qualified Data.Text                                as T
+import qualified Data.Typeable                            as Y
+import           GHC.Generics                             (Generic)
+import qualified Language.C.Pretty                        as C
+import           Language.C.Syntax.AST                    (CTranslUnit)
+import qualified Language.Kmkm.Internal.Build.NameResolve as KBN
+import           System.FilePath                          (isPathSeparator, pathSeparator)
+import qualified System.FilePath                          as F
+import qualified Text.PrettyPrint                         as P
 
 compile
   :: MonadCatch m
@@ -106,10 +107,10 @@ readRecursively readFile =
         moduleName' = copoint moduleName
         moduleName'' = filePathToModuleName path
         deps' = copoint <$> copoint deps
-      when (moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.range moduleName
+      when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.range moduleName
       (g, m) <- acc
       let
-        m' = M.insert moduleName' module' m
+        m' = M.insert moduleName' module' m -- TODO 今 main モジュールで、すでに main モジュールがあったらエラー
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
         depSet = KS.map (moduleNameToFilePath . copoint) $ KS.fromList $ copoint deps
         readSet = KS.map moduleNameToFilePath $ M.keysSet m'

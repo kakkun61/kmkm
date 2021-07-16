@@ -2,13 +2,14 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Language.Kmkm (Exception (NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
+import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
                       Position (Position), compile)
 
 import           Control.Exception.Safe (catch)
 import           Control.Monad          (replicateM)
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import qualified Data.List              as L
+import qualified Data.List.NonEmpty     as N
 import qualified Data.Set               as S
 import           Data.Text              (Text)
 import qualified Data.Text              as T
@@ -22,7 +23,7 @@ import           System.Directory       (createDirectoryIfMissing, doesFileExist
 import           System.Exit            (exitFailure)
 import           System.FilePath        ((</>))
 import qualified System.FilePath        as F
-import           System.IO              (Handle, IOMode (ReadMode), hPutStrLn, openFile, stderr)
+import           System.IO              (Handle, IOMode (ReadMode), hPutStr, hPutStrLn, openFile, stderr)
 
 main :: IO ()
 main = withUtf8 $ O.run_ main'
@@ -61,30 +62,40 @@ main' output libraries dryRun src =
           case e of
             ParseException m -> do
               hPutStrLn stderr "parsing error:"
-              hPutStrLn stderr m
+              hPutStr stderr m
             NameResolveUnknownIdentifierException i r -> do
               T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
-              T.hPutStrLn stderr "\tThe identifier may not imported or may have wrong letters."
+              T.hPutStrLn stderr "The identifier may not imported or may have wrong letters."
             TypeCheckNotFoundException i r -> do
               T.hPutStrLn stderr $ "type-checking error: not found error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
-              T.hPutStrLn stderr "\tThe identifier may not imported or may have wrong letters."
+              T.hPutStrLn stderr "The identifier may not imported or may have wrong letters."
             TypeCheckMismatchException e a r -> do
               T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
               maybe (pure ()) (printRange stderr (O.get src)) r
-              T.hPutStrLn stderr "\tThe expected type and actual one are different."
+              T.hPutStrLn stderr "The expected type and actual one are different."
             TypeCheckPrimitiveTypeException i r -> do
               T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> i
               maybe (pure ()) (printRange stderr (O.get src)) r
-              T.hPutStrLn stderr "\tA primitive is used but its type is not imported."
+              T.hPutStrLn stderr "A primitive is used but its type is not imported."
             TypeCheckBindProcedureEndException r -> do
               T.hPutStrLn stderr "type-checking error: bind procedure end error"
               maybe (pure ()) (printRange stderr (O.get src)) r
-              T.hPutStrLn stderr "\tAn end of a procedure must be a binding step."
+              T.hPutStrLn stderr "An end of a procedure must be a binding step."
             TypeCheckRecursionException is -> do
               T.hPutStrLn stderr $ "type-checking error: recursion error: " <> T.intercalate ", " (S.toList is)
-              T.hPutStrLn stderr "\tSome recursion definitions are found but they have no type annotations."
+              T.hPutStrLn stderr "Some recursion definitions are found but they have no type annotations."
+            CompileRecursionException ms -> do
+              T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
+              T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."
+            CompileModuleNameMismatchException f m r -> do
+              T.hPutStrLn stderr $ "compile error: module name mismatch error: file name: " <> T.pack f <> " module name: " <> m
+              maybe (pure ()) (printRange stderr (O.get src)) r
+              T.hPutStrLn stderr "A file's name and its enclosed module's name is mismatched while compiling."
+            CompileDotDotPathException f -> do
+              T.hPutStrLn stderr $ "compile error: \"..\" path error: " <> T.pack f
+              T.hPutStrLn stderr "A file path contains \"..\" while compiling."
           exitFailure
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath

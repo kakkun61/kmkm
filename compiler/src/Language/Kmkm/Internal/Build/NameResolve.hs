@@ -12,17 +12,17 @@ module Language.Kmkm.Internal.Build.NameResolve
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Barbies.Bare            as B
-import qualified Control.Exception       as E
-import           Control.Exception.Safe  (MonadThrow, throw)
-import           Data.Copointed          (Copointed (copoint))
-import           Data.Map.Strict         (Map)
-import qualified Data.Map.Strict         as M
-import           Data.Set                (Set)
-import qualified Data.Set                as S
-import           Data.Traversable        (for)
-import qualified Data.Typeable           as Y
-import           GHC.Generics            (Generic)
+import qualified Barbies.Bare                     as B
+import qualified Control.Exception                as E
+import           Control.Exception.Safe           (MonadThrow, throw)
+import           Data.Copointed                   (Copointed (copoint))
+import           Data.Map.Strict                  (Map)
+import qualified Data.Map.Strict                  as M
+import           Data.Set                         (Set)
+import qualified Data.Set                         as S
+import           Data.Traversable                 (for)
+import qualified Data.Typeable                    as Y
+import           GHC.Generics                     (Generic)
 import qualified Language.Kmkm.Internal.Exception as X
 
 type Module n f = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f
