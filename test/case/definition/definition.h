@@ -1,11 +1,10 @@
 #ifndef DEFINITION_H
-
 #define DEFINITION_H
-
 #include "kmkm/prim.h"
 
 enum definition_myBool_tag {
-  definition_myFalse_tag, definition_myTrue_tag
+  definition_myFalse_tag,
+  definition_myTrue_tag
 };
 
 struct definition_myBool {
@@ -17,13 +16,15 @@ struct definition_myBool const definition_myFalse;
 struct definition_myBool const definition_myTrue;
 
 struct definition_fraction {
-  kmkm_prim_int definition_numerator; kmkm_prim_int definition_denominator;
+  kmkm_prim_int definition_numerator;
+  kmkm_prim_int definition_denominator;
 };
 
 struct definition_fraction definition_fraction(kmkm_prim_int const definition_numerator, kmkm_prim_int const definition_denominator);
 
 enum definition_passenger_tag {
-  definition_person_tag, definition_pet_tag
+  definition_person_tag,
+  definition_pet_tag
 };
 
 struct definition_passenger {

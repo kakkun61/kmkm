@@ -62,9 +62,9 @@ definition =
         field :: (Functor f, Copointed f, S.HasPosition f) => f (a, f (Type 'S.Curried f)) -> f (a, f (Type 'S.Uncurried f))
         field = fmap $ \case (i, t) -> (i, typ t)
     S.TypeBind i t -> S.TypeBind i $ typ t
-    S.ForeignTypeBind i hs c -> S.ForeignTypeBind i hs c
+    S.ForeignTypeBind i c -> S.ForeignTypeBind i c
     S.ValueBind (S.ValueBindU i v) -> S.ValueBind $ S.ValueBindU i $ typedValue v
-    S.ForeignValueBind i hs c t -> S.ForeignValueBind i hs c $ typ t
+    S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
 
 typ :: (Functor f, Copointed f, S.HasPosition f) => f (Type 'S.Curried f) -> f (Type 'S.Uncurried f)
 typ v =

@@ -16,6 +16,7 @@ import qualified Language.Kmkm.Internal.Build.C.IntermediateC as KBCI
 import qualified Language.Kmkm.Internal.Build.C.Simplify      as KBCS
 import qualified Language.Kmkm.Internal.Build.C.Thunk         as KBCT
 import qualified Language.Kmkm.Internal.Build.LambdaLift      as KBL
+import qualified Language.Kmkm.Internal.Build.NameResolve     as KBN
 import qualified Language.Kmkm.Internal.Build.PartiallyApply  as KBP
 import qualified Language.Kmkm.Internal.Build.TypeCheck       as KBT
 import qualified Language.Kmkm.Internal.Build.Uncurry         as KBU
@@ -24,33 +25,30 @@ import qualified Language.Kmkm.Internal.Exception             as X
 import qualified Language.Kmkm.Internal.Parse.Sexp            as KP
 import qualified Language.Kmkm.Internal.Syntax                as KS
 
-import qualified Algebra.Graph.AdjacencyMap               as G
-import qualified Algebra.Graph.AdjacencyMap.Algorithm     as G
-import qualified Algebra.Graph.NonEmpty.AdjacencyMap      as GN
-import qualified Barbies.Bare                             as B
-import qualified Control.Exception                        as E
-import           Control.Exception.Safe                   (MonadCatch, MonadThrow, throw)
-import           Control.Monad                            (when)
-import           Data.Bifunctor                           (Bifunctor (second))
-import           Data.Copointed                           (Copointed (copoint))
-import           Data.Either                              (fromRight)
-import           Data.List.NonEmpty                       (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                       as N
-import           Data.Map.Strict                          (Map)
-import qualified Data.Map.Strict                          as M
-import           Data.Maybe                               (fromMaybe, mapMaybe)
-import qualified Data.Set                                 as KS
-import qualified Data.Set                                 as S
-import           Data.Text                                (Text)
-import qualified Data.Text                                as T
-import qualified Data.Typeable                            as Y
-import           GHC.Generics                             (Generic)
-import qualified Language.C.Pretty                        as C
-import           Language.C.Syntax.AST                    (CTranslUnit)
-import qualified Language.Kmkm.Internal.Build.NameResolve as KBN
-import           System.FilePath                          (isPathSeparator, pathSeparator)
-import qualified System.FilePath                          as F
-import qualified Text.PrettyPrint                         as P
+import qualified Algebra.Graph.AdjacencyMap           as G
+import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
+import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
+import qualified Barbies.Bare                         as B
+import qualified Control.Exception                    as E
+import           Control.Exception.Safe               (MonadCatch, MonadThrow, throw)
+import           Control.Monad                        (when)
+import           Data.Bifunctor                       (Bifunctor (second))
+import           Data.Copointed                       (Copointed (copoint))
+import           Data.Either                          (fromRight)
+import           Data.Foldable                        (Foldable (fold))
+import           Data.List.NonEmpty                   (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty                   as N
+import           Data.Map.Strict                      (Map)
+import qualified Data.Map.Strict                      as M
+import           Data.Maybe                           (fromMaybe, mapMaybe)
+import qualified Data.Set                             as KS
+import qualified Data.Set                             as S
+import           Data.Text                            (Text)
+import qualified Data.Text                            as T
+import qualified Data.Typeable                        as Y
+import           GHC.Generics                         (Generic)
+import           System.FilePath                      (isPathSeparator, pathSeparator)
+import qualified System.FilePath                      as F
 
 compile
   :: MonadCatch m
@@ -83,9 +81,8 @@ compile readFile writeFile writeLog src = do
     write (k, (c, h)) = do
       let
         path = moduleNameToFilePath k
-        style = P.Style P.PageMode maxBound 1
-      writeFile (F.addExtension path "c") $ T.pack $ P.renderStyle style c
-      writeFile (F.addExtension path "h") $ T.pack $ P.renderStyle style h
+      writeFile (F.addExtension path "c") c
+      writeFile (F.addExtension path "h") h
     build2_ typeOrigins m =
       let KS.Module n _ _ = copoint m
       in do
@@ -152,37 +149,37 @@ build2
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered f)
-  -> m (P.Doc, P.Doc)
+  -> m (Text, Text)
 build2 writeLog typeOrigins m = do
   let KS.Module n ms _ = copoint m
-  (hs, c, h) <- build2' writeLog typeOrigins m
+  (c, h) <- build2' writeLog typeOrigins m
   let
     n'@(KS.ModuleName i) = copoint n
     ms' = copoint <$> copoint ms
-    key = P.text $ T.unpack $ T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
-    newline = P.char '\n'
-    include (KS.SystemHeader h) = P.text $ T.unpack $ "#include <" <> h <> ">\n"
-    include (KS.LocalHeader h)  = P.text $ T.unpack $ "#include \"" <> h <> "\"\n"
+    key = T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
+    newline :: Text
+    newline = "\n"
+    include (KS.SystemHeader h) = "#include <" <> h <> ">\n"
+    include (KS.LocalHeader h)  = "#include \"" <> h <> "\"\n"
   pure
-    ( mconcat $
+    ( fold $
         (include . moduleNameToHeaderPath <$> n' : ms') ++
-        (include <$> hs) ++
-        [ C.pretty c
+        [ newline
+        , c
         , newline
         ]
-    , mconcat $
-        [ P.text "#ifndef "
+    , fold $
+        [ "#ifndef "
         , key
         , newline
-        , P.text "#define "
+        , "#define "
         , key
         , newline
         ] ++
-        (include <$> hs) ++
         (include . moduleNameToHeaderPath <$> ms') ++
-        [ C.pretty h
+        [ h
         , newline
-        , P.text "#endif"
+        , "#endif"
         , newline
         ]
     )
@@ -211,13 +208,13 @@ build2'
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed B.Covered f)
-  -> m ([KS.CHeader], CTranslUnit, CTranslUnit)
+  -> m (Text, Text)
 build2' writeLog typeOrigins m6 = do
   let m7 = KBCI.translate typeOrigins m6
-  writeLog $ "abstract C file: " <> T.pack (show $ snd m7)
-  let (hs, c) = second KBCS.simplify m7
+  writeLog $ "abstract C file: " <> T.pack (show m7)
+  let c = KBCS.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
-  pure (hs, KBCC.translate c, KBCC.translate $ KBCD.declare c)
+  pure (KBCC.render c, KBCC.render $ KBCD.declare c)
 
 filePathToModuleName :: FilePath -> KS.ModuleName
 filePathToModuleName path = KS.ModuleName $ fromMaybe X.unreachable $ N.nonEmpty $ T.split isPathSeparator $ T.pack path

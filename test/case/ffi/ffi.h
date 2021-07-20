@@ -1,10 +1,12 @@
 #ifndef FFI_H
 #define FFI_H
-
-#include <stdio.h>
-
+#include "kmkm/prim.h"
 #include "kmkm/unit.h"
 
-void ffi_hello(void);
 
+kmkm_prim_int ffi_increment(kmkm_prim_int const v);
+
+#include<stdio.h>
+
+struct kmkm_unit_unit ffi_hello(void);
 #endif

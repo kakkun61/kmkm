@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds                #-}
 {-# LANGUAGE DeriveGeneric            #-}
 {-# LANGUAGE DerivingVia              #-}
+{-# LANGUAGE DuplicateRecordFields    #-}
 {-# LANGUAGE EmptyDataDeriving        #-}
 {-# LANGUAGE FlexibleContexts         #-}
 {-# LANGUAGE FlexibleInstances        #-}
@@ -24,7 +25,8 @@ module Language.Kmkm.Internal.Syntax
   ( -- * Modules and definitions
     Module (..)
   , Definition (..)
-  , CDefinition (..)
+  , EmbeddedValue (..)
+  , EmbeddedType (..)
   , CHeader (..)
   , ValueBind (..)
     -- * Types
@@ -67,7 +69,6 @@ import qualified Barbies.Bare.Layered        as B
 import           Data.Bifunctor              (Bifunctor (bimap))
 import           Data.Copointed              (Copointed (copoint))
 import           Data.Foldable               (Foldable (fold))
-import           Data.Function               (on)
 import           Data.Functor.Barbie.Layered (FunctorB (bmap))
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import qualified Data.Kind                   as K
@@ -79,9 +80,6 @@ import qualified Data.Text                   as T
 import           GHC.Exts                    (IsList)
 import qualified GHC.Exts                    as E
 import           GHC.Generics                (Generic)
-import qualified Language.C.Pretty           as C
-import           Language.C.Syntax.AST       (CExtDecl)
-import qualified Text.PrettyPrint            as P
 
 -- Module
 
@@ -116,8 +114,8 @@ data Definition n c l t b f
   = DataDefinition (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n c b f))])])
   | TypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
   | ValueBind (ValueBind n c l t b f)
-  | ForeignTypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f CHeader]) (B.Wear b f CDefinition)
-  | ForeignValueBind (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f CHeader]) (B.Wear b f CDefinition) (B.Wear b f (Type n c b f))
+  | ForeignTypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (EmbeddedType b f))
+  | ForeignValueBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (EmbeddedValue b f)) (B.Wear b f (Type n c b f))
   deriving Generic
 
 type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Type -> (K.Type -> K.Type) -> K.Constraint
@@ -128,7 +126,8 @@ type DefinitionConstraint cls n c l t b f =
   , cls (ValueBind n c l t b f)
   , cls (B.Wear b f CHeader)
   , cls (B.Wear b f [B.Wear b f CHeader])
-  , cls (B.Wear b f CDefinition)
+  , cls (B.Wear b f (EmbeddedValue b f))
+  , cls (B.Wear b f (EmbeddedType b f))
   )
 
 deriving instance DefinitionConstraint Show n c l t b f => Show (Definition n c l t b f)
@@ -146,8 +145,8 @@ instance (FunctorB (Type n c B.Covered), FunctorB (ValueBind n c l t B.Covered))
       field = fmap (bimap f (fmap (bmap f) . f)) . f
   bmap f (TypeBind i t) = TypeBind (f i) (bmap f <$> f t)
   bmap f (ValueBind b) = ValueBind (bmap f b)
-  bmap f (ForeignTypeBind i hs c) =  ForeignTypeBind (f i) (fmap f <$> f hs) (f c)
-  bmap f (ForeignValueBind i hs c t) = ForeignValueBind (f i) (fmap f <$> f hs) (f c) (bmap f <$> f t)
+  bmap f (ForeignTypeBind i c) =  ForeignTypeBind (f i) (bmap f <$> f c)
+  bmap f (ForeignValueBind i c t) = ForeignValueBind (f i) (bmap f <$> f c) (bmap f <$> f t)
 
 instance (BareB (ValueBind n c l t), BareB (FunctionType n c)) => BareB (Definition n c l t) where
   bstrip (DataDefinition (Identity i) (Identity cs)) =
@@ -157,8 +156,8 @@ instance (BareB (ValueBind n c l t), BareB (FunctionType n c)) => BareB (Definit
       field (Identity (Identity i, Identity t)) = (i, bstrip t)
   bstrip (TypeBind (Identity i) (Identity t)) = TypeBind i (bstrip t)
   bstrip (ValueBind b) = ValueBind (bstrip b)
-  bstrip (ForeignTypeBind (Identity i) (Identity hs) (Identity c)) = ForeignTypeBind i (runIdentity <$> hs) c
-  bstrip (ForeignValueBind (Identity i) (Identity hs) (Identity c) (Identity t)) = ForeignValueBind i (runIdentity <$> hs) c (bstrip t)
+  bstrip (ForeignTypeBind (Identity i) (Identity c)) = ForeignTypeBind i (bstrip c)
+  bstrip (ForeignValueBind (Identity i) (Identity c) (Identity t)) = ForeignValueBind i (bstrip c) (bstrip t)
 
   bcover (DataDefinition i cs) =
     DataDefinition (Identity i) (Identity $ constructor <$> cs)
@@ -167,8 +166,8 @@ instance (BareB (ValueBind n c l t), BareB (FunctionType n c)) => BareB (Definit
       field (i, t) = Identity (Identity i, Identity $ bcover t)
   bcover (TypeBind i t) = TypeBind (Identity i) (Identity $ bcover t)
   bcover (ValueBind b) = ValueBind (bcover b)
-  bcover (ForeignTypeBind i hs c) = ForeignTypeBind (Identity i) (Identity $ Identity <$> hs) (Identity c)
-  bcover (ForeignValueBind i hs c t) = ForeignValueBind (Identity i) (Identity $ Identity <$> hs) (Identity c) (Identity $ bcover t)
+  bcover (ForeignTypeBind i c) = ForeignTypeBind (Identity i) (Identity $ bcover c)
+  bcover (ForeignValueBind i c t) = ForeignValueBind (Identity i) (Identity $ bcover c) (Identity $ bcover t)
 
 -- ValueBind
 
@@ -231,15 +230,43 @@ instance (BareB (Value n c 'LambdaLifted t), BareB (FunctionType n c)) => BareB 
     where
       parameter (i, t) = Identity (Identity i, Identity $ bcover t)
 
--- CDefinition
+-- EmbeddedValue
 
-newtype CDefinition = CDefinition CExtDecl deriving (Show, Generic)
+data EmbeddedValue b f
+  = CValue { include :: B.Wear b f Text, parameters :: B.Wear b f [B.Wear b f Text], body :: B.Wear b f Text }
+  deriving Generic
 
-instance Eq CDefinition where
-  (==) = (==) `on` (\(CDefinition c) -> P.render $ C.pretty c)
+deriving instance (Show (B.Wear b f Text), Show (B.Wear b f [B.Wear b f Text])) => Show (EmbeddedValue b f)
+deriving instance (Read (B.Wear b f Text), Read (B.Wear b f [B.Wear b f Text])) => Read (EmbeddedValue b f)
+deriving instance (Eq (B.Wear b f Text), Eq (B.Wear b f [B.Wear b f Text])) => Eq (EmbeddedValue b f)
+deriving instance (Ord (B.Wear b f Text), Ord (B.Wear b f [B.Wear b f Text])) => Ord (EmbeddedValue b f)
 
-instance Ord CDefinition where
-  compare = compare `on` (\(CDefinition c) -> P.render $ C.pretty c)
+instance FunctorB (EmbeddedValue B.Covered) where
+  bmap f (CValue i ps b) = CValue (f i) (fmap f <$> f ps) (f b)
+
+instance BareB EmbeddedValue where
+  bstrip (CValue (Identity i) (Identity ps) (Identity b)) = CValue i (runIdentity <$> ps) b
+
+  bcover (CValue i ps b) = CValue (Identity i) (Identity $ Identity <$> ps) (Identity b)
+
+-- EmbeddedType
+
+data EmbeddedType b f
+  = CType { include :: B.Wear b f Text, body :: B.Wear b f Text }
+  deriving Generic
+
+deriving instance (Show (B.Wear b f Text), Show (B.Wear b f [B.Wear b f Text])) => Show (EmbeddedType b f)
+deriving instance (Read (B.Wear b f Text), Read (B.Wear b f [B.Wear b f Text])) => Read (EmbeddedType b f)
+deriving instance (Eq (B.Wear b f Text), Eq (B.Wear b f [B.Wear b f Text])) => Eq (EmbeddedType b f)
+deriving instance (Ord (B.Wear b f Text), Ord (B.Wear b f [B.Wear b f Text])) => Ord (EmbeddedType b f)
+
+instance FunctorB (EmbeddedType B.Covered) where
+  bmap f (CType i b) = CType (f i) (f b)
+
+instance BareB EmbeddedType where
+  bstrip (CType (Identity i) (Identity b)) = CType i b
+
+  bcover (CType i b) = CType (Identity i) (Identity b)
 
 -- CHeader
 

@@ -158,10 +158,10 @@ replaceTerm typedValueBinds =
   fmap $ \case
     S.DataDefinition i cs -> S.DataDefinition i cs
     S.TypeBind i t -> S.TypeBind i t
-    S.ForeignTypeBind i hs c -> S.ForeignTypeBind i hs c
+    S.ForeignTypeBind i c -> S.ForeignTypeBind i c
     S.ValueBind (S.ValueBindU i _) ->
       S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup (copoint i) typedValueBinds)
-    S.ForeignValueBind i hs c t -> S.ForeignValueBind i hs c t
+    S.ForeignValueBind i c t -> S.ForeignValueBind i c t
 
 valueBind :: Copointed f => f (Definition t f) -> Maybe (S.QualifiedIdentifier, f (Value t f))
 valueBind d | S.ValueBind (S.ValueBindU i v) <- copoint d = Just (copoint i, v)

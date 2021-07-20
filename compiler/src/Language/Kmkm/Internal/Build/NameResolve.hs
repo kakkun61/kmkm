@@ -96,7 +96,7 @@ definition valueAffiliations typeAffiliations moduleName affiliation =
   traverse $ \case
     S.ValueBind b -> S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName affiliation b
     S.TypeBind i t -> S.TypeBind (S.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
-    S.ForeignTypeBind i hs c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) hs c
+    S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) c
     S.DataDefinition i cs ->
       S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> sequence (traverse constructor <$> cs)
       where
@@ -108,7 +108,7 @@ definition valueAffiliations typeAffiliations moduleName affiliation =
           traverse $ \(i, t) -> do
             t' <- typ typeAffiliations moduleName t
             pure (S.GlobalIdentifier moduleName <$> i, t')
-    S.ForeignValueBind i hs c t -> S.ForeignValueBind (S.GlobalIdentifier moduleName <$> i) hs c <$> typ typeAffiliations moduleName t
+    S.ForeignValueBind i c t -> S.ForeignValueBind (S.GlobalIdentifier moduleName <$> i) c <$> typ typeAffiliations moduleName t
 
 valueBind
   :: ( MonadThrow m
@@ -300,17 +300,17 @@ boundValueIdentifier =
   where
     boundValueIdentifier' (S.DataDefinition _ cs)          = S.fromList $ fst <$> cs
     boundValueIdentifier' (S.ValueBind (S.ValueBindU i _)) = S.singleton i
-    boundValueIdentifier' (S.ForeignValueBind i _ _ _)     = S.singleton i
+    boundValueIdentifier' (S.ForeignValueBind i _ _)       = S.singleton i
     boundValueIdentifier' _                                = S.empty
 
 boundTypeIdentifier :: (Functor f, Copointed f) => f (Definition 'S.NameUnresolved f) -> Set S.Identifier
 boundTypeIdentifier =
   boundTypeIdentifier' . S.strip
   where
-    boundTypeIdentifier' (S.DataDefinition i _)    = S.singleton i
-    boundTypeIdentifier' (S.TypeBind i _)          = S.singleton i
-    boundTypeIdentifier' (S.ForeignTypeBind i _ _) = S.singleton i
-    boundTypeIdentifier' _                         = S.empty
+    boundTypeIdentifier' (S.DataDefinition i _)  = S.singleton i
+    boundTypeIdentifier' (S.TypeBind i _)        = S.singleton i
+    boundTypeIdentifier' (S.ForeignTypeBind i _) = S.singleton i
+    boundTypeIdentifier' _                       = S.empty
 
 importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =

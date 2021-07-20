@@ -39,22 +39,15 @@ import qualified Data.List.NonEmpty         as N
 import           Data.Maybe                 (fromMaybe)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import qualified Data.Text.Encoding         as T
 import qualified Data.Typeable              as Y
 import           Data.Void                  (Void)
 import           GHC.Generics               (Generic)
-import qualified Language.C.Data.Ident      as C
-import qualified Language.C.Data.Position   as C
-import qualified Language.C.Parser          as C
-import qualified Language.C.Pretty          as C
-import qualified Language.C.Syntax.AST      as C
 import qualified Text.Megaparsec            as M
 import qualified Text.Megaparsec.Char.Lexer as M
 import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
 import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
-import qualified Text.PrettyPrint           as R
 
 type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
@@ -73,6 +66,10 @@ type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 
 type TypeAnnotation = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
 
 type ProcedureStep = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+
+type EmbeddedValue = S.EmbeddedValue B.Covered S.WithPosition
+
+type EmbeddedType = S.EmbeddedType B.Covered S.WithPosition
 
 type Parser = ParsecT Void Text Identity
 
@@ -155,25 +152,13 @@ foreignValueBind :: Parser Definition
 foreignValueBind =
   M.label "foreignValueBind" $ do
     void $ P.textSymbol "bind-value-foreign"
-    S.ForeignValueBind <$> identifier <*> list cHeader <*> withPosition (S.CDefinition <$> cExternalDeclaration) <*> typ
+    S.ForeignValueBind <$> identifier <*> embeddedValue <*> typ
 
 foreignTypeBind :: Parser Definition
 foreignTypeBind =
   M.label "foreignTypeBind" $ do
     void $ P.textSymbol "bind-type-foreign"
-    S.ForeignTypeBind <$> identifier <*> list cHeader <*> withPosition (S.CDefinition <$> (check =<< cExternalDeclaration))
-  where
-    check declExt@(C.CDeclExt (C.CDecl declSpecs [(Just (C.CDeclr (Just C.Ident {}) [] Nothing [] _), Nothing, Nothing)] _)) =
-      case foldr declSpecAcc (pure (False, False)) declSpecs of
-        Right (True, True) -> pure declExt
-        Right (False, _)   -> fail "typedef must be used"
-        Right (_, False)   -> fail "no typedef names are found"
-        Left s             -> fail $ "\"" ++ R.render (C.pretty s) ++ "\" cannot be used"
-    check declExt = fail $ "\"" ++ R.render (C.pretty declExt) ++ "\" cannot be used"
-    declSpecAcc (C.CTypeSpec (C.CUnsigType _)) acc = acc >>= \(d, t) -> pure (d, t)
-    declSpecAcc C.CTypeSpec {} acc                 = acc >>= \(d, _) -> pure (d, True)
-    declSpecAcc (C.CStorageSpec C.CTypedef {}) acc = acc >>= \(_, ts) -> pure (True, ts)
-    declSpecAcc s _                                = Left s
+    S.ForeignTypeBind <$> identifier <*> embeddedType
 
 identifier :: Parser (S.WithPosition S.Identifier)
 identifier =
@@ -396,25 +381,26 @@ procedureStep =
     void $ P.textSymbol "procedure"
     typ
 
-cExternalDeclaration :: Parser C.CExtDecl
-cExternalDeclaration = do
-  s <- T.encodeUtf8 <$> string
-  case C.execParser_ C.extDeclP s C.nopos of
-    Left (C.ParseError (m, _)) -> fail $ unlines m
-    Right c                    -> pure c
-
-cHeader :: Parser (S.WithPosition S.CHeader)
-cHeader =
-  withPosition $
+embeddedValue :: Parser (S.WithPosition EmbeddedValue)
+embeddedValue = do
+  M.label "embedded" $
     P.parens $
-      P.choice
-        [ do
-            void $ P.textSymbol "system-header"
-            S.SystemHeader <$> string
-        , do
-            void $ P.textSymbol "local-header"
-            S.LocalHeader <$> string
-        ]
+      withPosition $ do
+        void $ P.textSymbol "c-value"
+        i <- withPosition string
+        ps <- list $ withPosition string
+        b <- withPosition string
+        pure $ S.CValue i ps b
+
+embeddedType :: Parser (S.WithPosition EmbeddedType)
+embeddedType = do
+  M.label "embedded" $
+    P.parens $
+      withPosition $ do
+        void $ P.textSymbol "c-type"
+        i <- withPosition string
+        b <- withPosition string
+        pure $ S.CType i b
 
 doubleQuote :: Parser a -> Parser a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")
@@ -429,16 +415,15 @@ asciiLower :: Parser Char
 asciiLower = P.choice $ P.char <$> ['a' .. 'z']
 
 withPosition :: Parser a -> Parser (S.WithPosition a)
-withPosition p =
-  M.label "withPosition" $ do
-    M.SourcePos _ beginLine beginColumn <- M.getSourcePos
-    a <- p
-    M.SourcePos _ endLine endColumn <- M.getSourcePos
-    pure $
-      S.WithPosition
-        (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
-        (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
-        a
+withPosition p = do
+  M.SourcePos _ beginLine beginColumn <- M.getSourcePos
+  a <- p
+  M.SourcePos _ endLine endColumn <- M.getSourcePos
+  pure $
+    S.WithPosition
+      (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
+      (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
+      a
 
 newtype Exception
   = Exception String

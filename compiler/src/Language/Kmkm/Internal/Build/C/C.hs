@@ -2,198 +2,199 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Internal.Build.C.C
-  ( translate
+  ( render
   ) where
 
-import qualified Language.Kmkm.Internal.Build.C.Syntax as I
+import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
+                                              BlockElement (BlockDeclaration, BlockDefinition, BlockStatement, BlockTypeDefinition),
+                                              Definition (ExpressionDefinition, StatementDefinition),
+                                              Deriver (Function, Pointer),
+                                              Element (Declaration, Definition, TypeDefinition),
+                                              Expression (ArithmeticExpression, Assign, Call, CompoundLiteral, Literal, StatementExpression, Variable),
+                                              Field (Field), File (File),
+                                              FractionBase (FractionDecimal, FractionHexadecimal),
+                                              Identifier (Identifier),
+                                              Initializer (ExpressionInitializer, ListInitializer),
+                                              IntBase (IntBinary, IntDecimal, IntHexadecimal, IntOctal),
+                                              Literal (Fraction, Integer, String), QualifiedType,
+                                              Statement (Block, Case, ExpressionStatement, If, Return),
+                                              Type (Char, Double, Enumerable, EnumerableLiteral, Float, Int, Structure, StructureLiteral, TypeVariable, Union, Void),
+                                              TypeQualifier (Unsigned), VariableQualifier (Constant))
 
-import           Data.Hashable         (Hashable (hash))
-import qualified Data.List             as L
-import           Data.Text             (Text)
-import qualified Data.Text             as T
-import           Language.C            (CBlockItem, CCompoundBlockItem (CBlockDecl, CBlockStmt, CNestedFunDef), CConst,
-                                        CConstant (CFloatConst, CIntConst), CDecl, CDeclaration (CDecl),
-                                        CDeclarationSpecifier (CStorageSpec, CTypeQual, CTypeSpec),
-                                        CDeclarator (CDeclr), CDerivedDeclarator (CFunDeclr, CPtrDeclr), CDerivedDeclr,
-                                        CEnumeration (CEnum), CExpr,
-                                        CExpression (CCall, CCompoundLit, CConst, CStatExpr, CVar), CExtDecl,
-                                        CExternalDeclaration (CDeclExt, CFDefExt), CFloat (CFloat), CFunDef,
-                                        CFunctionDef (CFunDef), CInit, CInitializer (CInitExpr, CInitList),
-                                        CIntRepr (DecRepr, HexRepr, OctalRepr), CInteger (CInteger), CStat,
-                                        CStatement (CCompound, CExpr, CReturn), CStorageSpecifier (CTypedef),
-                                        CStructTag (CStructTag, CUnionTag), CStructureUnion (CStruct), CTranslUnit,
-                                        CTranslationUnit (CTranslUnit), CTypeQual, CTypeQualifier (CConstQual),
-                                        CTypeSpec,
-                                        CTypeSpecifier (CBoolType, CDoubleType, CEnumType, CIntType, CSUType, CTypeDef, CUnsigType, CVoidType),
-                                        Ident, noFlags, undefNode)
-import           Language.C.Data.Ident (Ident (Ident))
-import           Numeric               (showHex)
+import           Data.Foldable (Foldable (fold))
+import           Data.Text     (Text)
+import qualified Data.Text     as T
+import           Numeric       (showHex, showOct)
 
-translate :: I.File -> CTranslUnit
-translate = file
+render :: File -> Text
+render (File _ es) =
+  T.intercalate "\n\n" $ text element <$> es
 
-file :: I.File -> CTranslUnit
-file (I.File _ es) = flip CTranslUnit undefNode $ element <$> es
+element :: Element -> Text
+element (Declaration t qs i ds) = variable t qs (Right <$> i) ds <> ";"
+element (Definition d)          = definition d
+element (TypeDefinition t i)    = typeDefinition t i
 
-element :: I.Element -> CExtDecl
-element (I.Declaration t qs i ds)                           = CDeclExt $ valueDeclaration t qs i ds Nothing
-element (I.Definition (I.ExpressionDefinition t qs i ds l)) = CDeclExt $ valueDeclaration t qs (Just i) ds (Just l)
-element (I.Definition (I.StatementDefinition t qs i ds is)) = CFDefExt $ functionDefinition t qs i ds is
-element (I.TypeDefinition t i)                              = CDeclExt $ typeDefinition t i
-element (I.Embedded (I.C c))                                = c
-
-valueDeclaration :: I.QualifiedType -> [I.VariableQualifier] -> Maybe I.Identifier -> [I.Deriver] -> Maybe I.Initializer -> CDecl
-valueDeclaration t qs i ds l =
-  CDecl
-    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    [ ( Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode
-      , initializer <$> l
-      , Nothing
-      )
-    ] undefNode
-
-functionDefinition :: I.QualifiedType -> [I.VariableQualifier] -> I.Identifier -> [I.Deriver] -> [I.BlockElement] -> CFunDef
-functionDefinition t qs i ds is =
-  CFunDef
-    ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-    (CDeclr (Just $ identifier i) (deriver <$> ds) Nothing [] undefNode)
-    []
-    (CCompound [] (blockItem <$> is) undefNode)
-    undefNode
-
-typeDefinition :: I.QualifiedType -> I.Identifier -> CDecl
-typeDefinition t i =
-  CDecl
-    (CStorageSpec (CTypedef undefNode) : (CTypeSpec <$> qualifiedType t))
-    [ ( Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode
-      , Nothing
-      , Nothing
-      )
+definition :: Definition -> Text
+definition (ExpressionDefinition t qs i ds n) =
+  T.unwords
+    [ variable t qs (Just $ Right i) ds
+    , "="
+    , initializer n
+     ]
+  <> ";"
+definition (StatementDefinition t qs i ds es) =
+  T.intercalate "\n" $
+    [ variable t qs (Just $ Right i) ds
+    , "{"
     ]
-    undefNode
+    <> either pure (text blockElement <$>) es
+    <> ["}"]
 
-identifier :: I.Identifier -> Ident
-identifier (I.Identifier t) = textIdentifier t
+qualifiedType :: QualifiedType -> Text
+qualifiedType (qs, t) =
+  T.unwords $
+    (typeQualifier <$> qs)
+    <> [typ t]
 
-textIdentifier :: Text -> Ident
-textIdentifier t = Ident (T.unpack t) (hash t) undefNode
+typeDefinition :: Either Text QualifiedType -> Identifier -> Text
+typeDefinition t i = "typedef " <> text qualifiedType t <> " " <> identifier i
 
-variableQualifier :: I.VariableQualifier -> CTypeQual
-variableQualifier I.Constant = CConstQual undefNode
+typ :: Type -> Text
+typ Void = "void"
+typ Char = "char"
+typ Int = "int"
+typ Double = "double"
+typ Float = "float"
+typ (TypeVariable i) = identifier i
+typ (Structure i) = "struct " <> identifier i
+typ (Enumerable i) = "enum " <> identifier i
+typ (StructureLiteral i fs) =
+  T.intercalate "\n"
+    [ "struct" <> maybe "" ((" " <>) . identifier) i <> " {"
+    , T.intercalate "\n" ((<> ";") . field <$> fs)
+    , "}"
+    ]
+typ (Union fs) =
+  T.intercalate "\n"
+    [ "union {"
+    , T.intercalate "\n" ((<> ";") . field <$> fs)
+    , "}"
+    ]
+typ (EnumerableLiteral i is) =
+  T.intercalate "\n"
+    [ "enum" <> maybe "" ((" " <>) . identifier) i <> " {"
+    , T.intercalate ",\n" (identifier <$> is)
+    , "}"
+    ]
 
-qualifiedType :: I.QualifiedType -> [CTypeSpec]
-qualifiedType (qs, t) = (typeQualifier <$> qs) ++ [typ t]
+field :: Field -> Text
+field (Field t i) = qualifiedType t <> " " <> identifier i
 
-typeQualifier :: I.TypeQualifier -> CTypeSpec
-typeQualifier I.Unsigned = CUnsigType undefNode
+typeQualifier :: TypeQualifier -> Text
+typeQualifier Unsigned = "unsigned"
 
-typ :: I.Type -> CTypeSpec
-typ I.Void                              = CVoidType undefNode
-typ I.Int                               = CIntType undefNode
-typ I.Double                            = CDoubleType undefNode
-typ (I.EnumerableLiteral i is)          = enumerableLiteral i is
-typ (I.StructureLiteral i fs)           = structureLiteral i fs
-typ (I.Union fs)                        = union fs
-typ (I.TypeVariable "bool")             = CBoolType undefNode
-typ (I.TypeVariable i@(I.Identifier _)) = CTypeDef (identifier i) undefNode
-typ (I.Enumerable i)                    = CEnumType (CEnum (Just $ identifier i) Nothing [] undefNode) undefNode
-typ (I.Structure i)                     = CSUType (CStruct CStructTag (Just $ identifier i) Nothing [] undefNode) undefNode
-typ t                                   = error $ show t
+variableQualifier :: VariableQualifier -> Text
+variableQualifier Constant = "const"
 
-enumerableLiteral :: Maybe I.Identifier -> [I.Identifier] -> CTypeSpec
-enumerableLiteral i is =
-  CEnumType
-    (CEnum
-      (identifier <$> i)
-      (Just $ value <$> is)
-      []
-      undefNode
-    )
-    undefNode
+identifier :: Identifier -> Text
+identifier (Identifier t) = t
+
+variable :: QualifiedType -> [VariableQualifier] -> Maybe (Either Text Identifier) -> [Deriver] -> Text
+variable t qs i ds =
+  T.unwords $
+    [qualifiedType t]
+    <> (variableQualifier <$> qs)
+    <> case foldl deriver (maybe "" (text identifier) i) ds of { "" -> []; t -> [t] }
+
+deriver :: Text -> Deriver -> Text
+deriver t (Pointer qs) =
+  fold
+    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [t]
+    , ")"
+    ]
+deriver t (Function ps) =
+  fold
+    [ t
+    , "("
+    , T.intercalate ", " (uncurry4 variable <$> ps)
+    , ")"
+    ]
+
+initializer :: Initializer -> Text
+initializer (ExpressionInitializer e) = text expression e
+initializer (ListInitializer es) =
+  fold
+    [ "{ "
+    , T.intercalate ", " $ initializer <$> es
+    , " }"
+    ]
+
+expression :: Expression -> Text
+expression (Variable i)             = identifier i
+expression (Literal l)              = literal l
+expression (CompoundLiteral t ns)   = compoundLiteral t ns
+expression (ArithmeticExpression a) = arithmeticExpression a
+expression (Call e es)              = expression e <> "(" <> T.intercalate ", " (expression <$> es) <> ")"
+expression (StatementExpression s)  = "({ " <> statement s <> "})"
+expression (Assign i e)             = identifier i <> " = " <> expression e
+
+literal :: Literal -> Text
+literal (Integer v IntBinary) = "0x" <> T.pack (showHex v "")
+literal (Integer v IntOctal) = "0" <> T.pack (showOct v "")
+literal (Integer v IntDecimal) = T.pack $ show v
+literal (Integer v IntHexadecimal) = "0x" <> T.pack (showHex v "")
+literal (Fraction s f e b) =
+  fold [hstr, istr, dstr, fstr, kstr, estr]
   where
-    value i = (identifier i, Nothing)
-
-structureLiteral :: Maybe I.Identifier -> [I.Field] -> CTypeSpec
-structureLiteral = structureUnionLiteral CStructTag
-
-union :: [I.Field] -> CTypeSpec
-union = structureUnionLiteral CUnionTag Nothing
-
-structureUnionLiteral :: CStructTag -> Maybe I.Identifier -> [I.Field] -> CTypeSpec
-structureUnionLiteral t i fs =
-  CSUType (CStruct t (identifier <$> i) fields [] undefNode) undefNode
-    where
-      fields =
-        Just
-          case fs of
-            (_:_) -> field <$> fs
-            _ ->
-              [CDecl
-                [CTypeSpec $ CEnumType (CEnum (identifier <$> i) Nothing [] undefNode) undefNode]
-                [(Just $ CDeclr (Just $ textIdentifier "tag") [] Nothing [] undefNode, Nothing, Nothing)]
-                undefNode
-              ]
-      field (I.Field t i) =
-        CDecl
-          (CTypeSpec <$> qualifiedType t)
-          [(Just $ CDeclr (Just $ identifier i) [] Nothing [] undefNode, Nothing, Nothing)]
-          undefNode
-
-deriver :: I.Deriver -> CDerivedDeclr
-deriver (I.Pointer qs) = CPtrDeclr (variableQualifier <$> qs) undefNode
-deriver (I.Function ps) =
-  CFunDeclr (Right (parameter <$> ps, False)) [] undefNode
-  where
-    parameter (t, qs, i, ds) =
-      CDecl
-        ((CTypeSpec <$> qualifiedType t) ++ (CTypeQual . variableQualifier <$> qs))
-        [(Just $ CDeclr (identifier <$> i) (deriver <$> ds) Nothing [] undefNode, Nothing, Nothing)]
-        undefNode
-
-initializer :: I.Initializer -> CInit
-initializer (I.ExpressionInitializer e) = CInitExpr (expression e) undefNode
-initializer (I.ListInitializer is) =
-  CInitList (go <$> is) undefNode
-  where go i = ([], initializer i)
-
-expression :: I.Expression -> CExpr
-expression (I.Literal l)             = CConst $ literal l
-expression (I.Variable v)            = CVar (identifier v) undefNode
-expression (I.CompoundLiteral t is)  = CCompoundLit (CDecl (CTypeSpec <$> qualifiedType t) [] undefNode) (go <$> is) undefNode where go i = ([], initializer i)
-expression (I.Call t as)             = CCall (expression t) (expression <$> as) undefNode
-expression (I.StatementExpression s) = CStatExpr (statement s) undefNode
-expression e                         = error $ show e
-
-literal :: I.Literal -> CConst
-literal (I.Integer i b) =
-  CIntConst (CInteger i repr noFlags) undefNode
-  where
-    repr =
-      case b of
-        I.IntBinary      -> HexRepr
-        I.IntOctal       -> OctalRepr
-        I.IntDecimal     -> DecRepr
-        I.IntHexadecimal -> HexRepr
-literal (I.Fraction s f e b) =
-  CFloatConst (CFloat $ mconcat [hstr, istr, dstr, fstr, kstr, estr]) undefNode
-  where
-    hstr, sstr, istr, fstr, dstr, kstr, estr :: String
-    hstr = case b of { I.FractionDecimal -> ""; I.FractionHexadecimal -> "0x" }
-    sstr = (case b of { I.FractionDecimal -> show; I.FractionHexadecimal -> flip showHex "" }) s
-    (istr, fstr) = L.genericSplitAt (L.genericLength sstr - f) sstr
+    hstr, sstr, istr, fstr, dstr, kstr, estr :: Text
+    hstr = case b of { FractionDecimal -> ""; FractionHexadecimal -> "0x" }
+    sstr = T.pack $ (case b of { FractionDecimal -> show; FractionHexadecimal -> flip showHex "" }) s
+    (istr, fstr) = T.splitAt (T.length sstr - fromIntegral f) sstr
     dstr = if f == 0 then "" else "."
-    kstr = case b of { I.FractionDecimal -> "e"; I.FractionHexadecimal -> "p" }
-    estr = show e
-literal l = error $ show l
+    kstr = case b of { FractionDecimal -> "e"; FractionHexadecimal -> "p" }
+    estr = T.pack $ show e
+literal (String t) = "\"" <> t <> "\""
 
-blockItem :: I.BlockElement -> CBlockItem
-blockItem (I.BlockStatement s)                                     = CBlockStmt $ statement s
-blockItem (I.BlockDefinition (I.ExpressionDefinition t qs i ds l)) = CBlockDecl $ valueDeclaration t qs (Just i) ds (Just l)
-blockItem (I.BlockDefinition (I.StatementDefinition t qs i ds s))  = CNestedFunDef $ functionDefinition t qs i ds s
-blockItem e                                                        = error $ show e
+compoundLiteral :: QualifiedType -> [Initializer] -> Text
+compoundLiteral t ns =
+  fold
+    [ "("
+    , qualifiedType t
+    , ") { "
+    , T.intercalate ", " $ initializer <$> ns
+    , " }"
+    ]
 
-statement :: I.Statement -> CStat
-statement (I.Return e)              = CReturn (Just $ expression e) undefNode
-statement (I.Block is)              = CCompound [] (blockItem <$> is) undefNode
-statement (I.ExpressionStatement e) = CExpr (Just $ expression e) undefNode
-statement s                         = error $ show s
+arithmeticExpression :: ArithmeticExpression -> Text
+arithmeticExpression = undefined
+
+blockElement :: BlockElement -> Text
+blockElement (BlockStatement s)           = statement s
+blockElement (BlockDeclaration t qs i ds) = variable t qs (Right <$> i) ds
+blockElement (BlockDefinition d)          = definition d
+blockElement (BlockTypeDefinition t i)    = typeDefinition t i
+
+statement :: Statement -> Text
+statement (ExpressionStatement e) = expression e <> ";"
+statement (Return e) = "return " <> expression e <> ";"
+statement (If e ts es) =
+  T.intercalate "\n"
+    [ "if (" <> expression e <> ")"
+    , "{"
+    , T.intercalate "\n" $ statement ts : maybe [] (pure . statement) es
+    , "}"
+    ]
+statement (Case _e _bs) = undefined
+statement (Block es) =
+  T.intercalate "\n"
+    [ "{"
+    , T.intercalate "\n" $ text blockElement <$> es
+    , "}"
+    ]
+
+text :: (a -> Text) -> Either Text a -> Text
+text = either id
+
+uncurry4 :: (a -> b -> c -> d -> e) -> (a, b, c, d) -> e
+uncurry4 fun (a, b, c, d) = fun a b c d

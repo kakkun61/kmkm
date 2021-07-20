@@ -38,7 +38,7 @@ definition =
   traverse $ \case
     S.DataDefinition i cs -> pure $ S.DataDefinition i cs
     S.TypeBind i t -> pure $ S.TypeBind i t
-    S.ForeignTypeBind i hs c -> pure $ S.ForeignTypeBind i hs c
+    S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind i c
     S.ValueBind (S.ValueBindU i v) ->
       scope $
         case copoint v of
@@ -51,7 +51,7 @@ definition =
             (v', ds) <- term v
             let S.TypedValue _ t = copoint v'
             pure $ S.ValueBind $ S.ValueBindV i $ S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v
-    S.ForeignValueBind i hs c t -> pure $ S.ForeignValueBind i hs c t
+    S.ForeignValueBind i c t -> pure $ S.ForeignValueBind i c t
 
 term :: (Traversable f, Copointed f, S.HasPosition f) =>f (Value 'S.LambdaUnlifted f) -> Pass (f (Value 'S.LambdaLifted f), [f (Definition 'S.LambdaLifted f)])
 term v =

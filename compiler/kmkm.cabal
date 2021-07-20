@@ -67,12 +67,10 @@ library
                  filepath,
                  megaparsec,
                  hashable,
-                 language-c,
                  mtl,
                  parsers,
                  parsers-megaparsec,
                  pointed,
-                 pretty,
                  safe-exceptions,
                  text
   default-extensions: Strict

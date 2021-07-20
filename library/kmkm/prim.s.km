@@ -4,13 +4,10 @@
   (list
     (bind-type-foreign
       int
-      (list)
-      "typedef int kmkm_prim_int;")
+      (c-type "" "int"))
     (bind-type-foreign
       uint
-      (list)
-      "typedef unsigned int kmkm_prim_uint;")
+      (c-type "" "unsigned int"))
     (bind-type-foreign
       frac2
-      (list)
-      "typedef double kmkm_prim_frac2;")))
+      (c-type "" "double"))))

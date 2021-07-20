@@ -19,7 +19,9 @@ import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdenti
 import qualified Language.Kmkm.Internal.Syntax         as S
 
 import qualified Barbies.Bare.Layered  as B
+import           Data.Bifunctor        (Bifunctor (first))
 import           Data.Copointed        (Copointed (copoint))
+import           Data.Foldable         (Foldable (fold))
 import           Data.Functor.Identity (Identity)
 import qualified Data.List.NonEmpty    as N
 import           Data.Map.Strict       (Map)
@@ -45,16 +47,11 @@ translate
      )
   => Map QualifiedIdentifier TypeOrigin
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
-  -> ([S.CHeader], I.File)
+  -> I.File
 translate typeOrigins = module' typeOrigins . B.bstripFrom copoint . copoint
 
-module' :: Map QualifiedIdentifier TypeOrigin -> Module -> ([S.CHeader], I.File)
-module' typeOrigins (S.Module n _ ds) = (header =<< ds, I.File (moduleName n) $ definition typeOrigins n =<< ds)
-
-header :: Definition -> [S.CHeader]
-header (S.ForeignTypeBind _ hs _)    = hs
-header (S.ForeignValueBind _ hs _ _) = hs
-header _                             = []
+module' :: Map QualifiedIdentifier TypeOrigin -> Module -> I.File
+module' typeOrigins (S.Module n _ ds) = I.File (moduleName n) $ definition typeOrigins n =<< ds
 
 -- |
 -- @
@@ -68,13 +65,14 @@ header _                             = []
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-definition :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> Definition -> [I.Element]
+definition :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> Definition -> [Either Text I.Element]
 definition typeOrigins _ (S.DataDefinition i cs) =
-  mconcat
-    [ tagEnum
-    , [structure]
-    , I.Definition . constructor (length cs) <$> cs
-    ]
+  fold $
+    fmap Right <$>
+      [ tagEnum
+      , [structure]
+      , I.Definition . constructor (length cs) <$> cs
+      ]
   where
     tagEnumIdent i = I.Identifier $ qualifiedIdentifierText i <> "_tag"
     tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
@@ -94,41 +92,65 @@ definition typeOrigins _ (S.DataDefinition i cs) =
         field (i, t) = I.Field (typ typeOrigins t) $ qualifiedIdentifier i
         constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ qualifiedIdentifier i
         hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
-    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c) [] $ I.ListInitializer [I.ExpressionInitializer $ I.Variable $ tagEnumIdent c]
+    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c) [] $ I.ListInitializer [I.ExpressionInitializer $ Right $ I.Variable $ tagEnumIdent c]
     constructor n (c, fs) =
-      I.StatementDefinition structType [] (qualifiedIdentifier c) [I.Function $ parameter <$> fs] [blockItem]
+      I.StatementDefinition structType [] (qualifiedIdentifier c) [I.Function $ parameter <$> fs] $ Right [blockItem]
       where
-        parameter (i, t) = (typ typeOrigins t, [I.Constant], Just $ qualifiedIdentifier i, [])
-        blockItem = I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
+        parameter (i, t) = (typ typeOrigins t, [I.Constant], Just $ Right $ qualifiedIdentifier i, [])
+        blockItem = Right $ I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
         arguments =
           case (n, fs) of
             (1, _:_) -> argument <$> fs
-            _        -> I.ExpressionInitializer (I.Variable $ tagEnumIdent c) : (argument <$> fs)
-        argument (i, _) = I.ExpressionInitializer $ I.Variable $ qualifiedIdentifier i
+            _        -> I.ExpressionInitializer (Right $ I.Variable $ tagEnumIdent c) : (argument <$> fs)
+        argument (i, _) = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
 definition typeOrigins n (S.ValueBind (S.ValueBindV i v@(S.TypedValue _ t))) =
-  [I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (deriver typeOrigins t) $ I.ExpressionInitializer $ value typeOrigins n v]
+  [Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (deriver typeOrigins t) $ I.ExpressionInitializer $ Right $ value typeOrigins n v]
 definition typeOrigins n (S.ValueBind (S.ValueBindN i is v)) =
-  [bindTermN typeOrigins n i is v]
-definition _ _ (S.ForeignValueBind _ _ (S.CDefinition c) _) =
-  [I.Embedded $ I.C c]
+  [Right $ bindTermN typeOrigins n i is v]
+definition typeOrigins _ (S.ForeignValueBind i (S.CValue n [] b) t@S.TypeVariable {}) =
+  [ Left n
+  , Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [I.Constant] (qualifiedIdentifier i) [] $ I.ExpressionInitializer $ Left b
+  ]
+definition typeOrigins _ (S.ForeignValueBind i (S.CValue n ps b) (S.FunctionType (S.FunctionTypeN ts r))) =
+  let
+    r' =
+      case r of
+        S.ProcedureType t -> t
+        _                 -> r
+  in
+    [ Left n
+    , Right $
+        I.Definition $
+          I.StatementDefinition (typ typeOrigins r') [] (qualifiedIdentifier i) [I.Function $ parameters typeOrigins $ zip (Left <$> ps) ts] $ Left b
+    ]
+definition typeOrigins _ (S.ForeignValueBind i (S.CValue n [] b) t@S.ProcedureType {}) =
+  [ Left n
+  , Right $
+      I.Definition $
+        I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) [I.Function [(([], I.Void), [], Nothing, [])]] $ Left b
+  ]
+definition _ _ S.ForeignValueBind {} = X.unreachable
 definition typeOrigins _ (S.TypeBind i t) =
-  [I.TypeDefinition (typ typeOrigins t) $ qualifiedIdentifier i]
-definition _ _ (S.ForeignTypeBind _ _ (S.CDefinition c)) =
-  [I.Embedded $ I.C c]
+  [Right $ I.TypeDefinition (Right $ typ typeOrigins t) $ qualifiedIdentifier i]
+definition _ _ (S.ForeignTypeBind i (S.CType n b)) =
+  [ Left n
+  , Right $ I.TypeDefinition (Left b) (qualifiedIdentifier i)
+  ]
 
 bindTermN :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> S.QualifiedIdentifier -> [(S.QualifiedIdentifier, Type)] -> Value -> I.Element
 bindTermN typeOrigins n i ps v@(S.TypedValue _ t) =
-  I.Definition $ I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (I.Function (parameters ps) : deriverRoot typeOrigins t) [I.BlockStatement $ I.Return (value typeOrigins n v)]
+  I.Definition $ I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (I.Function (parameters typeOrigins $ first Right <$> ps) : deriverRoot typeOrigins t) $ Right [Right $ I.BlockStatement $ I.Return (value typeOrigins n v)]
+
+parameters :: Map QualifiedIdentifier TypeOrigin -> [(Either Text QualifiedIdentifier, Type)] -> [(([I.TypeQualifier], I.Type), [I.VariableQualifier], Maybe (Either Text I.Identifier), [I.Deriver])]
+parameters _ [] = [(([], I.Void), [], Nothing, [])]
+parameters typeOrigins ps = parameter <$> ps
   where
-    parameters [] = [(([], I.Void), [], Nothing, [])]
-    parameters ps = parameter <$> ps
-    parameter (i, t) = (typ typeOrigins t, case t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ qualifiedIdentifier i, deriver typeOrigins t)
+    parameter (i, t) = (typ typeOrigins t, case t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ qualifiedIdentifier <$> i, deriver typeOrigins t)
 
 elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
 elementStatement (I.Definition d)          = I.BlockDefinition d
 elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
-elementStatement (I.Embedded c)            = I.BlockEmbed c
 
 qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
 qualifiedIdentifier = I.Identifier . qualifiedIdentifierText
@@ -149,10 +171,10 @@ value :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> Value -> I.Expressi
 value _ _ (S.TypedValue (S.Variable i) _) = I.Variable $ qualifiedIdentifier i
 value _ _ (S.TypedValue (S.Literal l) _) = I.Literal $ literal l
 value typeOrigins n (S.TypedValue (S.Application (S.ApplicationN v vs)) _) = I.Call (value typeOrigins n v) $ value typeOrigins n <$> vs
-value typeOrigins n (S.TypedValue (S.Procedure ps) _) = I.StatementExpression $ I.Block $ procedureStep typeOrigins n =<< N.toList ps
+value typeOrigins n (S.TypedValue (S.Procedure ps) _) = I.StatementExpression $ I.Block $ fmap Right . procedureStep typeOrigins n =<< N.toList ps
 value typeOrigins n (S.TypedValue (S.Let ds v) _) =
   let typeOrigins' = M.fromList (mapMaybe typeOrigin ds) `M.union` typeOrigins
-  in I.StatementExpression $ I.Block $ (elementStatement <$> (definition typeOrigins' n =<< ds)) ++ [I.BlockStatement (I.ExpressionStatement $ value typeOrigins' n v)]
+  in I.StatementExpression $ I.Block $ (fmap elementStatement <$> (definition typeOrigins' n =<< ds)) ++ [Right $ I.BlockStatement $ I.ExpressionStatement $ value typeOrigins' n v]
 
 literal :: S.Literal -> I.Literal
 literal (S.Integer i b) =
@@ -186,6 +208,7 @@ typ typeOrigins (S.TypeVariable n) =
     Just DataType  -> ([], I.Structure $ qualifiedIdentifier n)
     Nothing        -> X.unreachable
 typ typeOrigins (S.FunctionType (S.FunctionTypeN _ t)) = typ typeOrigins t
+typ typeOrigins (S.ProcedureType t) = typ typeOrigins t
 typ _ t = error $ show t
 
 deriverRoot :: Map QualifiedIdentifier TypeOrigin -> Type -> [I.Deriver]
@@ -220,7 +243,7 @@ typeOrigins m =
   in M.fromList $ mapMaybe typeOrigin ds
 
 typeOrigin :: S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare f -> Maybe (S.QualifiedIdentifier, TypeOrigin)
-typeOrigin (S.DataDefinition i _)    = Just (i, DataType)
-typeOrigin (S.TypeBind i _)          = Just (i, AliasType)
-typeOrigin (S.ForeignTypeBind i _ _) = Just (i, AliasType)
-typeOrigin _                         = Nothing
+typeOrigin (S.DataDefinition i _)  = Just (i, DataType)
+typeOrigin (S.TypeBind i _)        = Just (i, AliasType)
+typeOrigin (S.ForeignTypeBind i _) = Just (i, AliasType)
+typeOrigin _                       = Nothing

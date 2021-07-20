@@ -20,31 +20,25 @@ module Language.Kmkm.Internal.Build.C.Syntax
   , BlockElement (..)
   , Statement (..)
   , Branch (..)
-  , C (..)
   ) where
 
-import           Data.Function         (on)
-import           Data.String           (IsString (fromString))
-import           Data.Text             (Text)
-import           GHC.Generics          (Generic)
-import qualified Language.C.Pretty     as C
-import           Language.C.Syntax.AST (CExtDecl)
-import qualified Text.PrettyPrint      as P
+import Data.String  (IsString (fromString))
+import Data.Text    (Text)
+import GHC.Generics (Generic)
 
 data File =
-  File Text [Element]
+  File Text [Either Text Element]
   deriving (Show, Eq, Ord, Generic)
 
 data Element
   = Declaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | Definition Definition
-  | TypeDefinition QualifiedType Identifier
-  | Embedded C
+  | TypeDefinition (Either Text QualifiedType) Identifier
   deriving (Show, Eq, Ord, Generic)
 
 data Definition
   = ExpressionDefinition QualifiedType [VariableQualifier] Identifier [Deriver] Initializer
-  | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] [BlockElement]
+  | StatementDefinition QualifiedType [VariableQualifier] Identifier [Deriver] (Either Text [Either Text BlockElement])
   deriving (Show, Eq, Ord, Generic)
 
 data VariableQualifier
@@ -73,7 +67,7 @@ type QualifiedType = ([TypeQualifier], Type)
 
 data Deriver
   = Pointer [VariableQualifier]
-  | Function [(QualifiedType, [VariableQualifier], Maybe Identifier, [Deriver])]
+  | Function [(QualifiedType, [VariableQualifier], Maybe (Either Text Identifier), [Deriver])]
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Field =
@@ -87,7 +81,7 @@ instance IsString Identifier where
   fromString = Identifier . fromString
 
 data Initializer
-  = ExpressionInitializer Expression
+  = ExpressionInitializer (Either Text Expression)
   | ListInitializer [Initializer]
   deriving (Show, Eq, Ord, Generic)
 
@@ -123,8 +117,7 @@ data BlockElement
   = BlockStatement Statement
   | BlockDeclaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | BlockDefinition Definition
-  | BlockTypeDefinition QualifiedType Identifier -- ^ GCC extension.
-  | BlockEmbed C
+  | BlockTypeDefinition (Either Text QualifiedType) Identifier -- ^ GCC extension.
   deriving (Show, Eq, Ord, Generic)
 
 data Statement
@@ -132,17 +125,9 @@ data Statement
   | Return Expression
   | If Expression Statement (Maybe Statement)
   | Case Expression [Branch]
-  | Block [BlockElement]
+  | Block [Either Text BlockElement]
   deriving (Show, Eq, Ord, Generic)
 
 data Branch =
   Branch Expression Statement
   deriving (Show, Eq, Ord, Generic)
-
-newtype C = C CExtDecl deriving (Show, Generic)
-
-instance Eq C where
-  (==) = (==) `on` (\(C c) -> P.render $ C.pretty c)
-
-instance Ord C where
-  compare = compare `on` (\(C c) -> P.render $ C.pretty c)
