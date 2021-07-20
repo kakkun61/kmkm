@@ -194,11 +194,11 @@ literal (S.Fraction s f e b) =
 literal l = error (show l)
 
 procedureStep :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> ProcedureStep -> [I.BlockElement]
-procedureStep typeOrigins n (S.BindProcedure i v@(S.TypedValue _ t)) =
+procedureStep typeOrigins n (S.BindProcedureStep i v@(S.TypedValue _ t)) =
   [ I.BlockDeclaration (typ typeOrigins t) [I.Constant] (Just $ qualifiedIdentifier i) []
   , I.BlockStatement $ I.ExpressionStatement $ I.Assign (qualifiedIdentifier i) (value typeOrigins n v)
   ]
-procedureStep typeOrigins n (S.TermProcedure v) =
+procedureStep typeOrigins n (S.CallProcedureStep v) =
   [I.BlockStatement $ I.ExpressionStatement $ value typeOrigins n v]
 
 typ :: Map QualifiedIdentifier TypeOrigin -> Type -> I.QualifiedType

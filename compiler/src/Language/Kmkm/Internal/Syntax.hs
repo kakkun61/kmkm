@@ -617,8 +617,8 @@ instance BareB (TypeAnnotation n c l 'Typed) where
 -- ProcedureStep
 
 data ProcedureStep n c l t b f
-  = BindProcedure (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c l t b f))
-  | TermProcedure (B.Wear b f (Value n c l t b f))
+  = BindProcedureStep (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c l t b f))
+  | CallProcedureStep (B.Wear b f (Value n c l t b f))
 
 type ProcedureStepConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> K.Type -> (K.Type -> K.Type) -> K.Constraint
 type ProcedureStepConstraint cls n c l t b f =
@@ -631,15 +631,15 @@ deriving instance ProcedureStepConstraint Eq n c l t b f => Eq (ProcedureStep n 
 deriving instance ProcedureStepConstraint Ord n c l t b f => Ord (ProcedureStep n c l t b f)
 
 instance FunctorB (Value n c l t B.Covered) => FunctorB (ProcedureStep n c l t B.Covered) where
-  bmap f (BindProcedure i v) = BindProcedure (f i) (bmap f <$> f v)
-  bmap f (TermProcedure v)   = TermProcedure (bmap f <$> f v)
+  bmap f (BindProcedureStep i v) = BindProcedureStep (f i) (bmap f <$> f v)
+  bmap f (CallProcedureStep v)   = CallProcedureStep (bmap f <$> f v)
 
 instance (BareB (Value n c l t)) => BareB (ProcedureStep n c l t) where
-  bstrip (BindProcedure (Identity i) (Identity v)) = BindProcedure i (bstrip v)
-  bstrip (TermProcedure (Identity v))              = TermProcedure (bstrip v)
+  bstrip (BindProcedureStep (Identity i) (Identity v)) = BindProcedureStep i (bstrip v)
+  bstrip (CallProcedureStep (Identity v))              = CallProcedureStep (bstrip v)
 
-  bcover (BindProcedure i v) = BindProcedure (Identity i) (Identity $ bcover v)
-  bcover (TermProcedure v)   = TermProcedure (Identity $ bcover v)
+  bcover (BindProcedureStep i v) = BindProcedureStep (Identity i) (Identity $ bcover v)
+  bcover (CallProcedureStep v)   = CallProcedureStep (Identity $ bcover v)
 
 -- Literal
 

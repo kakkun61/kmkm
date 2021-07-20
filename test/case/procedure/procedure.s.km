@@ -1,13 +1,13 @@
 (module
   procedure
-  (list)
   (list
-    (define unit (list unit))
+    kmkm.unit)
+  (list
     (bind-value
       rec0
-      (type procedure.rec0 unit))
+      (type procedure.rec0 (procedure kmkm.unit.unit)))
     (bind-value
       rec1
       (procedure
         (list
-          (term procedure.rec0))))))
+          (call procedure.rec0))))))

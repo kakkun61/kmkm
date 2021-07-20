@@ -105,7 +105,6 @@ definitions
 definitions context prim =
   traverse go
   where
-    -- go :: [f (Definition 'S.Untyped f)] -> m [f (Definition 'S.Typed f)]
     go definitions' = do
       let
         valueBinds = M.fromList $ mapMaybe valueBind definitions'
@@ -184,8 +183,8 @@ dep identifiers v =
           where
             go (is, ss) s =
               case copoint s of
-                S.BindProcedure i v' -> (dep ss v' ++ is, S.delete (copoint i) ss)
-                S.TermProcedure v'   -> (dep ss v' ++ is, ss)
+                S.BindProcedureStep i v' -> (dep ss v' ++ is, S.delete (copoint i) ss)
+                S.CallProcedureStep v'   -> (dep ss v' ++ is, ss)
         S.TypeAnnotation (S.TypeAnnotation' v' _) -> dep identifiers v'
         S.Let ds v ->
           let
@@ -252,19 +251,19 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
             _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.range t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
-          (ctx', p') <- typeOfProcedure ctx prim p
+          (ctx', p') <- typeOfProcedureStep ctx prim p
           (_, ps'') <- foldr go (pure (ctx', [])) ps'
           let ps''' = p' :| ps''
           case N.last ps''' of
             s
-              | S.TermProcedure v <- copoint s ->
+              | S.CallProcedureStep v <- copoint s ->
                   let S.TypedValue _ t = copoint v
                   in pure $ S.TypedValue (S.Procedure (ps''' <$ ps) <$ v') t <$ v
               | otherwise -> throw $ BindProcedureEndException $ S.range s
           where
             go p acc = do
               (ctx, ps) <- acc
-              (ctx', p') <- typeOfProcedure ctx prim p
+              (ctx', p') <- typeOfProcedureStep ctx prim p
               pure (ctx', p' : ps)
         S.TypeAnnotation (S.TypeAnnotation' v' t) -> do
           v'' <- typeOfTerm ctx prim v'
@@ -279,7 +278,7 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           let S.TypedValue _ t' = copoint v''
           pure $ S.TypedValue (S.Let ds' v'' <$ v') t' <$ v
 
-typeOfProcedure
+typeOfProcedureStep
   :: ( MonadThrow m
      , MonadCatch m
      , Traversable f
@@ -293,17 +292,20 @@ typeOfProcedure
   -> PrimitivesImporting
   -> f (ProcedureStep 'S.Untyped f)
   -> m (Map S.QualifiedIdentifier (f (Type f)), f (ProcedureStep 'S.Typed f))
-typeOfProcedure ctx prim s =
+typeOfProcedureStep ctx prim s =
   case copoint s of
-    S.BindProcedure i v -> do
+    S.BindProcedureStep i v -> do
       v' <- typeOfTerm ctx prim v
       let
         S.TypedValue _ t = copoint v'
         ctx' = M.insert (copoint i) t ctx
-      pure (ctx', S.BindProcedure i v' <$ v)
-    S.TermProcedure v -> do
+      pure (ctx', S.BindProcedureStep i v' <$ s)
+    S.CallProcedureStep v -> do
       v' <- typeOfTerm ctx prim v
-      pure (ctx, S.TermProcedure v' <$ v)
+      let S.TypedValue _ t = copoint v'
+      case copoint t of
+        S.ProcedureType _ -> pure (ctx, S.CallProcedureStep v' <$ s)
+        _                 -> throw $ MismatchException (Left "procedure") (S.strip t) $ S.range t
 
 primitivesImporting :: (Functor f, Copointed f) => f (Module 'S.Untyped f) -> PrimitivesImporting
 primitivesImporting m =

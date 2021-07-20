@@ -41,7 +41,6 @@ import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
 import qualified Data.Map.Strict                      as M
 import           Data.Maybe                           (fromMaybe, mapMaybe)
-import qualified Data.Set                             as KS
 import qualified Data.Set                             as S
 import           Data.Text                            (Text)
 import qualified Data.Text                            as T
@@ -77,7 +76,7 @@ compile readFile writeFile writeLog src = do
     accumulate f v acc = do
       (acc1, acc2) <- acc
       (v1, v2) <- f v acc1
-      pure (M.union acc1 v1, KS.insert v2 acc2)
+      pure (M.union acc1 v1, S.insert v2 acc2)
     write (k, (c, h)) = do
       let
         path = moduleNameToFilePath k
@@ -109,16 +108,16 @@ readRecursively readFile =
       let
         m' = M.insert moduleName' module' m -- TODO 今 main モジュールで、すでに main モジュールがあったらエラー
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
-        depSet = KS.map (moduleNameToFilePath . copoint) $ KS.fromList $ copoint deps
-        readSet = KS.map moduleNameToFilePath $ M.keysSet m'
-      foldl go (pure (g', m')) $ depSet KS.\\ readSet
+        depSet = S.map (moduleNameToFilePath . copoint) $ S.fromList $ copoint deps
+        readSet = S.map moduleNameToFilePath $ M.keysSet m'
+      foldl go (pure (g', m')) $ depSet S.\\ readSet
 
 sortModules
   :: MonadThrow m
   => G.AdjacencyMap (KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition))
   -> m [KS.WithPosition (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped B.Covered KS.WithPosition)]
 sortModules deps =
-  sequence $ go . GN.vertexList1 <$> fromRight KE.unreachable (G.topSort $ G.scc deps)
+  sequence (go . GN.vertexList1 <$> fromRight KE.unreachable (G.topSort $ G.scc deps))
   where
     go ms@(m :| ms') = if null ms' then pure m else throw $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
 
@@ -138,7 +137,8 @@ typeCheck types module' = do
           case copoint m of
             KS.ValueBind (KS.ValueBindU i v)
               | KS.TypedValue _ t <- copoint v -> Just (i, t)
-            _                                                   -> Nothing
+            KS.ForeignValueBind i _ t          -> Just (i, t)
+            _                                  -> Nothing
   pure (M.mapKeys copoint types', module'')
 
 build2

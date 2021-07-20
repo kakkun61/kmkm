@@ -1,0 +1,12 @@
+(module
+  kmkm.proc
+  (list
+    kmkm.prim)
+  (list
+    (bind-value-foreign
+      pureInt
+      (c-value
+        "a"
+        (list)
+        "return a;")
+      (function kmkm.prim.int (procedure kmkm.prim.int)))))

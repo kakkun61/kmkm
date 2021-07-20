@@ -241,10 +241,10 @@ procedure =
             P.choice
               [ do
                   void $ P.textSymbol "bind"
-                  S.BindProcedure <$> identifier <*> value
+                  S.BindProcedureStep <$> identifier <*> value
               , do
-                  void $ P.textSymbol "term"
-                  S.TermProcedure <$> value
+                  void $ P.textSymbol "call"
+                  S.CallProcedureStep <$> value
               ]
 
 typeAnnotation :: Parser TypeAnnotation
@@ -359,7 +359,7 @@ typ =
             P.choice
               [ S.FunctionType <$> functionType
               , uncurry S.TypeApplication <$> typeApplication
-              , S.ProcedureType <$> procedureStep
+              , S.ProcedureType <$> procedureType
               ]
         ]
 
@@ -375,9 +375,9 @@ typeApplication =
     void $ P.textSymbol "apply"
     (,) <$> typ <*> typ
 
-procedureStep :: Parser (S.WithPosition Type)
-procedureStep =
-  M.label "procedureStep" $ do
+procedureType :: Parser (S.WithPosition Type)
+procedureType =
+  M.label "procedureType" $ do
     void $ P.textSymbol "procedure"
     typ
 

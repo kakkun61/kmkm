@@ -185,8 +185,8 @@ procedureStep
   -> m (f (ProcedureStep 'S.NameResolved f))
 procedureStep valueAffiliations typeAffiliations moduleName =
   traverse $ \case
-    S.TermProcedure v -> S.TermProcedure <$> value valueAffiliations typeAffiliations moduleName v
-    S.BindProcedure i v -> S.BindProcedure (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+    S.CallProcedureStep v   -> S.CallProcedureStep <$> value valueAffiliations typeAffiliations moduleName v
+    S.BindProcedureStep i v -> S.BindProcedureStep (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
 literal :: S.Literal -> S.Literal
 literal (S.Integer v b)      = S.Integer v b

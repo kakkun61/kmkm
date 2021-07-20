@@ -5,7 +5,7 @@
   "patterns": [
     {
       "name": "keyword.other.kmkm",
-      "match": "\\b(module|define|list|bind-value-foreign|bind-value|bind-type-foreign|bind-type|function|function1|procedure|apply|call|var|type|system-header|local-header)\\b"
+      "match": "\\b(module|define|list|bind-value-foreign|bind-value|bind-type-foreign|bind-type|function|function1|procedure|apply|call|bind|type|system-header|local-header)\\b"
     },
     {
       "name": "variable.other.kmkm",

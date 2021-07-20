@@ -111,8 +111,8 @@ application a v =
     go (S.ApplicationC v0 v1)                                = typedValue v1 :| [typedValue v0]
 
 procedureStep :: (Functor f, Copointed f, S.HasPosition f) => ProcedureStep 'S.Curried f -> ProcedureStep 'S.Uncurried f
-procedureStep (S.BindProcedure i v) = S.BindProcedure i $ typedValue v
-procedureStep (S.TermProcedure v)   = S.TermProcedure $ typedValue v
+procedureStep (S.BindProcedureStep i v) = S.BindProcedureStep i $ typedValue v
+procedureStep (S.CallProcedureStep v)   = S.CallProcedureStep $ typedValue v
 
 function :: (Functor f, Copointed f, S.HasPosition f) => Function 'S.Curried f -> f a -> Function 'S.Uncurried f
 function (S.FunctionC i t v') v

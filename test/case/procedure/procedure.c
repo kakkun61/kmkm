@@ -1,16 +1,12 @@
 #include "procedure.h"
-enum procedure_unit_tag {
-                           procedure_unit_tag
-                       };
-                       struct procedure_unit {
-                           enum procedure_unit_tag tag;
-                       };
-                       struct procedure_unit const procedure_unit = { procedure_unit_tag };
-                       struct procedure_unit procedure_rec0(void)
-                       {
-                           return procedure_rec0();
-                       }
-                       struct procedure_unit procedure_rec1(void)
-                       {
-                           return procedure_rec0();
-                       }
+#include "kmkm/unit.h"
+
+struct kmkm_unit_unit procedure_rec0(void)
+{
+  return procedure_rec0();
+}
+
+struct kmkm_unit_unit procedure_rec1(void)
+{
+  return procedure_rec0();
+}

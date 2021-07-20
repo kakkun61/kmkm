@@ -78,8 +78,8 @@ term v =
 procedureStep :: (Traversable f, Copointed f, S.HasPosition f) => f (ProcedureStep f) -> Pass (f (ProcedureStep f))
 procedureStep =
   traverse $ \case
-    S.BindProcedure i v -> S.BindProcedure i <$> term v
-    S.TermProcedure v   -> S.TermProcedure <$> term v
+    S.BindProcedureStep i v -> S.BindProcedureStep i <$> term v
+    S.CallProcedureStep v   -> S.CallProcedureStep <$> term v
 
 newIdentifier :: Pass S.Identifier
 newIdentifier = do

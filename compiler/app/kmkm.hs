@@ -72,7 +72,7 @@ main' output libraries dryRun src =
               maybe (pure ()) (printRange stderr (O.get src)) r
               T.hPutStrLn stderr "The identifier may not imported or may have wrong letters."
             TypeCheckMismatchException e a r -> do
-              T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> " actual: " <> a
+              T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> ", actual: " <> a
               maybe (pure ()) (printRange stderr (O.get src)) r
               T.hPutStrLn stderr "The expected type and actual one are different."
             TypeCheckPrimitiveTypeException i r -> do
@@ -90,7 +90,7 @@ main' output libraries dryRun src =
               T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
               T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."
             CompileModuleNameMismatchException f m r -> do
-              T.hPutStrLn stderr $ "compile error: module name mismatch error: file name: " <> T.pack f <> " module name: " <> m
+              T.hPutStrLn stderr $ "compile error: module name mismatch error: file name: " <> T.pack f <> ", module name: " <> m
               maybe (pure ()) (printRange stderr (O.get src)) r
               T.hPutStrLn stderr "A file's name and its enclosed module's name is mismatched while compiling."
             CompileDotDotPathException f -> do

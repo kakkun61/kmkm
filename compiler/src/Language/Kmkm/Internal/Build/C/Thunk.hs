@@ -92,8 +92,8 @@ term tids v =
 procedureStep :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
 procedureStep tids p =
   case copoint p of
-    S.BindProcedure i v -> (tids S.\\ S.singleton (copoint i), S.BindProcedure i (term tids v) <$ p)
-    S.TermProcedure v   ->   (tids, S.TermProcedure (term tids v) <$ p)
+    S.BindProcedureStep i v -> (tids S.\\ S.singleton (copoint i), S.BindProcedureStep i (term tids v) <$ p)
+    S.CallProcedureStep v   ->   (tids, S.CallProcedureStep (term tids v) <$ p)
 
 identifiers :: Copointed f => f [f (Definition f)] -> Set S.QualifiedIdentifier
 identifiers =

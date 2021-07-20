@@ -81,12 +81,12 @@ term v =
 procedureStep :: (Traversable f, Copointed f, S.HasPosition f) => f (ProcedureStep 'S.LambdaUnlifted f) -> Pass (f (ProcedureStep 'S.LambdaLifted f), [f (Definition 'S.LambdaLifted f)])
 procedureStep s =
   case copoint s of
-    S.BindProcedure i v ->do
+    S.BindProcedureStep i v ->do
       (v', ds) <- term v
-      pure (S.BindProcedure i v' <$ v, ds)
-    S.TermProcedure v -> do
+      pure (S.BindProcedureStep i v' <$ v, ds)
+    S.CallProcedureStep v -> do
       (v', ds) <- term v
-      pure (S.TermProcedure v' <$ v, ds)
+      pure (S.CallProcedureStep v' <$ v, ds)
 
 newIdentifier :: Pass S.QualifiedIdentifier
 newIdentifier = do

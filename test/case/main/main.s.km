@@ -1,10 +1,11 @@
 (module
   main
   (list
-    kmkm.prim)
+    kmkm.prim
+    kmkm.proc)
   (list
     (bind-value
       main
       (procedure
         (list
-          (term 1))))))
+          (call (apply kmkm.proc.pureInt 1)))))))
