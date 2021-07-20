@@ -5,11 +5,7 @@
   "patterns": [
     {
       "name": "keyword.other.kmkm",
-      "match": "\\b(module|define|list|bind-value-foreign|bind-value|bind-type-foreign|bind-type|function|function1|procedure|apply|call|bind|type|system-header|local-header)\\b"
-    },
-    {
-      "name": "variable.other.kmkm",
-      "match": "('module'|'define'|'list'|'function'|'function1'|'procedure'|'apply'|'call'|'var'|'type')"
+      "match": "\\b(module|define|list|bind-value-foreign|bind-value|bind-type-foreign|bind-type|function1|function|procedure|apply|call|bind|type|let|c-value|c-type)\\b"
     },
     {
       "name": "string.quoted.triple.kmkm",
