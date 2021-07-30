@@ -1,14 +1,20 @@
-{-# LANGUAGE OverloadedLists   #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds                #-}
+{-# LANGUAGE FlexibleInstances        #-}
+{-# LANGUAGE OverloadedLists          #-}
+{-# LANGUAGE OverloadedStrings        #-}
+{-# LANGUAGE PolyKinds                #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 
 module Language.Kmkm.Internal.Build.TypeCheckSpec where
 
 import Language.Kmkm.Internal.Build.TypeCheck
 
-import Barbies.Bare.Layered
-import Data.Functor.Identity
-import Language.Kmkm.Internal.Syntax
-import Test.Hspec
+import           Barbies.Bare.Layered
+import           Data.Functor.Barbie.Layered
+import           Data.Functor.Identity
+import qualified Data.Kind                     as K
+import           Language.Kmkm.Internal.Syntax
+import           Test.Hspec
 
 spec :: Spec
 spec = do
@@ -16,14 +22,18 @@ spec = do
     describe "literal" $ do
       describe "integer" $ do
         it "10" $ do
-          typeCheck mempty (cover $ Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
-            `shouldReturn`
-              cover (Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedValue (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])])
+          let
+            actual = typeCheck mempty (cover $ Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "ten"] $ UntypedValue $ Literal $ Integer 10 10])
+            expected :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const2 () Covered Identity) (Const2 () Covered Identity) Covered Identity)
+            expected = cover (Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "ten"] $ TypedValue (Literal $ Integer 10 10) (TypeVariable ["kmkm", "prim", "int"])])
+          actual `shouldReturn` expected
 
         it "0x10" $ do
-          typeCheck mempty (cover $ Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
-            `shouldReturn`
-              cover (Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedValue (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])])
+          let
+            actual = typeCheck mempty (cover $ Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "sixteen"] (UntypedValue $ Literal $ Integer 16 16)])
+            expected :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const2 () Covered Identity) (Const2 () Covered Identity) Covered Identity)
+            expected = cover (Module "spec" [["kmkm", "prim"]] [ValueBind $ ValueBindU ["spec", "sixteen"] $ TypedValue (Literal $ Integer 16 16) (TypeVariable ["kmkm", "prim", "int"])])
+          actual `shouldReturn` expected
 
     describe "application" $ do
       describe "succ" $ do
@@ -52,6 +62,7 @@ spec = do
                               )
                               $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
+            result :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const2 () Covered Identity) (Const2 () Bare Identity) Bare Identity
             result =
               Module
                 "spec"
@@ -77,6 +88,7 @@ spec = do
 
         it "fail" $ do
           let
+            source :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const2 () Bare Identity) (Const2 () Bare Identity) Bare Identity
             source =
               Module
                 "spec"
@@ -100,3 +112,15 @@ spec = do
 
 cover :: BareB b => b Bare Identity -> Identity (b Covered Identity)
 cover = Identity . bcoverWith Identity
+
+type Const2 :: K.Type -> k -> l -> m -> n -> K.Type
+newtype Const2 a b c d e =
+  Const2 a
+  deriving (Show, Eq)
+
+instance FunctorB (Const2 a b c Covered) where
+  bmap _ (Const2 a) = Const2 a
+
+instance BareB (Const2 a b c) where
+  bstrip (Const2 a) = Const2 a
+  bcover (Const2 a) = Const2 a

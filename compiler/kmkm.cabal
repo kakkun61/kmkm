@@ -21,6 +21,7 @@ common common
   build-depends: base >= 4 && < 5
   ghc-options: -Wall
                -Wcompat
+               -Wno-name-shadowing
   default-language: Haskell2010
   default-extensions: NoStarIsType
   if impl(ghc >= 9.2)
@@ -37,7 +38,6 @@ common warnings
                -Widentities
                -Wpartial-fields
                -Wredundant-constraints
-               -Wno-name-shadowing
 
 library
   import: common,
@@ -118,9 +118,11 @@ test-suite spec
   build-depends: kmkm == 0.1.0.0,
                  barbies-layered,
                  containers,
+                 exceptions,
                  hspec,
                  megaparsec,
-                 pointed
+                 pointed,
+                 text
   ghc-options: -threaded
                -rtsopts
                -with-rtsopts=-N
