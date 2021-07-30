@@ -2,8 +2,8 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
-                      Position (Position), compile)
+import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
+                      Location (Location), Position (Position), compile)
 
 import           Control.Exception.Safe (catch)
 import           Control.Monad          (replicateM)
@@ -38,16 +38,17 @@ main' output libraries dryRun src =
   catch
     do
       let
-        readFile path =
+        findFile path =
           liftIO $ do
-            path' <- find $ "." : O.get libraries
-            T.readFile path'
+            go $ "." : O.get libraries
           where
-            find (dir : dirs) = do
+            go (dir : dirs) = do
               let p = dir </> path
               found <- doesFileExist p
-              if found then pure p else find dirs
-            find [] = fail $ "not found: " ++ path
+              if found then pure p else go dirs
+            go [] = fail $ "not found: " ++ path
+        readFile :: MonadIO m => FilePath -> m Text
+        readFile = liftIO . T.readFile
         writeFile path text =
           if O.get dryRun
             then pure ()
@@ -56,42 +57,46 @@ main' output libraries dryRun src =
               liftIO $ createDirectoryIfMissing True $  F.takeDirectory path'
               liftIO $ TU.writeFile path' text
         writeLog = O.logStr 1 . T.unpack
-      compile readFile writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
+      compile findFile readFile writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
     $ \e ->
         liftIO $ do
           case e of
             ParseException m -> do
               hPutStrLn stderr "parsing error:"
               hPutStr stderr m
-            NameResolveUnknownIdentifierException i r -> do
+            NameResolveUnknownIdentifierException i l -> do
               T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> i
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "The identifier may not imported or may have wrong letters."
-            TypeCheckNotFoundException i r -> do
+            TypeCheckNotFoundException i l -> do
               T.hPutStrLn stderr $ "type-checking error: not found error: " <> i
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "The identifier may not imported or may have wrong letters."
-            TypeCheckMismatchException e a r -> do
+            TypeCheckMismatchException e a l -> do
               T.hPutStrLn stderr $ "type-checking error: mismatch error: expected: " <> e <> ", actual: " <> a
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "The expected type and actual one are different."
-            TypeCheckPrimitiveTypeException i r -> do
+            TypeCheckPrimitiveTypeException i l -> do
               T.hPutStrLn stderr $ "type-checking error: primitive type not imported error: " <> i
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "A primitive is used but its type is not imported."
-            TypeCheckBindProcedureEndException r -> do
+            TypeCheckBindProcedureEndException l -> do
               T.hPutStrLn stderr "type-checking error: bind procedure end error"
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "An end of a procedure must be a binding step."
             TypeCheckRecursionException is -> do
               T.hPutStrLn stderr $ "type-checking error: recursion error: " <> T.intercalate ", " (S.toList is)
               T.hPutStrLn stderr "Some recursion definitions are found but they have no type annotations."
+            IntermediateCEmbeddedParameterMismatchException e a l -> do
+              T.hPutStrLn stderr $ "intermediate C error: C embedded parameter mismatch error: expected: " <> T.pack (show e) <> ", actual: " <> T.pack (show a)
+              maybe (pure ()) (printLocation stderr) l
+              T.hPutStrLn stderr "A number of parameters of embedded C is different from one of its type."
             CompileRecursionException ms -> do
               T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
               T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."
-            CompileModuleNameMismatchException f m r -> do
+            CompileModuleNameMismatchException f m l -> do
               T.hPutStrLn stderr $ "compile error: module name mismatch error: file name: " <> T.pack f <> ", module name: " <> m
-              maybe (pure ()) (printRange stderr (O.get src)) r
+              maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "A file's name and its enclosed module's name is mismatched while compiling."
             CompileDotDotPathException f -> do
               T.hPutStrLn stderr $ "compile error: \"..\" path error: " <> T.pack f
@@ -104,8 +109,8 @@ removeFileExtension ext path = do
     (f, e) | e == '.' : ext -> pure f
     _                       -> fail $ "extension is not \"" ++ ext ++ "\""
 
-printRange :: MonadIO m => Handle -> FilePath -> (Position, Position) -> m ()
-printRange outHandle filePath (Position beginLine beginColumn, Position endLine endColumn) =
+printLocation :: MonadIO m => Handle -> Location -> m ()
+printLocation outHandle (Location filePath (Position beginLine beginColumn) (Position endLine endColumn)) =
   liftIO $ do
     handle <- openFile filePath ReadMode
     hSkipLines handle $ beginLine - 1
@@ -135,14 +140,13 @@ printRange outHandle filePath (Position beginLine beginColumn, Position endLine 
       where
         underline n l
           | n == beginLine && n == endLine = T.replicate (beginColumn' - 1) " " <> T.replicate (endColumn' - beginColumn') "^"
-          | n == beginLine = T.replicate (beginColumn' - 1) " " <> T.replicate (l - beginColumn') "^"
-          | n == endLine   = T.replicate endColumn' "^"
-          | otherwise      = T.replicate l "^"
+          | n == beginLine                 = T.replicate (beginColumn' - 1) " " <> T.replicate (l - beginColumn') "^"
+          | n == endLine                   = T.replicate (endColumn' - 1) "^"
+          | otherwise                      = T.replicate l "^"
     alternate [] bs         = sequence_ bs
     alternate as []         = sequence_ as
     alternate (a:as) (b:bs) = a >> b >> alternate as bs
-    marginLeft n s =
-      T.replicate (fromIntegral n - T.length s) " " <> s
+    marginLeft n s = T.replicate (fromIntegral n - T.length s) " " <> s
 
 hPutStrLnRed :: Handle -> Text -> IO ()
 hPutStrLnRed h s = do

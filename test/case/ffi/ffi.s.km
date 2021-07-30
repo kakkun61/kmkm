@@ -6,20 +6,22 @@
   (list
     (bind-value-foreign
       increment
-      (c-value
-        ""
-        (list "v")
-        """
-          return v + 1;
-        """)
+      (list
+        (c-value
+          ""
+          (list "v")
+          """
+            return v + 1;
+          """))
       (function kmkm.prim.int kmkm.prim.int))
     (bind-value-foreign
       hello
-      (c-value
-        "#include<stdio.h>"
-        (list)
-        """
-          printf("hello\n");
-          return kmkm_unit_unit;
-        """)
+      (list
+        (c-value
+          "#include<stdio.h>"
+          (list)
+          """
+            printf("hello\n");
+            return kmkm_unit_unit;
+          """))
       (procedure kmkm.unit.unit))))

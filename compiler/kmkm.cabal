@@ -56,8 +56,10 @@ library
                    Language.Kmkm.Internal.Build.TypeCheck
                    Language.Kmkm.Internal.Build.Uncurry
                    Language.Kmkm.Internal.Compile
+                   Language.Kmkm.Internal.Compile.C
                    Language.Kmkm.Internal.Exception
                    Language.Kmkm.Internal.Parse.Sexp
+                   Language.Kmkm.Internal.Parse.Sexp.C
                    Language.Kmkm.Internal.Syntax
   build-depends: algebraic-graphs,
                  barbies,

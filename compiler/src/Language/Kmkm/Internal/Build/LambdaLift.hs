@@ -14,26 +14,26 @@ import qualified Control.Monad.State.Strict as S
 import           Data.Copointed             (Copointed (copoint))
 import qualified Data.List.NonEmpty         as N
 
-type Module l f = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
+type Module l et ev f = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
 
-type Definition l f = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
+type Definition l et ev f = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
 
-type Value l f = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
+type Value l et ev f = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
 
-type ProcedureStep l f = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed B.Covered f
+type ProcedureStep l et ev f = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
 
 type Pass = State Word
 
-lambdaLift :: (Traversable f, Copointed f, S.HasPosition f) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
+lambdaLift :: (Traversable f, Copointed f, S.HasLocation f) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev B.Covered f)
 lambdaLift = flip evalState 0 . module'
 
-module' :: (Traversable f, Copointed f, S.HasPosition f) => f (Module 'S.LambdaUnlifted f) -> Pass (f (Module 'S.LambdaLifted f))
+module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
     ds' <- sequence $ traverse definition <$> ds
     pure $ S.Module mn ms ds'
 
-definition :: (Traversable f, Copointed f, S.HasPosition f) => f (Definition 'S.LambdaUnlifted f) -> Pass (f (Definition 'S.LambdaLifted f))
+definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
 definition =
   traverse $ \case
     S.DataDefinition i cs -> pure $ S.DataDefinition i cs
@@ -53,7 +53,7 @@ definition =
             pure $ S.ValueBind $ S.ValueBindV i $ S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v
     S.ForeignValueBind i c t -> pure $ S.ForeignValueBind i c t
 
-term :: (Traversable f, Copointed f, S.HasPosition f) =>f (Value 'S.LambdaUnlifted f) -> Pass (f (Value 'S.LambdaLifted f), [f (Definition 'S.LambdaLifted f)])
+term :: (Traversable f, Copointed f, S.HasLocation f) =>f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 term v =
   case copoint v of
     S.TypedValue v' t ->
@@ -78,7 +78,7 @@ term v =
           (v1', vds) <- term v1
           pure (S.TypedValue (S.Let ds' v1' <$ v') t <$ v, vds)
 
-procedureStep :: (Traversable f, Copointed f, S.HasPosition f) => f (ProcedureStep 'S.LambdaUnlifted f) -> Pass (f (ProcedureStep 'S.LambdaLifted f), [f (Definition 'S.LambdaLifted f)])
+procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 procedureStep s =
   case copoint s of
     S.BindProcedureStep i v ->do

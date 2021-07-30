@@ -17,32 +17,38 @@ import qualified Control.Monad.State.Strict as S
 import           Data.Copointed             (Copointed (copoint))
 import           Data.Traversable           (for)
 
-type Module f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f
+type Module et ev f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
 
-type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f
+type Definition et ev f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
 
-type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f
+type Value et ev f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
 
-type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f
+type ProcedureStep et ev f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
 
 type Pass = State Word
 
-partiallyApply :: (Traversable f, Copointed f, S.HasPosition f) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed B.Covered f)
+partiallyApply
+  :: ( Traversable f
+     , Copointed f
+     , S.HasLocation f
+     )
+  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
 partiallyApply = flip evalState 0 . module'
 
-module' :: (Traversable f, Copointed f, S.HasPosition f) => f (Module f) -> Pass (f (Module f))
+module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module et ev f) -> Pass (f (Module et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
       ds' <- sequence $ traverse definition <$> ds
       pure $ S.Module mn ms ds'
 
-definition :: (Traversable f, Copointed f, S.HasPosition f) => f (Definition f) -> Pass (f (Definition f))
+definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition et ev f) -> Pass (f (Definition et ev f))
 definition =
   traverse $ \case
     S.ValueBind (S.ValueBindU i v) -> scope $ S.ValueBind . S.ValueBindU i <$> term v
     d                              -> pure d
 
-term :: (Traversable f, Copointed f, S.HasPosition f) => f (Value f) -> Pass (f (Value f))
+term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value et ev f) -> Pass (f (Value et ev f))
 term v =
   for v $ \v'@(S.TypedValue v1 t) ->
     case copoint v1 of
@@ -75,7 +81,7 @@ term v =
       S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> sequence (traverse procedureStep <$> ps)
       _ -> pure v'
 
-procedureStep :: (Traversable f, Copointed f, S.HasPosition f) => f (ProcedureStep f) -> Pass (f (ProcedureStep f))
+procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep et ev f) -> Pass (f (ProcedureStep et ev f))
 procedureStep =
   traverse $ \case
     S.BindProcedureStep i v -> S.BindProcedureStep i <$> term v

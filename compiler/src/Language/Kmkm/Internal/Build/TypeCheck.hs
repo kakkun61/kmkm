@@ -28,7 +28,8 @@ import qualified Algebra.Graph.AdjacencyMap           as G hiding (vertexList)
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
-import qualified Barbies.Bare                         as B
+import qualified Barbies.Bare                         as B (Bare, Covered)
+import qualified Barbies.Bare.Layered                 as B (BareB)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch, MonadThrow, catchJust, throw)
 import           Data.Copointed                       (Copointed (copoint))
@@ -46,28 +47,30 @@ import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-type Module t f = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t B.Covered f
+type Module t et ev f = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
 
-type Definition t f = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t B.Covered f
+type Definition t et ev f = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
 
 type Type f = S.Type 'S.NameResolved 'S.Curried B.Covered f
 
-type Value t f = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t B.Covered f
+type Value t et ev f = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
 
-type ProcedureStep t f = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t B.Covered f
+type ProcedureStep t et ev f = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
 
 typeCheck
   :: ( MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
      , Show (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
      , Show (f S.QualifiedIdentifier)
+     , B.BareB et
+     , B.BareB ev
      )
   => Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
-  -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered f)
-  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed B.Covered f))
+  -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered f)
+  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f))
 typeCheck = typeCheck'
 
 typeCheck'
@@ -75,13 +78,15 @@ typeCheck'
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (Type f))
      , Show (f (Type f))
-     , Show (f S.QualifiedIdentifier))
+     , Show (f S.QualifiedIdentifier)
+     , B.BareB et
+     , B.BareB ev)
   => Map S.QualifiedIdentifier (f (Type f))
-  -> f (Module 'S.Untyped f)
-  -> m (f (Module 'S.Typed f))
+  -> f (Module 'S.Untyped et ev f)
+  -> m (f (Module 'S.Typed et ev f))
 typeCheck' ctx m =
   traverse go m
   where
@@ -93,15 +98,15 @@ definitions
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
      )
   => Map S.QualifiedIdentifier (f (Type f))
   -> PrimitivesImporting
-  -> f [f (Definition 'S.Untyped f)]
-  -> m (f [f (Definition 'S.Typed f)])
+  -> f [f (Definition 'S.Untyped et ev f)]
+  -> m (f [f (Definition 'S.Typed et ev f)])
 definitions context prim =
   traverse go
   where
@@ -114,7 +119,7 @@ definitions context prim =
       typedValueBinds <- foldr (typeBind context' valueBinds prim) (pure M.empty) sortedIdentifiers
       pure $ replaceTerm typedValueBinds <$> definitions'
 
-dependency :: (Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped f) -> G.AdjacencyMap S.QualifiedIdentifier
+dependency :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
 dependency valueBinds d | S.ValueBind (S.ValueBindU i v) <- copoint d = G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
 dependency _ _                                                        = G.empty
 
@@ -123,17 +128,17 @@ typeBind
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
      )
   => Map S.QualifiedIdentifier (f (Type f))
-  -> Map S.QualifiedIdentifier (f (Value 'S.Untyped f))
+  -> Map S.QualifiedIdentifier (f (Value 'S.Untyped et ev f))
   -> PrimitivesImporting
   -> GN.AdjacencyMap S.QualifiedIdentifier
-  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed f)))
-  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed f)))
+  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
+  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
 typeBind context valueBinds prim recursionIdentifiers typedValueBinds =
   catchJust
     (\case { NotFoundException i _ -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
@@ -146,13 +151,13 @@ typeBind context valueBinds prim recursionIdentifiers typedValueBinds =
       pure $ recursionTypedValueBinds `M.union` typedValueBinds'
     $ const $ throw $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
 
-annotatedType :: Copointed f => f (Value 'S.Untyped f) -> Maybe (f (Type f))
+annotatedType :: Copointed f => f (Value 'S.Untyped et ev f) -> Maybe (f (Type f))
 annotatedType v
   | S.UntypedValue v <- copoint v
   , S.TypeAnnotation (S.TypeAnnotation' _ t) <- copoint v = Just t
 annotatedType _                                                           = Nothing
 
-replaceTerm :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed f)) -> f (Definition 'S.Untyped f) -> f (Definition 'S.Typed f)
+replaceTerm :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
 replaceTerm typedValueBinds =
   fmap $ \case
     S.DataDefinition i cs -> S.DataDefinition i cs
@@ -162,11 +167,11 @@ replaceTerm typedValueBinds =
       S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup (copoint i) typedValueBinds)
     S.ForeignValueBind i c t -> S.ForeignValueBind i c t
 
-valueBind :: Copointed f => f (Definition t f) -> Maybe (S.QualifiedIdentifier, f (Value t f))
+valueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Value t et ev f))
 valueBind d | S.ValueBind (S.ValueBindU i v) <- copoint d = Just (copoint i, v)
 valueBind _                                = Nothing
 
-dep :: (Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped f) -> [S.QualifiedIdentifier]
+dep :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped et ev f) -> [S.QualifiedIdentifier]
 dep identifiers v =
   case copoint v of
     S.UntypedValue v' ->
@@ -197,15 +202,15 @@ typeOfTerm
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
      )
   => Map S.QualifiedIdentifier (f (Type f))
   -> PrimitivesImporting
-  -> f (Value 'S.Untyped f)
-  -> m (f (Value 'S.Typed f))
+  -> f (Value 'S.Untyped et ev f)
+  -> m (f (Value 'S.Typed et ev f))
 typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, string = primString } v =
   case copoint v of
     S.UntypedValue v' ->
@@ -214,26 +219,26 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           let i' = copoint i
           in
             case M.lookup i' ctx of
-              Nothing -> throw $ NotFoundException i' $ S.range i
+              Nothing -> throw $ NotFoundException i' $ S.location i
               Just t  -> pure $ S.TypedValue (S.Variable i <$ v') t <$ v
         S.Literal (S.Integer v_ b) ->
           let int = S.GlobalIdentifier ["kmkm", "prim"] "int"
           in
             if primInt
               then pure $ S.TypedValue (S.Literal (S.Integer v_ b) <$ v') (S.TypeVariable (int <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException int $ S.range v
+              else throw $ PrimitiveTypeException int $ S.location v
         S.Literal (S.Fraction s d e b) ->
           let frac2 = S.GlobalIdentifier ["kmkm", "prim"] "frac2"
           in
             if primFrac2
               then pure $ S.TypedValue (S.Literal (S.Fraction s d e b) <$ v') (S.TypeVariable (frac2 <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException frac2 $ S.range v
+              else throw $ PrimitiveTypeException frac2 $ S.location v
         S.Literal (S.String t) ->
           let string = S.GlobalIdentifier ["kmkm", "prim"] "string"
           in
             if primString
               then pure $ S.TypedValue (S.Literal (S.String t) <$ v') (S.TypeVariable (string <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException string $ S.range v
+              else throw $ PrimitiveTypeException string $ S.location v
         S.Function (S.FunctionC i t v'') -> do
           v''' <- typeOfTerm (M.insert (copoint i) t ctx) prim v''
           let S.TypedValue _ t' = copoint v'''
@@ -247,8 +252,8 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           case copoint t0 of
             S.FunctionType (S.FunctionTypeC t00 t01)
               | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
-              | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.range t1
-            _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.range t0
+              | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.location t1
+            _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.location t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (ctx', p') <- typeOfProcedureStep ctx prim p
@@ -259,7 +264,7 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
               | S.CallProcedureStep v <- copoint s ->
                   let S.TypedValue _ t = copoint v
                   in pure $ S.TypedValue (S.Procedure (ps''' <$ ps) <$ v') t <$ v
-              | otherwise -> throw $ BindProcedureEndException $ S.range s
+              | otherwise -> throw $ BindProcedureEndException $ S.location s
           where
             go p acc = do
               (ctx, ps) <- acc
@@ -270,7 +275,7 @@ typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, stri
           let S.TypedValue _ t' = copoint v''
           if S.strip t == S.strip t'
             then pure v''
-            else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.range t'
+            else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.location t'
         S.Let ds v' -> do
           ds' <- definitions ctx prim ds
           let ctx' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` ctx
@@ -283,15 +288,15 @@ typeOfProcedureStep
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
   )
   => Map S.QualifiedIdentifier (f (Type f))
   -> PrimitivesImporting
-  -> f (ProcedureStep 'S.Untyped f)
-  -> m (Map S.QualifiedIdentifier (f (Type f)), f (ProcedureStep 'S.Typed f))
+  -> f (ProcedureStep 'S.Untyped et ev f)
+  -> m (Map S.QualifiedIdentifier (f (Type f)), f (ProcedureStep 'S.Typed et ev f))
 typeOfProcedureStep ctx prim s =
   case copoint s of
     S.BindProcedureStep i v -> do
@@ -305,9 +310,9 @@ typeOfProcedureStep ctx prim s =
       let S.TypedValue _ t = copoint v'
       case copoint t of
         S.ProcedureType _ -> pure (ctx, S.CallProcedureStep v' <$ s)
-        _                 -> throw $ MismatchException (Left "procedure") (S.strip t) $ S.range t
+        _                 -> throw $ MismatchException (Left "procedure") (S.strip t) $ S.location t
 
-primitivesImporting :: (Functor f, Copointed f) => f (Module 'S.Untyped f) -> PrimitivesImporting
+primitivesImporting :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImporting
 primitivesImporting m =
   case S.strip m of
     S.Module _ ms _ ->
@@ -325,11 +330,11 @@ data PrimitivesImporting =
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Exception
-  = NotFoundException S.QualifiedIdentifier (Maybe (S.Position, S.Position))
-  | MismatchException { expected :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity), actual :: S.Type 'S.NameResolved 'S.Curried B.Bare Identity, range :: Maybe (S.Position, S.Position) }
-  | BindProcedureEndException (Maybe (S.Position, S.Position))
+  = NotFoundException S.QualifiedIdentifier (Maybe S.Location)
+  | MismatchException { expected :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity), actual :: S.Type 'S.NameResolved 'S.Curried B.Bare Identity, location :: Maybe S.Location }
+  | BindProcedureEndException (Maybe S.Location)
   | RecursionException (Set S.QualifiedIdentifier)
-  | PrimitiveTypeException S.QualifiedIdentifier (Maybe (S.Position, S.Position))
+  | PrimitiveTypeException S.QualifiedIdentifier (Maybe S.Location)
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where

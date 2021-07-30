@@ -22,44 +22,44 @@ import qualified Data.Set           as S
 -- I think that a smarter method needs topological sort for dependencies
 -- of value definitions.
 
-type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f
+type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
 type Type f = S.Type 'S.NameResolved 'S.Uncurried B.Covered f
 
-type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered  f
+type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered  f
 
-type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f
+type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
 thunk
   :: ( Functor f
      , Copointed f
-     , S.HasPosition f
+     , S.HasLocation f
      )
-  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
+  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f)
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f)
 thunk = fmap $ \(S.Module n ms ds) -> S.Module n ms $ fmap (definition (thunkIdentifiers ds)) <$> ds
 
-definition :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition tids d =
   case copoint d of
     S.ValueBind (S.ValueBindV i v) -> definition' tids (S.ValueBind (S.ValueBindN i ([] <$ d) v) <$ d)
     _                              -> definition' tids d
 
-definition' :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition' :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition' tids =
   fmap $ \case
     S.ValueBind (S.ValueBindV i v)    -> valueBind tids i Nothing v
     S.ValueBind (S.ValueBindN i ps v) -> valueBind tids i (Just ps) v
     m                                 -> m
 
-valueBind :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> Definition f
+valueBind :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> Definition f
 valueBind tids i mps v =
   let
     v' = term tids v
   in
     S.ValueBind (maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps)
 
-term :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
+term :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
 term tids v =
   let S.TypedValue v1 t = copoint v
   in
@@ -89,7 +89,7 @@ term tids v =
         in S.TypedValue (S.Let ds'' v' <$ v1) t <$ v
       _ -> v
 
-procedureStep :: (Functor f, Copointed f, S.HasPosition f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
+procedureStep :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
 procedureStep tids p =
   case copoint p of
     S.BindProcedureStep i v -> (tids S.\\ S.singleton (copoint i), S.BindProcedureStep i (term tids v) <$ p)

@@ -1,5 +1,5 @@
-#include "kmkm/prim.h"
 #include "definition.h"
+#include "kmkm/prim.h"
 
 enum definition_myBool_tag {
   definition_myFalse_tag,

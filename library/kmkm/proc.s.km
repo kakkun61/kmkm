@@ -5,8 +5,9 @@
   (list
     (bind-value-foreign
       pureInt
-      (c-value
-        "a"
-        (list)
-        "return a;")
+      (list
+        (c-value
+          ""
+          (list "a")
+          "return a;"))
       (function kmkm.prim.int (procedure kmkm.prim.int)))))

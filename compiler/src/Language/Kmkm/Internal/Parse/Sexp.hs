@@ -1,8 +1,10 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP                      #-}
+{-# LANGUAGE DataKinds                #-}
+{-# LANGUAGE DeriveGeneric            #-}
+{-# LANGUAGE FlexibleContexts         #-}
+{-# LANGUAGE NamedFieldPuns           #-}
+{-# LANGUAGE OverloadedStrings        #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 
 module Language.Kmkm.Internal.Parse.Sexp
   ( parse
@@ -17,7 +19,13 @@ module Language.Kmkm.Internal.Parse.Sexp
   , integer
   , fraction
   , string
+  , withPosition
+  , list
+  , list1
   , Parser
+  , EmbeddedParser (..)
+  , EmbeddedValue
+  , EmbeddedType
   , Exception (..)
   ) where
 
@@ -29,14 +37,16 @@ import           Control.Applicative        (Alternative (many, (<|>)))
 import qualified Control.Exception          as E
 import           Control.Exception.Safe     (MonadThrow, throw)
 import           Control.Monad              (void)
+import           Control.Monad.Reader       (MonadReader (ask), Reader, runReader)
 import           Data.Bool                  (bool)
 import qualified Data.Char                  as C
+import           Data.Copointed             (Copointed (copoint))
 import           Data.Functor               (($>))
-import           Data.Functor.Identity      (Identity)
+import qualified Data.Kind                  as K
 import qualified Data.List                  as L
 import           Data.List.NonEmpty         (NonEmpty)
 import qualified Data.List.NonEmpty         as N
-import           Data.Maybe                 (fromMaybe)
+import           Data.Maybe                 (fromMaybe, mapMaybe)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import qualified Data.Typeable              as Y
@@ -49,46 +59,71 @@ import qualified Text.Parser.Char           as P
 import qualified Text.Parser.Combinators    as P
 import qualified Text.Parser.Token          as P
 
-type Module = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type Definition = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered S.WithPosition
+type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered S.WithLocation
 
-type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered S.WithPosition
+type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered S.WithLocation
 
-type Value = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type Value et ev = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type Function = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type Function et ev = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type Application = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type TypeAnnotation = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type ProcedureStep = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped B.Covered S.WithPosition
+type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
 
-type EmbeddedValue = S.EmbeddedValue B.Covered S.WithPosition
+type EmbeddedValue = S.EmbeddedValue B.Covered S.WithLocation
 
-type EmbeddedType = S.EmbeddedType B.Covered S.WithPosition
+type EmbeddedType = S.EmbeddedType B.Covered S.WithLocation
 
-type Parser = ParsecT Void Text Identity
+type Parser et ev = ParsecT Void Text (Reader (Env et ev))
 
-parse :: MonadThrow m => String -> Text -> m (S.WithPosition Module)
-parse = parse' $ module' <* P.eof
+type Env :: (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type
+data Env et ev =
+  Env
+    { filePath        :: FilePath
+    , embeddedParsers :: [EmbeddedParser et ev]
+    , isEmbeddedType  :: S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation)
+    , isEmbeddedValue :: S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation)
+    }
 
-parse' :: MonadThrow m => Parser a -> String -> Text -> m a
-parse' (ParsecT p) n s =
-  case M.parse p n s of
+parse
+  :: MonadThrow m
+  => [EmbeddedParser et ev] -- ^ Embedded parser.
+  -> (S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation)) -- ^ Embedded type filter.
+  -> (S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation)) -- ^ Embedded value filter.
+  -> String -- ^ File name.
+  -> Text -- ^ Input.
+  -> m (S.WithLocation (Module et ev))
+parse eps fv ft = parse' eps fv ft $ module' <* P.eof
+
+parse'
+  :: MonadThrow m
+  => [EmbeddedParser et ev]
+  -> (S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation))
+  -> (S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation))
+  -> Parser et ev a
+  -> String
+  -> Text
+  -> m a
+parse' eps ft fv (ParsecT p) n s =
+  case runReader (M.runParserT p n s) (Env n eps ft fv) of
     Right a -> pure a
     Left e  -> throw $ Exception $ M.errorBundlePretty e
 
-parse'' :: MonadFail m => Parser a -> String -> Text -> m a
-parse'' (ParsecT p) n s =
-  case M.parse p n s of
+parse'' :: (MonadFail m, MonadReader (Env et ev) m) => Parser et ev a -> String -> Text -> m a
+parse'' (ParsecT p) n s = do
+  env <- ask
+  case runReader (M.runParserT p n s) env of
     Right a -> pure a
     Left e  -> fail $ M.errorBundlePretty e
 
-module' :: Parser (S.WithPosition Module)
+module' :: Parser et ev (S.WithLocation (Module et ev))
 module' =
   M.label "module" $
     withPosition $
@@ -96,7 +131,7 @@ module' =
         void $ P.textSymbol "module"
         S.Module <$> moduleName <*> list moduleName <*> list definition
 
-list :: Parser a -> Parser (S.WithPosition [a])
+list :: Parser et ev a -> Parser et ev (S.WithLocation [a])
 list p =
   M.label "list" $
     withPosition $
@@ -104,7 +139,7 @@ list p =
         void $ P.textSymbol "list"
         P.many p
 
-list1 :: Parser a -> Parser (S.WithPosition (NonEmpty a))
+list1 :: Parser et ev a -> Parser et ev (S.WithLocation (NonEmpty a))
 list1 p =
   M.label "list1" $
     withPosition $
@@ -112,7 +147,7 @@ list1 p =
         void $ P.textSymbol "list"
         fromMaybe X.unreachable . N.nonEmpty <$> P.some p
 
-definition :: Parser (S.WithPosition Definition)
+definition :: Parser et ev (S.WithLocation (Definition et ev))
 definition =
   M.label "definition" $
     withPosition $
@@ -124,13 +159,13 @@ definition =
           , foreignTypeBind
           ]
 
-dataDefinition :: Parser Definition
+dataDefinition :: Parser et ev (Definition et ev)
 dataDefinition =
   M.label "dataDefinition" $ do
     void $ P.textSymbol "define"
     S.DataDefinition <$> identifier <*> list valueConstructor
 
-valueConstructor :: Parser (S.WithPosition (S.WithPosition S.Identifier, S.WithPosition [S.WithPosition (S.WithPosition S.Identifier, S.WithPosition Type)]))
+valueConstructor :: Parser et ev (S.WithLocation (S.WithLocation S.Identifier, S.WithLocation [S.WithLocation (S.WithLocation S.Identifier, S.WithLocation Type)]))
 valueConstructor =
   M.label "valueConstructor" $
     withPosition $
@@ -139,28 +174,41 @@ valueConstructor =
         , P.parens $ (,) <$> identifier <*> list field
         ]
 
-field :: Parser (S.WithPosition (S.WithPosition S.Identifier, S.WithPosition Type))
+field :: Parser et ev (S.WithLocation (S.WithLocation S.Identifier, S.WithLocation Type))
 field = M.label "field" $ withPosition $ P.parens $ (,) <$> identifier <*> typ
 
-valueBind :: Parser Definition
+valueBind :: Parser et ev (Definition et ev)
 valueBind =
   M.label "valueBind" $ do
     void $ P.textSymbol "bind-value"
     S.ValueBind <$> (S.ValueBindU <$> identifier <*> value)
 
-foreignValueBind :: Parser Definition
+foreignValueBind :: Parser et ev (Definition et ev)
 foreignValueBind =
   M.label "foreignValueBind" $ do
     void $ P.textSymbol "bind-value-foreign"
-    S.ForeignValueBind <$> identifier <*> embeddedValue <*> typ
+    Env { embeddedParsers, isEmbeddedValue } <- ask
+    let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
+    i <- identifier
+    evs <- list $ P.parens $ P.choice evps
+    t <- typ
+    case mapMaybe (traverse isEmbeddedValue) $ copoint evs of
+      [ev] -> pure $ S.ForeignValueBind i ev t
+      _    -> fail "no or more than one embedded value parsers"
 
-foreignTypeBind :: Parser Definition
+foreignTypeBind :: Parser et ev (Definition et ev)
 foreignTypeBind =
   M.label "foreignTypeBind" $ do
     void $ P.textSymbol "bind-type-foreign"
-    S.ForeignTypeBind <$> identifier <*> embeddedType
+    Env { embeddedParsers, isEmbeddedType } <- ask
+    let etps = (\EmbeddedParser { embeddedTypeParser } -> embeddedTypeParser) <$> embeddedParsers
+    i <- identifier
+    ets <- list $ P.parens $ P.choice etps
+    case mapMaybe (traverse isEmbeddedType) $ copoint ets of
+      [et] -> pure $ S.ForeignTypeBind i et
+      _    -> fail "no or more than one embedded type parsers"
 
-identifier :: Parser (S.WithPosition S.Identifier)
+identifier :: Parser et ev (S.WithLocation S.Identifier)
 identifier =
   M.label "identifier" $
     P.token $
@@ -169,7 +217,7 @@ identifier =
         b <- many $ P.choice [asciiAlphabet, P.digit]
         pure $ S.UserIdentifier $ T.pack $ a : b
 
-eitherIdentifier :: Parser (S.WithPosition S.EitherIdentifier)
+eitherIdentifier :: Parser et ev (S.WithLocation S.EitherIdentifier)
 eitherIdentifier =
   M.label "eitherIdentifier" $
     P.token $
@@ -180,20 +228,20 @@ eitherIdentifier =
           Nothing -> pure $ S.UnqualifiedIdentifier n
           Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
 
-moduleName :: Parser (S.WithPosition S.ModuleName)
+moduleName :: Parser et ev (S.WithLocation S.ModuleName)
 moduleName = M.label "moduleName" $ fmap S.ModuleName <$> P.token (withPosition dotSeparatedIdentifier)
 
-dotSeparatedIdentifier :: Parser (N.NonEmpty Text)
+dotSeparatedIdentifier :: Parser et ev (N.NonEmpty Text)
 dotSeparatedIdentifier =
   M.label "dotSeparatedIdentifier" $ P.sepByNonEmpty identifierSegment (P.char '.')
 
-identifierSegment :: Parser Text
+identifierSegment :: Parser et ev Text
 identifierSegment = do
   a <- asciiAlphabet
   b <- many $ P.choice [asciiAlphabet, P.digit]
   pure $ T.pack $ a : b
 
-value :: Parser (S.WithPosition Value)
+value :: Parser et ev (S.WithLocation (Value et ev))
 value =
   M.label "value'" $
     withPosition $
@@ -212,7 +260,7 @@ value =
                   ]
             ]
 
-literal :: Parser S.Literal
+literal :: Parser et ev S.Literal
 literal =
   M.label "literal" $
     P.choice
@@ -221,19 +269,19 @@ literal =
       , S.String <$> string
       ]
 
-application :: Parser Application
+application :: Parser et ev (Application et ev)
 application =
   M.label "application" $ do
     void $ P.textSymbol "apply"
     S.ApplicationC <$> value <*> value
 
-procedure :: Parser (S.WithPosition (NonEmpty (S.WithPosition ProcedureStep)))
+procedure :: Parser et ev (S.WithLocation (NonEmpty (S.WithLocation (ProcedureStep et ev))))
 procedure =
   M.label "procedure" $ do
     void $ P.textSymbol "procedure"
     list1 step
   where
-    step :: Parser (S.WithPosition ProcedureStep)
+    step :: Parser et ev (S.WithLocation (ProcedureStep et ev))
     step =
       M.label "procedure.p" $
         withPosition $
@@ -247,13 +295,13 @@ procedure =
                   S.CallProcedureStep <$> value
               ]
 
-typeAnnotation :: Parser TypeAnnotation
+typeAnnotation :: Parser et ev (TypeAnnotation et ev)
 typeAnnotation =
   M.label "typeAnnotation" $ do
     void $ P.textSymbol "type"
     S.TypeAnnotation' <$> value <*> typ
 
-integer :: Parser S.Literal
+integer :: Parser et ev S.Literal
 integer =
   M.label "integer" $ do
     P.token $
@@ -264,7 +312,7 @@ integer =
         , flip S.Integer 10 <$> M.decimal
         ]
 
-fraction :: Parser S.Literal
+fraction :: Parser et ev S.Literal
 fraction =
   M.label "fraction" $ do P.token $ hexadecimal <|> decimal
   where
@@ -306,15 +354,15 @@ fraction =
     sign' :: Num n => Bool -> n -> n
     sign' = bool negate id
 
-digits :: Word -> Parser Text
+digits :: Word -> Parser et ev Text
 digits b = do
   let bs = L.genericTake b ['0' .. '9'] ++ ((++) <$> id <*> (C.toUpper <$>) $ L.genericTake (b - 10) ['a' ..])
   T.pack <$> many (P.choice $ P.char <$> bs)
 
-sign :: Parser Bool
+sign :: Parser et ev Bool
 sign =  P.option True $ P.text "-" $> False <|> P.text "+" $> True
 
-string :: Parser Text
+string :: Parser et ev Text
 string =
   M.label "string" $ do
     P.token $
@@ -343,13 +391,13 @@ string =
                   ]
         ]
 
-function :: Parser Function
+function :: Parser et ev (Function et ev)
 function =
   M.label "function" $ do
     void $ P.textSymbol "function"
     S.FunctionC <$> identifier <*> typ <*> value
 
-typ :: Parser (S.WithPosition Type)
+typ :: Parser et ev (S.WithLocation Type)
 typ =
   M.label "type" $
     withPosition $
@@ -363,67 +411,57 @@ typ =
               ]
         ]
 
-functionType :: Parser FunctionType
+functionType :: Parser et ev FunctionType
 functionType =
   M.label "functionType" $ do
     void $ P.textSymbol "function"
     S.FunctionTypeC <$> typ <*> typ
 
-typeApplication :: Parser (S.WithPosition Type, S.WithPosition Type)
+typeApplication :: Parser et ev (S.WithLocation Type, S.WithLocation Type)
 typeApplication =
   M.label "typeApplication" $ do
     void $ P.textSymbol "apply"
     (,) <$> typ <*> typ
 
-procedureType :: Parser (S.WithPosition Type)
+procedureType :: Parser et ev (S.WithLocation Type)
 procedureType =
   M.label "procedureType" $ do
     void $ P.textSymbol "procedure"
     typ
 
-embeddedValue :: Parser (S.WithPosition EmbeddedValue)
-embeddedValue = do
-  M.label "embedded" $
-    P.parens $
-      withPosition $ do
-        void $ P.textSymbol "c-value"
-        i <- withPosition string
-        ps <- list $ withPosition string
-        b <- withPosition string
-        pure $ S.CValue i ps b
-
-embeddedType :: Parser (S.WithPosition EmbeddedType)
-embeddedType = do
-  M.label "embedded" $
-    P.parens $
-      withPosition $ do
-        void $ P.textSymbol "c-type"
-        i <- withPosition string
-        b <- withPosition string
-        pure $ S.CType i b
-
-doubleQuote :: Parser a -> Parser a
+doubleQuote :: Parser et ev a -> Parser et ev a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")
 
-asciiAlphabet :: Parser Char
+asciiAlphabet :: Parser et ev Char
 asciiAlphabet = P.choice [asciiUpper, asciiLower]
 
-asciiUpper :: Parser Char
+asciiUpper :: Parser et ev Char
 asciiUpper = P.choice $ P.char <$> ['A' .. 'Z']
 
-asciiLower :: Parser Char
+asciiLower :: Parser et ev Char
 asciiLower = P.choice $ P.char <$> ['a' .. 'z']
 
-withPosition :: Parser a -> Parser (S.WithPosition a)
+withPosition :: Parser et ev a -> Parser et ev (S.WithLocation a)
 withPosition p = do
+  Env { filePath } <- ask
   M.SourcePos _ beginLine beginColumn <- M.getSourcePos
   a <- p
   M.SourcePos _ endLine endColumn <- M.getSourcePos
   pure $
-    S.WithPosition
-      (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
-      (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
+    S.WithLocation
+      ( S.Location
+          filePath
+          (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
+          (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
+      )
       a
+
+data EmbeddedParser et ev =
+  EmbeddedParser
+    { embeddedValueParser :: Parser et ev (S.WithLocation EmbeddedValue)
+    , embeddedTypeParser  :: Parser et ev (S.WithLocation EmbeddedType)
+    }
+  deriving Generic
 
 newtype Exception
   = Exception String

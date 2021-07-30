@@ -4,10 +4,10 @@
   (list
     (bind-type-foreign
       int
-      (c-type "" "int"))
+      (list (c-type "" "int")))
     (bind-type-foreign
       uint
-      (c-type "" "unsigned int"))
+      (list (c-type "" "unsigned int")))
     (bind-type-foreign
       frac2
-      (c-type "" "double"))))
+      (list (c-type "" "double")))))

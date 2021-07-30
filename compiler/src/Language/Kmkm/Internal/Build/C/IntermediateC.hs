@@ -10,6 +10,7 @@ module Language.Kmkm.Internal.Build.C.IntermediateC
   , Module
   , TypeOrigin (..)
   , definition
+  , Exception (..)
   ) where
 
 import qualified Language.Kmkm.Internal.Build.C.Syntax as I
@@ -18,40 +19,45 @@ import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdenti
                                                         ModuleName (ModuleName), QualifiedIdentifier)
 import qualified Language.Kmkm.Internal.Syntax         as S
 
-import qualified Barbies.Bare.Layered  as B
-import           Data.Bifunctor        (Bifunctor (first))
-import           Data.Copointed        (Copointed (copoint))
-import           Data.Foldable         (Foldable (fold))
-import           Data.Functor.Identity (Identity)
-import qualified Data.List.NonEmpty    as N
-import           Data.Map.Strict       (Map)
-import qualified Data.Map.Strict       as M
-import           Data.Maybe            (mapMaybe)
-import           Data.Text             (Text)
-import qualified Data.Text             as T
-import           GHC.Generics          (Generic)
+import qualified Barbies.Bare.Layered   as B
+import qualified Control.Exception      as E
+import           Control.Exception.Safe (MonadThrow, throw)
+import           Control.Monad          (join)
+import           Data.Copointed         (Copointed (copoint))
+import           Data.Foldable          (Foldable (fold))
+import qualified Data.List.NonEmpty     as N
+import           Data.Map.Strict        (Map)
+import qualified Data.Map.Strict        as M
+import           Data.Maybe             (mapMaybe)
+import           Data.Text              (Text)
+import qualified Data.Text              as T
+import qualified Data.Typeable          as Y
+import           GHC.Generics           (Generic)
 
-type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
+type Module f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
-type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
+type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
-type Type = S.Type 'S.NameResolved 'S.Uncurried B.Bare Identity
+type Type f = S.Type 'S.NameResolved 'S.Uncurried B.Covered f
 
-type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
+type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
-type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare Identity
+type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
 
 translate
-  :: ( Functor f
+  :: ( MonadThrow m
+     , Functor f
+     , Foldable f
      , Copointed f
+     , S.HasLocation f
      )
   => Map QualifiedIdentifier TypeOrigin
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
-  -> I.File
-translate typeOrigins = module' typeOrigins . B.bstripFrom copoint . copoint
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f)
+  -> m I.File
+translate = module'
 
-module' :: Map QualifiedIdentifier TypeOrigin -> Module -> I.File
-module' typeOrigins (S.Module n _ ds) = I.File (moduleName n) $ definition typeOrigins n =<< ds
+module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f (Module f) -> m I.File
+module' typeOrigins m | S.Module n _ ds <- copoint m = I.File (moduleName $ copoint n) . join <$> traverse (definition typeOrigins n) (copoint ds)
 
 -- |
 -- @
@@ -65,116 +71,191 @@ module' typeOrigins (S.Module n _ ds) = I.File (moduleName n) $ definition typeO
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-definition :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> Definition -> [Either Text I.Element]
-definition typeOrigins _ (S.DataDefinition i cs) =
-  fold $
-    fmap Right <$>
-      [ tagEnum
-      , [structure]
-      , I.Definition . constructor (length cs) <$> cs
-      ]
-  where
-    tagEnumIdent i = I.Identifier $ qualifiedIdentifierText i <> "_tag"
-    tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
-    tagEnum =
-      case cs of
-        [(_, _:_)] -> []
-        _          -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst <$> cs) [] Nothing []]
-    structType = ([], I.Structure $ qualifiedIdentifier i)
-    structure =
-      I.Declaration ([], I.StructureLiteral (Just $ qualifiedIdentifier i) fields) [] Nothing []
+definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
+definition typeOrigins n d =
+  case copoint d of
+    S.DataDefinition i cs ->
+      pure $
+        fold $
+          fmap Right <$>
+            [ tagEnum
+            , [structure]
+            , I.Definition . constructor (length cs_) <$> cs_
+            ]
       where
-        fields =
-          case cs of
-            [(_, fs@(_:_))] -> field <$> fs
-            _ ->
-              I.Field tagEnumType "tag" : [ I.Field ([], I.Union $ constructor <$> cs) "body" | hasFields ]
-        field (i, t) = I.Field (typ typeOrigins t) $ qualifiedIdentifier i
-        constructor (i, fs) = I.Field ([], I.StructureLiteral Nothing $ field <$> fs) $ qualifiedIdentifier i
-        hasFields = or $ go <$> cs where go (_, fs) = not $ null fs
-    constructor _ (c, []) = I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c) [] $ I.ListInitializer [I.ExpressionInitializer $ Right $ I.Variable $ tagEnumIdent c]
-    constructor n (c, fs) =
-      I.StatementDefinition structType [] (qualifiedIdentifier c) [I.Function $ parameter <$> fs] $ Right [blockItem]
-      where
-        parameter (i, t) = (typ typeOrigins t, [I.Constant], Just $ Right $ qualifiedIdentifier i, [])
-        blockItem = Right $ I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
-        arguments =
-          case (n, fs) of
-            (1, _:_) -> argument <$> fs
-            _        -> I.ExpressionInitializer (Right $ I.Variable $ tagEnumIdent c) : (argument <$> fs)
-        argument (i, _) = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
-definition typeOrigins n (S.ValueBind (S.ValueBindV i v@(S.TypedValue _ t))) =
-  [Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (deriver typeOrigins t) $ I.ExpressionInitializer $ Right $ value typeOrigins n v]
-definition typeOrigins n (S.ValueBind (S.ValueBindN i is v)) =
-  [Right $ bindTermN typeOrigins n i is v]
-definition typeOrigins _ (S.ForeignValueBind i (S.CValue n [] b) t@S.TypeVariable {}) =
-  [ Left n
-  , Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [I.Constant] (qualifiedIdentifier i) [] $ I.ExpressionInitializer $ Left b
-  ]
-definition typeOrigins _ (S.ForeignValueBind i (S.CValue n ps b) (S.FunctionType (S.FunctionTypeN ts r))) =
+        cs_ = copoint cs
+        tagEnumIdent i = I.Identifier $ qualifiedIdentifierText i <> "_tag"
+        tagEnumType = ([], I.Enumerable $ tagEnumIdent i)
+        tagEnum =
+          case cs_ of
+            [c] | (_, fs) <- copoint c, _:_ <- copoint fs -> []
+            _          -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst . copoint <$> cs_) [] Nothing []]
+        structType = ([], I.Structure $ qualifiedIdentifier i)
+        structure =
+          I.Declaration ([], I.StructureLiteral (Just $ qualifiedIdentifier i) fields) [] Nothing []
+          where
+            fields =
+              case cs_ of
+                [c] | (_, fs) <- copoint c, fs_@(_:_) <- copoint fs -> field <$> fs_
+                _ -> I.Field tagEnumType "tag" : [ I.Field ([], I.Union $ constructor <$> cs_) "body" | hasFields ]
+            field f | (i, t) <- copoint f = I.Field (typ typeOrigins t) $ qualifiedIdentifier i
+            constructor c | (i, fs) <- copoint c = I.Field ([], I.StructureLiteral Nothing $ field <$> copoint fs) $ qualifiedIdentifier i
+            hasFields = or $ go <$> cs_ where go c | (_, fs) <- copoint c = not $ null $ copoint fs
+        constructor n c =
+          case copoint c of
+            (c', fs) ->
+              case copoint fs of
+                [] -> I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c') [] $ I.ListInitializer [I.ExpressionInitializer $ Right $ I.Variable $ tagEnumIdent c']
+                fs_ ->
+                  I.StatementDefinition structType [] (qualifiedIdentifier c') [I.Function $ parameter <$> fs_] $ Right [blockItem]
+                  where
+                    parameter p | (i, t) <- copoint p = (typ typeOrigins t, [I.Constant], Just $ Right $ qualifiedIdentifier i, [])
+                    blockItem = Right $ I.BlockStatement $ I.Return $ I.CompoundLiteral structType arguments
+                    arguments =
+                      case (n, fs_) of
+                        (1, _:_) -> argument <$> fs_
+                        _        -> I.ExpressionInitializer (Right $ I.Variable $ tagEnumIdent c') : (argument <$> fs_)
+                    argument f | (i, _) <- copoint f = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
+    S.ValueBind (S.ValueBindV i v) -> do
+      let S.TypedValue _ t = copoint v
+      v' <- value typeOrigins n v
+      pure [Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (deriver typeOrigins t) $ I.ExpressionInitializer $ Right v']
+    S.ValueBind (S.ValueBindN i is v) -> do
+      b <- bindTermN typeOrigins n i is v
+      pure [Right b]
+    S.ForeignValueBind i e t ->
+      case copoint t of
+        S.TypeVariable {} ->
+          case S.strip e of
+            S.EmbeddedCValue n [] b ->
+              pure
+                [ Left n
+                , Right $ I.Definition $ I.ExpressionDefinition (typ typeOrigins t) [I.Constant] (qualifiedIdentifier i) [] $ I.ExpressionInitializer $ Left b
+                ]
+            S.EmbeddedCValue _ ps _ -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length ps) (S.location e)
+        S.FunctionType (S.FunctionTypeN ts r) ->
+          case copoint e of
+            S.EmbeddedCValue n ps b
+              | ps_ <- copoint ps
+              , ts_ <- copoint ts
+              , length ps_ == length ts_ ->
+                let
+                  r' =
+                    case copoint r of
+                      S.ProcedureType t -> t
+                      _                 -> r
+                  ps' =
+                    zipWith go ps_ ts_ <$ ps
+                    where
+                      go p t =
+                        let p_ = copoint p
+                        in (Left p_ <$ p, t) <$ p
+                in
+                  pure
+                    [ Left $ copoint n
+                    , Right $
+                        I.Definition $
+                          I.StatementDefinition (typ typeOrigins r') [] (qualifiedIdentifier i) [I.Function $ parameters typeOrigins ps'] $ Left $ copoint b
+                    ]
+              | otherwise -> throw $ EmbeddedParameterMismatchException (fromIntegral $ length $ copoint ts) (fromIntegral $ length $ copoint ps) $ S.location e
+        S.ProcedureType {} ->
+          case copoint e of
+            S.EmbeddedCValue n ps b | [] <- copoint ps ->
+              pure
+                [ Left $ copoint n
+                , Right $
+                    I.Definition $
+                      I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) [I.Function [(([], I.Void), [], Nothing, [])]] $ Left $ copoint b
+                ]
+            S.EmbeddedCValue _ ps _ -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length $ copoint ps) $ S.location e
+        _ -> X.unreachable
+    S.TypeBind i t ->
+      pure [Right $ I.TypeDefinition (Right $ typ typeOrigins t) $ qualifiedIdentifier i]
+    S.ForeignTypeBind i e ->
+      case copoint e of
+        S.EmbeddedCType n b ->
+          pure
+            [ Left $ copoint n
+            , Right $ I.TypeDefinition (Left $ copoint b) (qualifiedIdentifier i)
+            ]
+
+bindTermN :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f ModuleName -> f S.QualifiedIdentifier -> f [f (f S.QualifiedIdentifier, f (Type f))] -> f (Value f) -> m I.Element
+bindTermN typeOrigins n i ps v = do
   let
-    r' =
-      case r of
-        S.ProcedureType t -> t
-        _                 -> r
-  in
-    [ Left n
-    , Right $
-        I.Definition $
-          I.StatementDefinition (typ typeOrigins r') [] (qualifiedIdentifier i) [I.Function $ parameters typeOrigins $ zip (Left <$> ps) ts] $ Left b
-    ]
-definition typeOrigins _ (S.ForeignValueBind i (S.CValue n [] b) t@S.ProcedureType {}) =
-  [ Left n
-  , Right $
-      I.Definition $
-        I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) [I.Function [(([], I.Void), [], Nothing, [])]] $ Left b
-  ]
-definition _ _ S.ForeignValueBind {} = X.unreachable
-definition typeOrigins _ (S.TypeBind i t) =
-  [Right $ I.TypeDefinition (Right $ typ typeOrigins t) $ qualifiedIdentifier i]
-definition _ _ (S.ForeignTypeBind i (S.CType n b)) =
-  [ Left n
-  , Right $ I.TypeDefinition (Left b) (qualifiedIdentifier i)
-  ]
+    ps_ = copoint ps
+    S.TypedValue _ t = copoint v
+    ps' = (go <$> ps_) <$ ps
+    go p =
+      let
+        (i, t) = copoint p
+        i_ = copoint i
+      in (Right i_ <$ i, t) <$ p
+  v' <- value typeOrigins n v
+  pure $
+    I.Definition $
+      I.StatementDefinition
+        (typ typeOrigins t)
+        []
+        (qualifiedIdentifier i)
+        (I.Function (parameters typeOrigins ps') : deriverRoot typeOrigins t) $
+          Right [Right $ I.BlockStatement $ I.Return v']
 
-bindTermN :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> S.QualifiedIdentifier -> [(S.QualifiedIdentifier, Type)] -> Value -> I.Element
-bindTermN typeOrigins n i ps v@(S.TypedValue _ t) =
-  I.Definition $ I.StatementDefinition (typ typeOrigins t) [] (qualifiedIdentifier i) (I.Function (parameters typeOrigins $ first Right <$> ps) : deriverRoot typeOrigins t) $ Right [Right $ I.BlockStatement $ I.Return (value typeOrigins n v)]
-
-parameters :: Map QualifiedIdentifier TypeOrigin -> [(Either Text QualifiedIdentifier, Type)] -> [(([I.TypeQualifier], I.Type), [I.VariableQualifier], Maybe (Either Text I.Identifier), [I.Deriver])]
-parameters _ [] = [(([], I.Void), [], Nothing, [])]
-parameters typeOrigins ps = parameter <$> ps
+parameters
+  :: ( Functor f
+     , Copointed f
+     )
+  => Map QualifiedIdentifier TypeOrigin
+  -> f [f (f (Either Text QualifiedIdentifier), f (Type f))]
+  -> [(([I.TypeQualifier], I.Type), [I.VariableQualifier], Maybe (Either Text I.Identifier), [I.Deriver])]
+parameters typeOrigins ps =
+  case copoint ps of
+    []  -> [(([], I.Void), [], Nothing, [])]
+    ps_ -> parameter <$> ps_
   where
-    parameter (i, t) = (typ typeOrigins t, case t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ qualifiedIdentifier <$> i, deriver typeOrigins t)
+    parameter p =
+      let
+        (i, t) = copoint p
+        i_ = copoint i
+      in (typ typeOrigins t, case copoint t of { S.FunctionType {} -> []; _ -> [I.Constant] }, Just $ qualifiedIdentifier . (<$ i) <$> i_, deriver typeOrigins t)
 
 elementStatement :: I.Element -> I.BlockElement
 elementStatement (I.Declaration t qs i ds) = I.BlockDeclaration t qs i ds
 elementStatement (I.Definition d)          = I.BlockDefinition d
 elementStatement (I.TypeDefinition t i)    = I.BlockTypeDefinition t i
 
-qualifiedIdentifier :: QualifiedIdentifier -> I.Identifier
+qualifiedIdentifier :: Copointed f => f QualifiedIdentifier -> I.Identifier
 qualifiedIdentifier = I.Identifier . qualifiedIdentifierText
 
 identifierText :: S.Identifier -> Text
 identifierText (UserIdentifier t)     = t
 identifierText (SystemIdentifier t n) = T.pack $ '_' : t : show n
 
-qualifiedIdentifierText :: QualifiedIdentifier -> Text
-qualifiedIdentifierText (S.GlobalIdentifier "main" i) = identifierText i
-qualifiedIdentifierText (S.GlobalIdentifier m i)      = moduleName m <> "_" <> identifierText i
-qualifiedIdentifierText (S.LocalIdentifier i)         = identifierText i
+qualifiedIdentifierText :: Copointed f => f QualifiedIdentifier -> Text
+qualifiedIdentifierText i =
+  case copoint i of
+    S.GlobalIdentifier "main" i -> identifierText i
+    S.GlobalIdentifier m i      -> moduleName m <> "_" <> identifierText i
+    S.LocalIdentifier i         -> identifierText i
 
 moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = T.intercalate "_" $ N.toList n
 
-value :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> Value -> I.Expression
-value _ _ (S.TypedValue (S.Variable i) _) = I.Variable $ qualifiedIdentifier i
-value _ _ (S.TypedValue (S.Literal l) _) = I.Literal $ literal l
-value typeOrigins n (S.TypedValue (S.Application (S.ApplicationN v vs)) _) = I.Call (value typeOrigins n v) $ value typeOrigins n <$> vs
-value typeOrigins n (S.TypedValue (S.Procedure ps) _) = I.StatementExpression $ I.Block $ fmap Right . procedureStep typeOrigins n =<< N.toList ps
-value typeOrigins n (S.TypedValue (S.Let ds v) _) =
-  let typeOrigins' = M.fromList (mapMaybe typeOrigin ds) `M.union` typeOrigins
-  in I.StatementExpression $ I.Block $ (fmap elementStatement <$> (definition typeOrigins' n =<< ds)) ++ [Right $ I.BlockStatement $ I.ExpressionStatement $ value typeOrigins' n v]
+value :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f ModuleName -> f (Value f) -> m I.Expression
+value typeOrigins n v =
+  let S.TypedValue v' _ = copoint v
+  in
+    case copoint v' of
+      S.Variable i -> pure $ I.Variable $ qualifiedIdentifier i
+      S.Literal l -> pure $ I.Literal $ literal l
+      S.Application (S.ApplicationN v vs) -> I.Call <$> value typeOrigins n v <*> traverse (value typeOrigins n) (copoint vs)
+      S.Procedure ps -> I.StatementExpression . I.Block . join <$> traverse (fmap (fmap Right) . procedureStep typeOrigins n) (N.toList $ copoint ps)
+      S.Let ds v -> do
+        let
+          ds_ = B.bstripFrom copoint . copoint <$> copoint ds
+          typeOrigins' = M.fromList (mapMaybe typeOrigin ds_) `M.union` typeOrigins
+        es <- join <$> traverse (definition typeOrigins' n) (copoint ds)
+        v' <- value typeOrigins n v
+        pure $ I.StatementExpression $ I.Block $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v']
 
 literal :: S.Literal -> I.Literal
 literal (S.Integer i b) =
@@ -193,36 +274,48 @@ literal (S.Fraction s f e b) =
       _  -> error $ "literal: base " ++ show b
 literal l = error (show l)
 
-procedureStep :: Map QualifiedIdentifier TypeOrigin -> ModuleName -> ProcedureStep -> [I.BlockElement]
-procedureStep typeOrigins n (S.BindProcedureStep i v@(S.TypedValue _ t)) =
-  [ I.BlockDeclaration (typ typeOrigins t) [I.Constant] (Just $ qualifiedIdentifier i) []
-  , I.BlockStatement $ I.ExpressionStatement $ I.Assign (qualifiedIdentifier i) (value typeOrigins n v)
-  ]
-procedureStep typeOrigins n (S.CallProcedureStep v) =
-  [I.BlockStatement $ I.ExpressionStatement $ value typeOrigins n v]
+procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
+procedureStep typeOrigins n s =
+  case copoint s of
+    S.BindProcedureStep i v -> do
+      let S.TypedValue _ t = copoint v
+      v' <- value typeOrigins n v
+      pure
+        [ I.BlockDeclaration (typ typeOrigins t) [I.Constant] (Just $ qualifiedIdentifier i) []
+        , I.BlockStatement $ I.ExpressionStatement $ I.Assign (qualifiedIdentifier i) v'
+        ]
+    S.CallProcedureStep v -> do
+      v' <- value typeOrigins n v
+      pure [I.BlockStatement $ I.ExpressionStatement v']
 
-typ :: Map QualifiedIdentifier TypeOrigin -> Type -> I.QualifiedType
-typ typeOrigins (S.TypeVariable n) =
-  case M.lookup n typeOrigins of
-    Just AliasType -> ([], I.TypeVariable $ qualifiedIdentifier n)
-    Just DataType  -> ([], I.Structure $ qualifiedIdentifier n)
-    Nothing        -> X.unreachable
-typ typeOrigins (S.FunctionType (S.FunctionTypeN _ t)) = typ typeOrigins t
-typ typeOrigins (S.ProcedureType t) = typ typeOrigins t
-typ _ t = error $ show t
+typ :: Copointed f => Map QualifiedIdentifier TypeOrigin -> f (Type f) -> I.QualifiedType
+typ typeOrigins t =
+  case copoint t of
+    S.TypeVariable n ->
+      case M.lookup (copoint n) typeOrigins of
+        Just AliasType -> ([], I.TypeVariable $ qualifiedIdentifier n)
+        Just DataType  -> ([], I.Structure $ qualifiedIdentifier n)
+        Nothing        -> X.unreachable
+    S.FunctionType (S.FunctionTypeN _ t) -> typ typeOrigins t
+    S.ProcedureType t -> typ typeOrigins t
+    _ -> undefined
 
-deriverRoot :: Map QualifiedIdentifier TypeOrigin -> Type -> [I.Deriver]
-deriverRoot typeOrigins (S.FunctionType (S.FunctionTypeN ts _)) = deriverFunction typeOrigins True ts
-deriverRoot _ _                                                 = []
+deriverRoot :: Copointed f => Map QualifiedIdentifier TypeOrigin -> f (Type f) -> [I.Deriver]
+deriverRoot typeOrigins t =
+  case copoint t of
+    S.FunctionType (S.FunctionTypeN ts _) -> deriverFunction typeOrigins True ts
+    _                                     -> []
 
-deriver :: Map QualifiedIdentifier TypeOrigin -> Type -> [I.Deriver]
-deriver typeOrigins (S.FunctionType (S.FunctionTypeN ts _)) = deriverFunction typeOrigins False ts
-deriver _ _                                                 = []
+deriver :: Copointed f => Map QualifiedIdentifier TypeOrigin -> f (Type f) -> [I.Deriver]
+deriver typeOrigins t =
+  case copoint t of
+    S.FunctionType (S.FunctionTypeN ts _) -> deriverFunction typeOrigins False ts
+    _                                     -> []
 
-deriverFunction :: Map QualifiedIdentifier TypeOrigin -> Bool -> [Type] -> [I.Deriver]
+deriverFunction :: Copointed f => Map QualifiedIdentifier TypeOrigin -> Bool -> f [f (Type f)] -> [I.Deriver]
 deriverFunction typeOrigins root ts =
   [ I.Pointer [ I.Constant | not root ]
-  , I.Function $ go <$> ts
+  , I.Function $ go <$> copoint ts
   ]
   where
     go t = (typ typeOrigins t, [I.Constant], Nothing, deriver typeOrigins t)
@@ -236,14 +329,24 @@ typeOrigins
   :: ( Functor f
      , Copointed f
      )
-  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Covered f)
+  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f)
   -> Map QualifiedIdentifier TypeOrigin
 typeOrigins m =
   let S.Module _ _ ds = S.strip m
   in M.fromList $ mapMaybe typeOrigin ds
 
-typeOrigin :: S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed B.Bare f -> Maybe (S.QualifiedIdentifier, TypeOrigin)
+typeOrigin :: S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Bare f -> Maybe (S.QualifiedIdentifier, TypeOrigin)
 typeOrigin (S.DataDefinition i _)  = Just (i, DataType)
 typeOrigin (S.TypeBind i _)        = Just (i, AliasType)
 typeOrigin (S.ForeignTypeBind i _) = Just (i, AliasType)
 typeOrigin _                       = Nothing
+
+data Exception
+  = EmbeddedParameterMismatchException { expected :: Word, actual :: Word, location :: Maybe S.Location }
+  deriving (Show, Read, Eq, Ord, Generic)
+
+instance E.Exception Exception where
+  toException = E.toException . X.Exception
+  fromException e = do
+    X.Exception e <- E.fromException e
+    Y.cast e
