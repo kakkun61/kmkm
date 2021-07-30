@@ -13,7 +13,7 @@ Push-Location -Path $compiler
 try {
   cabal install --installdir $out --overwrite-policy always --enable-executable-dynamic --disable-optimization
   if ($LASTEXITCODE -ne 0) {
-    exit
+    exit 1
   }
 }
 finally {
