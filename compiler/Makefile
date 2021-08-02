@@ -39,6 +39,10 @@ lint:
 doc:
 	cabal v2-haddock
 
+.PHONY: install
+install:
+	cabal install --overwrite-policy=always
+
 .PHONY: clean
 clean:
 	cabal v2-clean

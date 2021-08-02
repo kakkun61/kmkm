@@ -28,11 +28,11 @@ import           Data.Foldable          (Foldable (fold))
 import qualified Data.List.NonEmpty     as N
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
+import qualified Data.Set               as S
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 import qualified Data.Typeable          as Y
 import           GHC.Generics           (Generic)
-import           System.FilePath        (pathSeparator)
 import qualified System.FilePath        as F
 
 compile
@@ -47,21 +47,22 @@ compile _ _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile findFile readFile writeFile writeLog src =
   KC.compile [KPC.embeddedParser] KS.isEmbeddedCType KS.isEmbeddedCValue lastStep findFile readFile writeLog src
   where
-    lastStep ms = do
-      let ms' = KBCT.thunk <$> ms
-      let typeOrigins = M.unions $ KBCI.typeOrigins <$> ms'
-      docs <- sequence $ build2_ typeOrigins <$> ms'
+    lastStep ms fs = do
+      let ms' = S.map KBCT.thunk ms
+      let typeOrigins = M.unions $ S.map KBCI.typeOrigins ms'
+      docs <- sequence $ build2_ typeOrigins <$> S.toList ms'
       sequence_ $ write <$> docs
-    write (k, (c, h)) = do
-      let
-        path = moduleNameToFilePath k
-      writeFile (F.addExtension path "c") c
-      writeFile (F.addExtension path "h") h
-    build2_ typeOrigins m =
-      let KS.Module n _ _ = copoint m
-      in do
-        ds <- build2 writeLog typeOrigins m
-        pure (copoint n, ds)
+      where
+        write (k, (c, h)) = do
+          let path = fs M.! k
+          writeFile (F.addExtension path "c") c
+          writeFile (F.addExtension path "h") h
+        build2_ typeOrigins m =
+          let
+            KS.Module n _ _ = copoint m
+          in do
+            ds <- build2 writeLog typeOrigins fs m
+            pure (copoint n, ds)
 
 build2
   :: ( MonadThrow m
@@ -72,9 +73,10 @@ build2
      )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
+  -> Map KS.ModuleName FilePath
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue B.Covered f)
   -> m (Text, Text)
-build2 writeLog typeOrigins m = do
+build2 writeLog typeOrigins fs m = do
   let KS.Module n ms _ = copoint m
   (c, h) <- build2' writeLog typeOrigins m
   let
@@ -86,7 +88,7 @@ build2 writeLog typeOrigins m = do
     include h  = "#include \"" <> h <> "\"\n"
   pure
     ( fold $
-        (include . moduleNameToHeaderPath <$> n' : ms') ++
+        (include . T.pack . flip F.addExtension "h" . (fs M.!) <$> n' : ms') ++
         [ newline
         , c
         , newline
@@ -99,7 +101,7 @@ build2 writeLog typeOrigins m = do
         , key
         , newline
         ] ++
-        (include . moduleNameToHeaderPath <$> ms') ++
+        (include . T.pack . flip F.addExtension "h" . (fs M.!) <$> ms') ++
         [ h
         , newline
         , "#endif"
@@ -124,12 +126,6 @@ build2' writeLog typeOrigins m6 = do
   let c = KBCS.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
   pure (KBCC.render c, KBCC.render $ KBCD.declare c)
-
-moduleNameToFilePath :: KS.ModuleName -> FilePath
-moduleNameToFilePath (KS.ModuleName n) = T.unpack $ T.intercalate (T.singleton pathSeparator) $ N.toList n
-
-moduleNameToHeaderPath :: KS.ModuleName -> Text
-moduleNameToHeaderPath (KS.ModuleName n) = T.intercalate "/" (N.toList n) <> ".h"
 
 data Exception
   = RecursionException (N.NonEmpty KS.ModuleName)

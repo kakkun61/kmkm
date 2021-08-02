@@ -37,6 +37,7 @@ import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
 import qualified Data.Map.Strict                      as M
 import           Data.Maybe                           (fromMaybe, mapMaybe)
+import           Data.Set                             (Set)
 import qualified Data.Set                             as S
 import           Data.Text                            (Text)
 import qualified Data.Text                            as T
@@ -57,7 +58,7 @@ compile
   => [KP.EmbeddedParser et ev]
   -> (KS.EmbeddedType B.Covered KS.WithLocation -> Maybe (et B.Covered KS.WithLocation)) -- ^ Embedded type filter.
   -> (KS.EmbeddedValue B.Covered KS.WithLocation -> Maybe (ev B.Covered KS.WithLocation)) -- ^ Embedded value filter.
-  -> ([KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev B.Covered KS.WithLocation)] -> m ()) -- ^ Last step.
+  -> (Set (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev B.Covered KS.WithLocation)) -> Map KS.ModuleName FilePath -> m ()) -- ^ Last step.
   -> (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (Text -> m ()) -- ^ Logger.
@@ -65,8 +66,7 @@ compile
   -> m ()
 compile _ _ _ _ _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFile writeLog src = do
-  let src' = F.normalise src
-  (nameDeps, modules1) <- readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile src'
+  (nameDeps, modules1, paths) <- readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile src
   sequence_ $ writeLog . ("original module: " <>) . T.pack . show . second KS.strip <$> M.toList modules1
   let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
   modules2 <- sequence $ KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers <$> modules1
@@ -76,7 +76,7 @@ compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFil
   modules3 <- snd <$> foldr (accumulate $ flip typeCheck) (pure mempty) sortedModules
   sequence_ $ writeLog . ("typed module: " <>) . T.pack . show . KS.strip <$> S.toList modules3
   modules4 <- sequence $ build1 writeLog <$> S.toList modules3
-  lastStep modules4
+  lastStep (S.fromList modules4) paths
   where
     accumulate f v acc = do
       (acc1, acc2) <- acc
@@ -91,9 +91,13 @@ readRecursively
   -> (FilePath -> m FilePath)
   -> (FilePath -> m Text)
   -> FilePath
-  -> m (G.AdjacencyMap KS.ModuleName, Map KS.ModuleName (KS.WithLocation (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev B.Covered KS.WithLocation)))
+  -> m
+       ( G.AdjacencyMap KS.ModuleName
+       , Map KS.ModuleName (KS.WithLocation (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev B.Covered KS.WithLocation))
+       , Map KS.ModuleName FilePath
+       )
 readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile =
-  go (pure (G.empty, M.empty))
+  go (pure (G.empty, M.empty, M.empty))
   where
     go acc path = do
       module' <- do
@@ -107,13 +111,14 @@ readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile
         moduleName'' = filePathToModuleName path
         deps' = copoint <$> copoint deps
       when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.location moduleName
-      (g, m) <- acc
+      (g, m, f) <- acc
       let
         m' = M.insert moduleName' module' m -- TODO 今 main モジュールで、すでに main モジュールがあったらエラー
+        f' = M.insert moduleName' (normalisePath path) f
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
         depSet = S.map (moduleNameToFilePath . copoint) $ S.fromList $ copoint deps
         readSet = S.map moduleNameToFilePath $ M.keysSet m'
-      foldl go (pure (g', m')) $ depSet S.\\ readSet
+      foldl go (pure (g', m', f')) $ depSet S.\\ readSet
 
 sortModules
   :: ( MonadThrow m
@@ -174,6 +179,13 @@ filePathToModuleName path = KS.ModuleName $ fromMaybe X.unreachable $ N.nonEmpty
 
 moduleNameToFilePath :: KS.ModuleName -> FilePath
 moduleNameToFilePath (KS.ModuleName n) = T.unpack $ T.intercalate (T.singleton pathSeparator) $ N.toList n
+
+normalisePath :: FilePath -> FilePath
+normalisePath =
+  fmap go . F.normalise
+  where
+    go '\\' = '/'
+    go c    = c
 
 data Exception
   = RecursionException (N.NonEmpty KS.ModuleName)
