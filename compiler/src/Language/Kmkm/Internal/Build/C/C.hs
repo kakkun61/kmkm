@@ -58,7 +58,7 @@ qualifiedType (qs, t) =
     <> [typ t]
 
 typeDefinition :: Either Text QualifiedType -> Identifier -> Text
-typeDefinition t i = "typedef " <> text qualifiedType t <> " " <> identifier i
+typeDefinition t i = "typedef " <> text qualifiedType t <> " " <> identifier i <> ";"
 
 typ :: Type -> Text
 typ Void = "void"

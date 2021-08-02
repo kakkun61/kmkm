@@ -24,4 +24,5 @@
             printf("hello\n");
             return kmkm_unit_unit;
           """))
-      (procedure kmkm.unit.unit))))
+      (procedure kmkm.unit.unit))
+    (bind-type-foreign int (list (c-type "" "int")))))

@@ -20,3 +20,5 @@ struct kmkm_unit_unit ffi_hello(void)
   return kmkm_unit_unit;
 
 }
+
+typedef int ffi_int;

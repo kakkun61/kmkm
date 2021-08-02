@@ -10,3 +10,5 @@ kmkm_prim_int ffi_increment(kmkm_prim_int const v);
 
 struct kmkm_unit_unit ffi_hello(void);
 #endif
+
+typedef int ffi_int;
