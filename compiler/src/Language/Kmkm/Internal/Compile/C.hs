@@ -11,9 +11,10 @@ module Language.Kmkm.Internal.Compile.C
   ) where
 
 import qualified Language.Kmkm.Internal.Build.C.C             as KBCC
-import qualified Language.Kmkm.Internal.Build.C.Declare       as KBCD
+import qualified Language.Kmkm.Internal.Build.C.Header        as KBCH
 import qualified Language.Kmkm.Internal.Build.C.IntermediateC as KBCI
 import qualified Language.Kmkm.Internal.Build.C.Simplify      as KBCS
+import qualified Language.Kmkm.Internal.Build.C.Source        as KBCR
 import qualified Language.Kmkm.Internal.Build.C.Thunk         as KBCT
 import qualified Language.Kmkm.Internal.Compile               as KC
 import qualified Language.Kmkm.Internal.Exception             as KE
@@ -25,6 +26,7 @@ import qualified Control.Exception      as E
 import           Control.Exception.Safe (MonadCatch, MonadThrow, throw)
 import           Data.Copointed         (Copointed (copoint))
 import           Data.Foldable          (Foldable (fold))
+import qualified Data.List              as L
 import qualified Data.List.NonEmpty     as N
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
@@ -85,10 +87,11 @@ build2 writeLog typeOrigins fs m = do
     key = T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
     newline :: Text
     newline = "\n"
-    include h  = "#include \"" <> h <> "\"\n"
+    dir = F.takeDirectory $ fs M.! n'
+    include h = "#include \"" <> T.pack (makeRelativePath dir h) <> "\"\n"
   pure
     ( fold $
-        (include . T.pack . flip F.addExtension "h" . (fs M.!) <$> n' : ms') ++
+        (include . flip F.addExtension "h" . (fs M.!) <$> n' : ms') ++
         [ newline
         , c
         , newline
@@ -101,7 +104,7 @@ build2 writeLog typeOrigins fs m = do
         , key
         , newline
         ] ++
-        (include . T.pack . flip F.addExtension "h" . (fs M.!) <$> ms') ++
+        (include . flip F.addExtension "h" . (fs M.!) <$> ms') ++
         [ h
         , newline
         , "#endif"
@@ -125,7 +128,27 @@ build2' writeLog typeOrigins m6 = do
   writeLog $ "abstract C file: " <> T.pack (show m7)
   let c = KBCS.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
-  pure (KBCC.render c, KBCC.render $ KBCD.declare c)
+  pure (KBCC.render $ KBCR.source c, KBCC.render $ KBCH.header c)
+
+makeRelativePath :: FilePath -> FilePath -> FilePath
+makeRelativePath base path =
+  let
+    baseDirs =
+      let ds = F.splitDirectories base
+      in if ds == ["."] then [] else ds
+    pathDirs = F.splitDirectories path
+    commonLength [] _ = 0
+    commonLength _ [] = 0
+    commonLength (a:as) (b:bs) | a == b = 1 + commonLength as bs
+                               | otherwise = 0
+    bl = length baseDirs
+    cl = commonLength baseDirs pathDirs
+  in
+    if bl == cl
+      then L.intercalate "/" $ drop cl pathDirs
+      else if bl > cl
+        then L.intercalate "/" $ replicate (bl - cl) "../" ++ drop cl pathDirs
+        else KE.unreachable
 
 data Exception
   = RecursionException (N.NonEmpty KS.ModuleName)

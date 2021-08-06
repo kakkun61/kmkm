@@ -19,7 +19,7 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Literal (Fraction, Integer, String), QualifiedType,
                                               Statement (Block, Case, ExpressionStatement, If, Return),
                                               Type (Char, Double, Enumerable, EnumerableLiteral, Float, Int, Structure, StructureLiteral, TypeVariable, Union, Void),
-                                              TypeQualifier (Unsigned), VariableQualifier (Constant))
+                                              TypeQualifier (Unsigned), VariableQualifier (Constant, External))
 
 import           Data.Foldable (Foldable (fold))
 import           Data.Text     (Text)
@@ -96,6 +96,7 @@ typeQualifier Unsigned = "unsigned"
 
 variableQualifier :: VariableQualifier -> Text
 variableQualifier Constant = "const"
+variableQualifier External = "extern"
 
 identifier :: Identifier -> Text
 identifier (Identifier t) = t

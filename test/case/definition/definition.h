@@ -1,7 +1,6 @@
 #ifndef DEFINITION_H
 #define DEFINITION_H
 #include "kmkm/prim.h"
-
 enum definition_myBool_tag {
   definition_myFalse_tag,
   definition_myTrue_tag
@@ -11,9 +10,9 @@ struct definition_myBool {
   enum definition_myBool_tag tag;
 };
 
-struct definition_myBool const definition_myFalse;
+struct definition_myBool extern const definition_myFalse;
 
-struct definition_myBool const definition_myTrue;
+struct definition_myBool extern const definition_myTrue;
 
 struct definition_fraction {
   kmkm_prim_int definition_numerator;
@@ -29,12 +28,10 @@ enum definition_passenger_tag {
 
 struct definition_passenger {
   enum definition_passenger_tag tag;
-
   union {
     struct {
       kmkm_prim_uint definition_class;
     } definition_person;
-
     struct {
       kmkm_prim_uint definition_species;
     } definition_pet;
@@ -53,6 +50,5 @@ struct definition_unit {
   enum definition_unit_tag tag;
 };
 
-struct definition_unit const definition_unit;
-
+struct definition_unit extern const definition_unit;
 #endif

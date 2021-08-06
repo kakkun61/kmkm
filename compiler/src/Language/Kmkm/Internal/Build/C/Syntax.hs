@@ -43,6 +43,7 @@ data Definition
 
 data VariableQualifier
   = Constant
+  | External
   deriving (Show, Read, Eq, Ord, Generic)
 
 data TypeQualifier

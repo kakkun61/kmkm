@@ -45,9 +45,10 @@ library
   hs-source-dirs: src
   exposed-modules: Language.Kmkm
                    Language.Kmkm.Internal.Build.C.C
-                   Language.Kmkm.Internal.Build.C.Declare
+                   Language.Kmkm.Internal.Build.C.Header
                    Language.Kmkm.Internal.Build.C.IntermediateC
                    Language.Kmkm.Internal.Build.C.Simplify
+                   Language.Kmkm.Internal.Build.C.Source
                    Language.Kmkm.Internal.Build.C.Syntax
                    Language.Kmkm.Internal.Build.C.Thunk
                    Language.Kmkm.Internal.Build.LambdaLift

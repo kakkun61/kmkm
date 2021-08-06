@@ -93,6 +93,8 @@ typeCheck' ctx m =
     prim = primitivesImporting m
     go (S.Module mn ms ds) = S.Module mn ms <$> definitions ctx prim ds
 
+{-# ANN definitions ("HLint: ignore Use list literal" :: String) #-}
+
 definitions
   :: ( MonadThrow m
      , MonadCatch m
@@ -113,11 +115,12 @@ definitions context prim =
     go definitions' = do
       let
         valueBinds = M.fromList $ mapMaybe valueBind definitions'
+        foreignValueBinds = M.fromList $ mapMaybe foreignValueBind definitions'
         dependencyGraph = G.overlays $ dependency (M.keysSet valueBinds) <$> definitions'
         sortedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencyGraph
-        context' = M.mapMaybe annotatedType valueBinds `M.union` context
-      typedValueBinds <- foldr (typeBind context' valueBinds prim) (pure M.empty) sortedIdentifiers
-      pure $ replaceTerm typedValueBinds <$> definitions'
+        context' = M.unions $ M.mapMaybe annotatedType valueBinds : foreignValueBinds : context : []
+      typedValueBinds <- foldr (flip $ typeBind context' valueBinds prim) (pure M.empty) sortedIdentifiers
+      pure $ replaceValue typedValueBinds <$> definitions'
 
 dependency :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
 dependency valueBinds d | S.ValueBind (S.ValueBindU i v) <- copoint d = G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
@@ -136,10 +139,10 @@ typeBind
   => Map S.QualifiedIdentifier (f (Type f))
   -> Map S.QualifiedIdentifier (f (Value 'S.Untyped et ev f))
   -> PrimitivesImporting
+  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
   -> GN.AdjacencyMap S.QualifiedIdentifier
   -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
-  -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
-typeBind context valueBinds prim recursionIdentifiers typedValueBinds =
+typeBind context valueBinds prim typedValueBinds recursionIdentifiers =
   catchJust
     (\case { NotFoundException i _ -> if GN.hasVertex i recursionIdentifiers then Just i else Nothing; _ -> Nothing })
     do
@@ -155,10 +158,10 @@ annotatedType :: Copointed f => f (Value 'S.Untyped et ev f) -> Maybe (f (Type f
 annotatedType v
   | S.UntypedValue v <- copoint v
   , S.TypeAnnotation (S.TypeAnnotation' _ t) <- copoint v = Just t
-annotatedType _                                                           = Nothing
+annotatedType _ = Nothing
 
-replaceTerm :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
-replaceTerm typedValueBinds =
+replaceValue :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
+replaceValue typedValueBinds =
   fmap $ \case
     S.DataDefinition i cs -> S.DataDefinition i cs
     S.TypeBind i t -> S.TypeBind i t
@@ -169,7 +172,11 @@ replaceTerm typedValueBinds =
 
 valueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Value t et ev f))
 valueBind d | S.ValueBind (S.ValueBindU i v) <- copoint d = Just (copoint i, v)
-valueBind _                                = Nothing
+valueBind _                                               = Nothing
+
+foreignValueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Type f))
+foreignValueBind d | S.ForeignValueBind i _ t <- copoint d       = Just (copoint i, t)
+foreignValueBind _                                               = Nothing
 
 dep :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped et ev f) -> [S.QualifiedIdentifier]
 dep identifiers v =
