@@ -1,0 +1,13 @@
+(module
+  kmkm.int
+  (list
+    kmkm.prim)
+  (list
+    (bind-value-foreign
+      add
+      (list
+        (c-value
+          ""
+          (list "a" "b")
+          "return a + b;"))
+      (function kmkm.prim.int (function kmkm.prim.int kmkm.prim.int)))))
