@@ -1,0 +1,13 @@
+(module
+  kmkm.io
+  (list
+    kmkm.prim)
+  (list
+    (bind-value-foreign
+      printInt
+      (list
+        (c-value
+          "#include <stdio.h>"
+          (list "a")
+          """printf("%d\n", a);"""))
+      (function kmkm.prim.int (procedure kmkm.prim.int)))))
