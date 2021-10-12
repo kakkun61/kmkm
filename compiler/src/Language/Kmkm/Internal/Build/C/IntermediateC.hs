@@ -248,14 +248,14 @@ value typeOrigins n v =
       S.Variable i -> pure $ I.Variable $ qualifiedIdentifier i
       S.Literal l -> pure $ I.Literal $ literal l
       S.Application (S.ApplicationN v vs) -> I.Call <$> value typeOrigins n v <*> traverse (value typeOrigins n) (copoint vs)
-      S.Procedure ps -> I.StatementExpression . I.Block . join <$> traverse (fmap (fmap Right) . procedureStep typeOrigins n) (N.toList $ copoint ps)
+      S.Procedure ps -> I.StatementExpression . join <$> traverse (fmap (fmap Right) . procedureStep typeOrigins n) (N.toList $ copoint ps)
       S.Let ds v -> do
         let
           ds_ = B.bstripFrom copoint . copoint <$> copoint ds
           typeOrigins' = M.fromList (mapMaybe typeOrigin ds_) `M.union` typeOrigins
         es <- join <$> traverse (definition typeOrigins' n) (copoint ds)
         v' <- value typeOrigins n v
-        pure $ I.StatementExpression $ I.Block $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v']
+        pure $ I.StatementExpression $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v']
 
 literal :: S.Literal -> I.Literal
 literal (S.Integer i b) =

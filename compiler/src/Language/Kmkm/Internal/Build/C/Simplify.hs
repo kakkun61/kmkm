@@ -8,7 +8,7 @@ import Language.Kmkm.Internal.Build.C.Syntax (BlockElement (BlockDefinition, Blo
                                               Element (Declaration, Definition, TypeDefinition),
                                               Expression (StatementExpression), File (File),
                                               Initializer (ExpressionInitializer, ListInitializer),
-                                              Statement (Block, ExpressionStatement, Return))
+                                              Statement (ExpressionStatement, Return))
 
 simplify :: File -> File
 simplify f =
@@ -25,7 +25,7 @@ element d@TypeDefinition {} = d
 
 definition :: Definition -> Definition
 definition (ExpressionDefinition t qs i ds n) = ExpressionDefinition t qs i ds $ initializer n
-definition (StatementDefinition t qs i ds es@(Right [Right (BlockStatement (Return (StatementExpression (Block es'))))])) =
+definition (StatementDefinition t qs i ds es@(Right [Right (BlockStatement (Return (StatementExpression es')))])) =
   case es' of
     [] -> StatementDefinition t qs i ds $ ((blockElement <$>) <$>) <$> es
     _ ->
@@ -41,8 +41,8 @@ initializer (ExpressionInitializer e) = ExpressionInitializer $ expression <$> e
 initializer (ListInitializer is)      = ListInitializer $ initializer <$> is
 
 expression :: Expression -> Expression
-expression (StatementExpression (Block [Right (BlockStatement (ExpressionStatement e))])) = e
-expression e                                                                              = e
+expression (StatementExpression [Right (BlockStatement (ExpressionStatement e))]) = e
+expression e                                                                      = e
 
 blockElement :: BlockElement -> BlockElement
 blockElement (BlockDefinition d) = BlockDefinition $ definition d

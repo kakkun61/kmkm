@@ -92,7 +92,7 @@ data Expression
   | CompoundLiteral QualifiedType [Initializer]
   | ArithmeticExpression ArithmeticExpression
   | Call Expression [Expression]
-  | StatementExpression Statement -- ^ GCC extension.
+  | StatementExpression [Either Text BlockElement] -- ^ GCC extension.
   | Assign Identifier Expression
   deriving (Show, Eq, Ord, Generic)
 

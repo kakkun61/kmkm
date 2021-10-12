@@ -137,7 +137,12 @@ expression (Literal l)              = literal l
 expression (CompoundLiteral t ns)   = compoundLiteral t ns
 expression (ArithmeticExpression a) = arithmeticExpression a
 expression (Call e es)              = expression e <> "(" <> T.intercalate ", " (expression <$> es) <> ")"
-expression (StatementExpression s)  = "({ " <> statement s <> "})"
+expression (StatementExpression es) =
+  T.intercalate "\n"
+    [ "({"
+    , T.intercalate "\n" $ text blockElement <$> es
+    , "})"
+    ]
 expression (Assign i e)             = identifier i <> " = " <> expression e
 
 literal :: Literal -> Text
