@@ -272,7 +272,7 @@ literal (S.Fraction s f e b) =
       10 -> I.FractionDecimal
       16 -> I.FractionHexadecimal
       _  -> error $ "literal: base " ++ show b
-literal l = error (show l)
+literal (S.String s) = I.String s -- XXX バックスラッシュでバイナリー表記にした方がいいかも
 
 procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier TypeOrigin -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
 procedureStep typeOrigins n s =

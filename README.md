@@ -168,7 +168,12 @@ These are hexadecimal fractions.
 
 #### `kmkm.prim.string`
 
-Not yet implemented. Only parser for string literal is implemented.
+```
+"hello"
+"こんにちは"
+"""triple-double-quoted strings can contain "double quotes""""
+"escaping \\"
+```
 
 ### Functions
 
