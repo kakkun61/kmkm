@@ -56,19 +56,6 @@ kmkm_prim_int main(void);
 
 Not yet implemented.
 
-### Variables
-
-Use `let` syntax to introduce variables.
-
-```
-(let
-  (list
-    (bind-value b 1))
-  b)
-```
-
-In this case `b` is bound to `1`.
-
 ### Identifiers
 
 These identifiers are acceptable.
@@ -106,6 +93,8 @@ Let-expressions have this form.
     (bind-value foo 1))
   foo)
 ```
+
+In this case `b` is bound to `1`.
 
 ### Modules
 
