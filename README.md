@@ -12,7 +12,19 @@
 
 ### Hello world
 
-Not yet.
+```
+(module
+  main
+  (list
+    kmkm.io
+    kmkm.prim)
+  (list
+    (bind-value
+      main
+      (procedure
+        (list
+          (call (apply kmkm.io.print "Hello world!")))))))
+```
 
 Instead this is a program that exits with code 1.
 
