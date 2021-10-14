@@ -160,7 +160,7 @@ literal (Fraction s f e b) =
     dstr = if f == 0 then "" else "."
     kstr = case b of { FractionDecimal -> "e"; FractionHexadecimal -> "p" }
     estr = T.pack $ show e
-literal (String t) = "\"" <> t <> "\""
+literal (String t) = "u8\"" <> t <> "\"" -- TODO: backslash escape
 
 compoundLiteral :: QualifiedType -> [Initializer] -> Text
 compoundLiteral t ns =

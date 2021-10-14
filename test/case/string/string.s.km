@@ -1,0 +1,9 @@
+(module
+  string
+  (list
+    kmkm.prim)
+  (list
+    (bind-value hello "hello")
+    (bind-value hola "¡Hola!")
+    (bind-value triple1 """hello""")
+    (bind-value triple2 """printf("");""")))
