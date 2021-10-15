@@ -25,6 +25,7 @@ import           Data.Foldable (Foldable (fold))
 import           Data.Text     (Text)
 import qualified Data.Text     as T
 import           Numeric       (showHex, showOct)
+import qualified Data.Char as C
 
 render :: File -> Text
 render (File _ es) =
@@ -160,7 +161,36 @@ literal (Fraction s f e b) =
     dstr = if f == 0 then "" else "."
     kstr = case b of { FractionDecimal -> "e"; FractionHexadecimal -> "p" }
     estr = T.pack $ show e
-literal (String t) = "u8\"" <> t <> "\"" -- TODO: backslash escape
+literal (String t) = "u8\"" <> escapeText t <> "\""
+
+escapeText :: Text -> Text
+escapeText s
+  | T.null s = s
+  | c <- T.head s
+  , s' <- T.tail s =
+    if C.isAscii c
+      then
+        case c of
+          '\n' -> "\\n" <> escapeText s'
+          '\t' -> "\\t" <> escapeText s'
+          '\r' -> "\\r" <> escapeText s'
+          '\v' -> "\\v" <> escapeText s'
+          '\b' -> "\\b" <> escapeText s'
+          '\f' -> "\\f" <> escapeText s'
+          '\a' -> "\\a" <> escapeText s'
+          '\'' -> "\\'" <> escapeText s'
+          '\"' -> "\\\"" <> escapeText s'
+          '\\' -> "\\\\" <> escapeText s'
+          _ -> T.cons c $escapeText s'
+      else "\\U" <> pad 8 '0' (T.pack (showHex (C.ord c) "")) <> escapeText s'
+
+pad :: Word -> Char -> Text -> Text
+pad n c s =
+  go (fromIntegral n - T.length s) s
+  where
+    go n s
+      | n > 0 = go (n - 1) (T.cons c s)
+      | otherwise = s
 
 compoundLiteral :: QualifiedType -> [Initializer] -> Text
 compoundLiteral t ns =
