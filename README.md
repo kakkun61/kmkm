@@ -17,13 +17,15 @@
   main
   (list
     kmkm.io
-    kmkm.prim)
+    kmkm.prim
+    kmkm.proc)
   (list
     (bind-value
       main
       (procedure
         (list
-          (call (apply kmkm.io.print "Hello world!")))))))
+          (call (apply kmkm.io.print "Hello world!"))
+          (call (apply kmkm.proc.pureInt 0)))))))
 ```
 
 Instead this is a program that exits with code 1.
