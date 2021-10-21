@@ -12,7 +12,7 @@
 
 ### Hello world
 
-```
+```lisp
 (module
   main
   (list
@@ -30,7 +30,7 @@
 
 Instead this is a program that exits with code 1.
 
-```
+```lisp
 (module
   main
   (list
@@ -101,7 +101,7 @@ Variables are introduced by let-expressions or functions' parameters.
 
 Let-expressions have this form.
 
-```
+```lisp
 (let
   (list
     (bind-value foo 1))
@@ -114,7 +114,7 @@ In this case `b` is bound to `1`.
 
 This module `foo.bar` imports no modules and defines no items.
 
-```
+```lisp
 (module
   foo.bar
   (list)
@@ -123,7 +123,7 @@ This module `foo.bar` imports no modules and defines no items.
 
 Write module names at the first `list` when you want to import them.
 
-```
+```lisp
 (module
   foo.bar
   (list
@@ -195,7 +195,7 @@ These are hexadecimal fractions.
 
 This code is an example of a function application.
 
-```
+```lisp
 (apply (apply kmkm.int.add 1) 2)
 ```
 
@@ -205,7 +205,7 @@ This code is an example of a function application.
 
 This `add` takes two `kmkm.prim.int` arguments and returns `kmkm.prim.int`.
 
-```
+```lisp
 (bind-value
   add
   (function a kmkm.prim.int (function b kmkm.prim.int (apply (apply kmkm.int.add a) b))))
@@ -213,7 +213,7 @@ This `add` takes two `kmkm.prim.int` arguments and returns `kmkm.prim.int`.
 
 This `succ` takes one `kmkm.prim.int` arguments and return `kmkm.prim.int`.
 
-```
+```lisp
 (bind-value
   succ
   (apply func.add 1))
@@ -227,7 +227,7 @@ For instance `printInt` has `(function kmkm.prim.int (procedure kmkm.prim.int))`
 
 Procedures can be called in other procedures with `call` and `bind` keywords.
 
-```
+```lisp
 (module
   main
   (list
@@ -255,7 +255,7 @@ Procedures can be called in other procedures with `call` and `bind` keywords.
 
 `add` is implemented as a C function.
 
-```
+```lisp
 (bind-value-foreign
   add
   (list
@@ -268,7 +268,7 @@ Procedures can be called in other procedures with `call` and `bind` keywords.
 
 When header files are “include”-d, put them at the first parameter of `c-value`.
 
-```
+```lisp
 (c-value
   "#include <stdio.h>"
   …
@@ -278,7 +278,7 @@ When header files are “include”-d, put them at the first parameter of `c-val
 
 `int` is “typedef”-ed as C `int`;
 
-```
+```lisp
 (bind-type-foreign
   int
   (list (c-type "" "int")))
@@ -286,7 +286,7 @@ When header files are “include”-d, put them at the first parameter of `c-val
 
 When header files are “include”-d, put them at the first parameter of `c-type`.
 
-```
+```lisp
 (c-type
   "#include <stdio.h>"
   …
