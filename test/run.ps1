@@ -3,11 +3,11 @@ Set-StrictMode -Version 3
 
 $dir = Split-Path -Path $(Split-Path -Path $PSCommandPath)
 $out = "$dir\out"
-$compiler = "$dir\compiler"
-$library = "$dir\library"
-$test = "$dir\test"
-$kmkm = "$out\kmkm"
-$testOut = "$out\test"
+$compiler = Join-Path $dir 'compiler'
+$library = Join-Path $dir 'library'
+$test = Join-Path $dir 'test'
+$kmkm = Join-Path $out 'kmkm'
+$testOut = Join-Path $out 'test'
 
 Push-Location -Path $compiler
 try {
@@ -30,7 +30,7 @@ function Compare-Result {
 
   Write-Host "`t$filePath " -NoNewline
   try {
-    if (Compare-Object (Normalize (Get-Content $filePath)) (Normalize (Get-Content "$testOut\$case\$filePath"))) {
+    if (Compare-Object (Normalize (Get-Content $filePath)) (Normalize (Get-Content (Join-Path $testOut $case $filePath)))) {
       Write-Host "FAIL" -ForegroundColor Red
       $script:fail = $true
     }
@@ -54,9 +54,9 @@ function Normalize {
 $cases = Get-ChildItem -Path "$test\case" | ForEach-Object { $_.Name }
 
 foreach ($case in $cases) {
-  Push-Location -Path "$test\case\$case"
+  Push-Location -Path (Join-Path $test 'case' $case)
   try {
-    & $kmkm -o "$testOut\$case" -l $library "$case.s.km"
+    & $kmkm -o (Join-Path $testOut $case) -l $library "$case.s.km"
     Write-Host "$case " -NoNewline
     if ($LASTEXITCODE -ne 0) {
       Write-Host "ERROR" -ForegroundColor Red
