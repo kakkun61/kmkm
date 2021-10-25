@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
 
 $dir = Split-Path -Path $(Split-Path -Path $PSCommandPath)
-$out = "$dir\out"
+
+$out = Join-Path $dir out
 $compiler = Join-Path $dir 'compiler'
 $library = Join-Path $dir 'library'
 $test = Join-Path $dir 'test'
@@ -51,7 +52,7 @@ function Normalize {
   $lines | ForEach-Object { if ($_ -ne $null) { $_.Trim() } else { $_ } } | Where-Object { $_ -ne "" }
 }
 
-$cases = Get-ChildItem -Path "$test\case" | ForEach-Object { $_.Name }
+$cases = Get-ChildItem -Path (Join-Path $test case) | ForEach-Object { $_.Name }
 
 foreach ($case in $cases) {
   Push-Location -Path (Join-Path $test 'case' $case)
