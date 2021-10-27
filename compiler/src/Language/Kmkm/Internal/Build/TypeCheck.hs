@@ -106,7 +106,7 @@ definitions
      , Show (f S.QualifiedIdentifier)
      )
   => Map S.QualifiedIdentifier (f (Type f))
-  -> PrimitivesImporting
+  -> PrimitivesImported
   -> f [f (Definition 'S.Untyped et ev f)]
   -> m (f [f (Definition 'S.Typed et ev f)])
 definitions context prim =
@@ -138,7 +138,7 @@ typeBind
      )
   => Map S.QualifiedIdentifier (f (Type f))
   -> Map S.QualifiedIdentifier (f (Value 'S.Untyped et ev f))
-  -> PrimitivesImporting
+  -> PrimitivesImported
   -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
   -> GN.AdjacencyMap S.QualifiedIdentifier
   -> m (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
@@ -215,10 +215,10 @@ typeOfTerm
      , Show (f S.QualifiedIdentifier)
      )
   => Map S.QualifiedIdentifier (f (Type f))
-  -> PrimitivesImporting
+  -> PrimitivesImported
   -> f (Value 'S.Untyped et ev f)
   -> m (f (Value 'S.Typed et ev f))
-typeOfTerm ctx prim@PrimitivesImporting { int = primInt, frac2 = primFrac2, string = primString } v =
+typeOfTerm ctx prim@PrimitivesImported { int = primInt, frac2 = primFrac2, string = primString } v =
   case copoint v of
     S.UntypedValue v' ->
       case copoint v' of
@@ -301,7 +301,7 @@ typeOfProcedureStep
      , Show (f S.QualifiedIdentifier)
   )
   => Map S.QualifiedIdentifier (f (Type f))
-  -> PrimitivesImporting
+  -> PrimitivesImported
   -> f (ProcedureStep 'S.Untyped et ev f)
   -> m (Map S.QualifiedIdentifier (f (Type f)), f (ProcedureStep 'S.Typed et ev f))
 typeOfProcedureStep ctx prim s =
@@ -319,16 +319,16 @@ typeOfProcedureStep ctx prim s =
         S.ProcedureType _ -> pure (ctx, S.CallProcedureStep v' <$ s)
         _                 -> throw $ MismatchException (Left "procedure") (S.strip t) $ S.location t
 
-primitivesImporting :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImporting
+primitivesImporting :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImported
 primitivesImporting m =
   case S.strip m of
     S.Module _ ms _ ->
       if ["kmkm", "prim"] `elem` ms
-        then PrimitivesImporting { int = True, uint = True, frac2 = True, string = True }
-        else PrimitivesImporting { int = False, uint = False, frac2 = False, string = False }
+        then PrimitivesImported { int = True, uint = True, frac2 = True, string = True }
+        else PrimitivesImported { int = False, uint = False, frac2 = False, string = False }
 
-data PrimitivesImporting =
-  PrimitivesImporting
+data PrimitivesImported =
+  PrimitivesImported
     { int    :: Bool
     , uint   :: Bool
     , frac2  :: Bool
