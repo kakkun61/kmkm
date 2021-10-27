@@ -15,6 +15,7 @@ import qualified Language.Kmkm.Internal.Build.C.Header        as KBCH
 import qualified Language.Kmkm.Internal.Build.C.IntermediateC as KBCI
 import qualified Language.Kmkm.Internal.Build.C.Simplify      as KBCS
 import qualified Language.Kmkm.Internal.Build.C.Source        as KBCR
+import qualified Language.Kmkm.Internal.Build.C.Syntax        as KBCY
 import qualified Language.Kmkm.Internal.Build.C.Thunk         as KBCT
 import qualified Language.Kmkm.Internal.Compile               as KC
 import qualified Language.Kmkm.Internal.Exception             as KE
@@ -51,19 +52,19 @@ compile findFile readFile writeFile writeLog src =
   where
     lastStep ms fs = do
       let ms' = S.map KBCT.thunk ms
-      let typeOrigins = M.unions $ S.map KBCI.typeOrigins ms'
-      docs <- sequence $ build2_ typeOrigins <$> S.toList ms'
+      let definedVariables = M.unions $ S.map KBCI.definedVariables ms'
+      docs <- sequence $ build2_ definedVariables <$> S.toList ms'
       sequence_ $ write <$> docs
       where
         write (k, (c, h)) = do
           let path = fs M.! k
           writeFile (F.addExtension path "c") c
           writeFile (F.addExtension path "h") h
-        build2_ typeOrigins m =
+        build2_ definedVariables m =
           let
             KS.Module n _ _ = copoint m
           in do
-            ds <- build2 writeLog typeOrigins fs m
+            ds <- build2 writeLog definedVariables fs m
             pure (copoint n, ds)
 
 build2
@@ -74,13 +75,13 @@ build2
      , KS.HasLocation f
      )
   => (Text -> m ())
-  -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
+  -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
   -> Map KS.ModuleName FilePath
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue B.Covered f)
   -> m (Text, Text)
-build2 writeLog typeOrigins fs m = do
+build2 writeLog definedVariables fs m = do
   let KS.Module n ms _ = copoint m
-  (c, h) <- build2' writeLog typeOrigins m
+  (c, h) <- build2' writeLog definedVariables m
   let
     n'@(KS.ModuleName i) = copoint n
     ms' = copoint <$> copoint ms
@@ -120,11 +121,11 @@ build2'
      , KS.HasLocation f
      )
   => (Text -> m ())
-  -> Map KS.QualifiedIdentifier KBCI.TypeOrigin
+  -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue B.Covered f)
   -> m (Text, Text)
-build2' writeLog typeOrigins m6 = do
-  m7 <- KBCI.translate typeOrigins m6
+build2' writeLog definedVariables m6 = do
+  m7 <- KBCI.translate definedVariables m6
   writeLog $ "abstract C file: " <> T.pack (show m7)
   let c = KBCS.simplify m7
   writeLog $ "simplified abstract C file: " <> T.pack (show c)

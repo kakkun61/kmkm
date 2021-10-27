@@ -273,6 +273,9 @@ typ typeAffiliations moduleName =
     S.ProcedureType t -> S.ProcedureType <$> typ typeAffiliations moduleName t
     S.TypeApplication t1 t2 -> S.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
     S.FunctionType f -> S.FunctionType <$> functionType typeAffiliations moduleName f
+    S.ForAll i t -> do
+      let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
+      S.ForAll (S.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
 
 functionType
   :: ( MonadThrow m

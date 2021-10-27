@@ -408,6 +408,7 @@ typ =
               [ S.FunctionType <$> functionType
               , uncurry S.TypeApplication <$> typeApplication
               , S.ProcedureType <$> procedureType
+              , uncurry S.ForAll <$> forAll
               ]
         ]
 
@@ -428,6 +429,12 @@ procedureType =
   M.label "procedureType" $ do
     void $ P.textSymbol "procedure"
     typ
+
+forAll :: Parser et ev (S.WithLocation S.Identifier, S.WithLocation Type)
+forAll =
+  M.label "forAll" $ do
+    void $ P.textSymbol "for-all"
+    (,) <$> identifier <*> typ
 
 doubleQuote :: Parser et ev a -> Parser et ev a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")

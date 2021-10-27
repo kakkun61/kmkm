@@ -21,11 +21,11 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Type (Char, Double, Enumerable, EnumerableLiteral, Float, Int, Structure, StructureLiteral, TypeVariable, Union, Void),
                                               TypeQualifier (Unsigned), VariableQualifier (Constant, External))
 
+import qualified Data.Char     as C
 import           Data.Foldable (Foldable (fold))
 import           Data.Text     (Text)
 import qualified Data.Text     as T
 import           Numeric       (showHex, showOct)
-import qualified Data.Char as C
 
 render :: File -> Text
 render (File _ es) =
@@ -58,8 +58,9 @@ qualifiedType (qs, t) =
     (typeQualifier <$> qs)
     <> [typ t]
 
-typeDefinition :: Either Text QualifiedType -> Identifier -> Text
-typeDefinition t i = "typedef " <> text qualifiedType t <> " " <> identifier i <> ";"
+typeDefinition :: Either Text (QualifiedType, [Deriver]) -> Identifier -> Text
+typeDefinition (Left t) i        = "typedef " <> t <> " " <> identifier i <> ";"
+typeDefinition (Right (t, ds)) i = "typedef " <> qualifiedType t <> " " <> derivers (identifier i) ds <> ";"
 
 typ :: Type -> Text
 typ Void = "void"
@@ -90,7 +91,7 @@ typ (EnumerableLiteral i is) =
     ]
 
 field :: Field -> Text
-field (Field t i) = qualifiedType t <> " " <> identifier i
+field (Field t i ds) = derivers (qualifiedType t <> " " <> identifier i) ds
 
 typeQualifier :: TypeQualifier -> Text
 typeQualifier Unsigned = "unsigned"
@@ -107,7 +108,10 @@ variable t qs i ds =
   T.unwords $
     [qualifiedType t]
     <> (variableQualifier <$> qs)
-    <> case foldl deriver (maybe "" (text identifier) i) ds of { "" -> []; t -> [t] }
+    <> case derivers (maybe "" (text identifier) i) ds of { "" -> []; t -> [t] }
+
+derivers :: Text -> [Deriver] -> Text
+derivers = foldl deriver
 
 deriver :: Text -> Deriver -> Text
 deriver t (Pointer qs) =
@@ -181,7 +185,7 @@ escapeText s
           '\'' -> "\\'" <> escapeText s'
           '\"' -> "\\\"" <> escapeText s'
           '\\' -> "\\\\" <> escapeText s'
-          _ -> T.cons c $escapeText s'
+          _    -> T.cons c $escapeText s'
       else "\\U" <> pad 8 '0' (T.pack (showHex (C.ord c) "")) <> escapeText s'
 
 pad :: Word -> Char -> Text -> Text

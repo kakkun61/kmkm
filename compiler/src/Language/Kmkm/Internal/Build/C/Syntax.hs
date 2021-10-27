@@ -33,7 +33,7 @@ data File =
 data Element
   = Declaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | Definition Definition
-  | TypeDefinition (Either Text QualifiedType) Identifier
+  | TypeDefinition (Either Text (QualifiedType, [Deriver])) Identifier
   deriving (Show, Eq, Ord, Generic)
 
 data Definition
@@ -72,7 +72,7 @@ data Deriver
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Field =
-  Field QualifiedType Identifier
+  Field QualifiedType Identifier [Deriver]
   deriving (Show, Read, Eq, Ord, Generic)
 
 newtype Identifier = Identifier Text
@@ -118,7 +118,7 @@ data BlockElement
   = BlockStatement Statement
   | BlockDeclaration QualifiedType [VariableQualifier] (Maybe Identifier) [Deriver]
   | BlockDefinition Definition
-  | BlockTypeDefinition (Either Text QualifiedType) Identifier -- ^ GCC extension.
+  | BlockTypeDefinition (Either Text (QualifiedType, [Deriver])) Identifier -- ^ GCC extension.
   deriving (Show, Eq, Ord, Generic)
 
 data Statement

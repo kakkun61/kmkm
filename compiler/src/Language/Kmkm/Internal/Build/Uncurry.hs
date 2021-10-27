@@ -73,6 +73,7 @@ typ v =
     S.TypeApplication t s -> S.TypeApplication (typ t) $ typ s
     S.FunctionType a      -> S.FunctionType $ functionType a
     S.ProcedureType t     -> S.ProcedureType $ typ t
+    S.ForAll i t          -> S.ForAll i $ typ t
 
 typedValue :: (Functor f, Copointed f, S.HasLocation f) => f (Value 'S.Curried et ev f) -> f (Value 'S.Uncurried et ev f)
 typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t

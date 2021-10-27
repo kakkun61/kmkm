@@ -345,6 +345,7 @@ data Type n c b f
   | TypeApplication (B.Wear b f (Type n c b f)) (B.Wear b f (Type n c b f))
   | FunctionType (FunctionType n c b f)
   | ProcedureType (B.Wear b f (Type n c b f))
+  | ForAll (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
   deriving Generic
 
 type TypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Constraint
@@ -352,6 +353,7 @@ type TypeConstraint cls n c b f =
   ( cls (B.Wear b f (ReferenceIdentifier n))
   , cls (FunctionType n c b f)
   , cls (B.Wear b f (Type n c b f))
+  , cls (B.Wear b f (BindIdentifier n))
   )
 
 deriving instance TypeConstraint Show n c b f => Show (Type n c b f)
@@ -364,22 +366,26 @@ instance FunctorB (FunctionType n c B.Covered) => FunctorB (Type n c B.Covered) 
   bmap f (TypeApplication t1 t2) = TypeApplication (bmap f <$> f t1) (bmap f <$> f t2)
   bmap f (FunctionType g)        = FunctionType (bmap f g)
   bmap f (ProcedureType t)       = ProcedureType (bmap f <$> f t)
+  bmap f (ForAll i t)            = ForAll (f i) (bmap f <$> f t)
 
 instance BareB (FunctionType n c) => BareB (Type n c) where
   bstrip (TypeVariable (Identity i))                   = TypeVariable i
   bstrip (TypeApplication (Identity t1) (Identity t2)) = TypeApplication (bstrip t1) (bstrip t2)
   bstrip (FunctionType f)                              = FunctionType (bstrip f)
   bstrip (ProcedureType (Identity t))                  = ProcedureType (bstrip t)
+  bstrip (ForAll (Identity i) (Identity t))            = ForAll i (bstrip t)
 
   bcover (TypeVariable i)        = TypeVariable $ Identity i
   bcover (TypeApplication t1 t2) = TypeApplication (Identity $ bcover t1) (Identity $ bcover t2)
   bcover (FunctionType f)        = FunctionType $ bcover f
   bcover (ProcedureType t)       = ProcedureType $ Identity $ bcover t
+  bcover (ForAll i t)            = ForAll (Identity i) $ Identity $ bcover t
 
 instance
   ( Pretty (B.Wear b f (Type n c b f))
   , Pretty (B.Wear b f (ReferenceIdentifier n))
   , Pretty (FunctionType n c b f)
+  , Pretty (B.Wear b f (BindIdentifier n))
   ) =>
   Pretty (Type n c b f) where
 
@@ -387,6 +393,7 @@ instance
   pretty (TypeApplication t1 t2) = "(apply " <> pretty t1 <> " " <> pretty t2 <> ")"
   pretty (FunctionType f)        = pretty f
   pretty (ProcedureType t)       = "(procedure " <> pretty t <> ")"
+  pretty (ForAll i t)            = "(for-all " <> pretty i <> " " <> pretty t <> ")"
 
 -- FunctionType
 
