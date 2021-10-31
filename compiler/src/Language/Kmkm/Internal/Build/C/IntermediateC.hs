@@ -57,7 +57,9 @@ translate
 translate = module'
 
 module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Module f) -> m I.File
-module' definedVariables m | S.Module n _ ds <- copoint m = I.File (moduleName $ copoint n) . join <$> traverse (definition definedVariables n) (copoint ds)
+module' definedVariables m =
+  let S.Module n _ ds = copoint m
+  in I.File (moduleName $ copoint n) . join <$> traverse (definition definedVariables n) (copoint ds)
 
 -- |
 -- @
@@ -281,11 +283,12 @@ value definedVariables n v =
       S.Literal l -> pure $ I.Literal $ literal l
       S.Application (S.ApplicationN v vs) -> I.Call <$> value definedVariables n v <*> traverse (value definedVariables n) (copoint vs)
       S.Procedure ps -> I.StatementExpression . join <$> traverse (fmap (fmap Right) . procedureStep definedVariables n) (N.toList $ copoint ps)
-      S.Let ds v -> do
+      S.Let ds v1 -> do
         let definedVariables' = M.fromList (mapMaybe definedVariable $ copoint ds) `M.union` definedVariables
         es <- join <$> traverse (definition definedVariables' n) (copoint ds)
-        v' <- value definedVariables n v
-        pure $ I.StatementExpression $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v']
+        v1' <- value definedVariables n v1
+        pure $ I.StatementExpression $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v1']
+      S.ForAll _ v1 -> value definedVariables n v1
 
 literal :: S.Literal -> I.Literal
 literal (S.Integer i b) =
@@ -322,12 +325,9 @@ procedureStep definedVariables n s =
 typ :: Copointed f => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Type f) -> (I.QualifiedType, [I.Deriver])
 typ definedVariables t =
   case copoint t of
-    S.TypeVariable n -> fromMaybe X.unreachable $ M.lookup (copoint n) definedVariables
+    S.TypeVariable n ->  fromMaybe (([], I.Void), [I.Pointer []]) $ M.lookup (copoint n) definedVariables
     S.FunctionType (S.FunctionTypeN _ t) -> typ definedVariables t
     S.ProcedureType t -> typ definedVariables t
-    S.ForAll i t' ->
-      let definedVariables' = M.insert (copoint i) (([], I.Void), [I.Pointer []]) definedVariables
-      in typ definedVariables' t'
     _ -> undefined
 
 derivers :: Copointed f => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Type f) -> [I.Deriver]
@@ -341,7 +341,7 @@ derivers definedVariables t =
           go t =
             let (t', ds) = typ definedVariables t
             in (t', [I.Constant], Nothing, constantDeriver <$> ds ++ derivers definedVariables t)
-    _                                     -> []
+    _ -> []
 
 definedVariables
   :: Copointed f

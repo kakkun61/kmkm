@@ -1,5 +1,5 @@
-{-# LANGUAGE DataKinds  #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds    #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | “Lambda lifting” pass.
 module Language.Kmkm.Internal.Build.LambdaLift
@@ -35,11 +35,13 @@ module' =
 
 definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
 definition =
-  traverse $ \case
-    S.DataDefinition i cs -> pure $ S.DataDefinition i cs
-    S.TypeBind i t -> pure $ S.TypeBind i t
-    S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind i c
-    S.ValueBind (S.ValueBindU i v) ->
+  traverse definition'
+  where
+    definition' (S.DataDefinition i cs)    = pure $ S.DataDefinition i cs
+    definition' (S.TypeBind i t)           = pure $ S.TypeBind i t
+    definition' (S.ForeignTypeBind i c)    = pure $ S.ForeignTypeBind i c
+    definition' (S.ForeignValueBind i c t) = pure $ S.ForeignValueBind i c t
+    definition' (S.ValueBind (S.ValueBindU i v)) =
       scope $
         case copoint v of
           S.TypedValue v1 _
@@ -47,11 +49,12 @@ definition =
                 (v', ds) <- term v2
                 let S.TypedValue _ t = copoint v'
                 pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v
+            | S.ForAll _ v1' <- copoint v1 -> do
+                definition' $ S.ValueBind (S.ValueBindU i v1')
           _ -> do
             (v', ds) <- term v
             let S.TypedValue _ t = copoint v'
             pure $ S.ValueBind $ S.ValueBindV i $ S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v
-    S.ForeignValueBind i c t -> pure $ S.ForeignValueBind i c t
 
 term :: (Traversable f, Copointed f, S.HasLocation f) =>f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 term v =
@@ -77,6 +80,9 @@ term v =
           ds' <- sequence (traverse definition <$> ds)
           (v1', vds) <- term v1
           pure (S.TypedValue (S.Let ds' v1' <$ v') t <$ v, vds)
+        S.ForAll i v1 -> do
+          (v1', ds) <- term v1
+          pure (S.TypedValue (S.ForAll i v1' <$ v') t <$ v, ds)
 
 procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 procedureStep s =

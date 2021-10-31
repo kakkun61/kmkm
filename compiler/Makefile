@@ -37,7 +37,7 @@ lint:
 
 .PHONY: doc
 doc:
-	cabal v2-haddock
+	cabal v2-haddock --haddock-quickjump --haddock-hyperlinked-source
 
 .PHONY: install
 install:

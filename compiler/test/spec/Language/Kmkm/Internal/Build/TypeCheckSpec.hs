@@ -8,12 +8,13 @@
 module Language.Kmkm.Internal.Build.TypeCheckSpec where
 
 import Language.Kmkm.Internal.Build.TypeCheck
+import Language.Kmkm.Internal.Syntax
 
 import           Barbies.Bare.Layered
 import           Data.Functor.Barbie.Layered
 import           Data.Functor.Identity
-import qualified Data.Kind                     as K
-import           Language.Kmkm.Internal.Syntax
+import qualified Data.Kind                   as K
+import           Data.Map                    (Map)
 import           Test.Hspec
 
 spec :: Spec
@@ -88,7 +89,7 @@ spec = do
 
         it "fail" $ do
           let
-            source :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const2 () Bare Identity) (Const2 () Bare Identity) Bare Identity
+            source :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const2 () Covered Identity) (Const2 () Bare Identity) Bare Identity
             source =
               Module
                 "spec"
@@ -109,6 +110,43 @@ spec = do
                               $ FunctionType $ FunctionTypeC (TypeVariable ["kmkm", "prim", "int"]) $ TypeVariable ["kmkm", "prim", "int"]
                 ]
           typeCheck mempty (cover source) `shouldThrow` \MismatchException {} -> True
+
+    describe "parametric polymorphism" $ do
+      it "id \"hello\" is string" $ do
+        let
+          source :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const2 () Covered Identity) (Const2 () Bare Identity) Bare Identity
+          source =
+            Module
+              "spec"
+              [["kmkm", "prim"]]
+              [ ValueBind $
+                  ValueBindU
+                    ["spec", "hello"]
+                    $ UntypedValue $
+                        Application $
+                          ApplicationC
+                            (UntypedValue $ Variable ["spec", "id"])
+                            (UntypedValue $ Literal $ String "hello")
+              ]
+          variableTypes :: Map QualifiedIdentifier (Identity (Type 'NameResolved 'Curried Covered Identity))
+          variableTypes = [(["spec", "id"], cover $ FunctionType $ FunctionTypeC (TypeVariable ["a"]) $ TypeVariable ["a"])]
+          result :: Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const2 () Covered Identity) (Const2 () Bare Identity) Bare Identity
+          result =
+            Module
+              "spec"
+              [["kmkm", "prim"]]
+              [ ValueBind $
+                  ValueBindU
+                    ["spec", "hello"]
+                    $ TypedValue
+                        ( Application $
+                            ApplicationC
+                              (TypedValue (Variable ["spec", "id"]) (FunctionType $ FunctionTypeC (TypeVariable ["a"]) $ TypeVariable ["a"]))
+                              (TypedValue (Literal $ String "hello") (TypeVariable ["kmkm", "prim", "string"]))
+                        )
+                        $ TypeVariable ["kmkm", "prim", "string"]
+              ]
+        typeCheck variableTypes (cover source) `shouldReturn` cover result
 
 cover :: BareB b => b Bare Identity -> Identity (b Covered Identity)
 cover = Identity . bcoverWith Identity

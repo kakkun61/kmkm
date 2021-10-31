@@ -184,6 +184,9 @@ value' valueAffiliations typeAffiliations moduleName v =
         S.Let
           <$> sequence (traverse (definition valueAffiliations' typeAffiliations moduleName Local) <$> ds)
           <*> value valueAffiliations' typeAffiliations moduleName v
+    S.ForAll i v ->
+      let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
+      in S.ForAll (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations' moduleName v
 
 procedureStep
   :: ( MonadThrow m
@@ -273,9 +276,9 @@ typ typeAffiliations moduleName =
     S.ProcedureType t -> S.ProcedureType <$> typ typeAffiliations moduleName t
     S.TypeApplication t1 t2 -> S.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
     S.FunctionType f -> S.FunctionType <$> functionType typeAffiliations moduleName f
-    S.ForAll i t -> do
+    S.ForAllType i t -> do
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
-      S.ForAll (S.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
+      S.ForAllType (S.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
 
 functionType
   :: ( MonadThrow m

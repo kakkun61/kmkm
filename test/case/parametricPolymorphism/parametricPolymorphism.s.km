@@ -1,5 +1,7 @@
 (module
   parametricPolymorphism
-  (list)
   (list
-    (bind-value id (function a (for-all a a) a))))
+    kmkm.prim)
+  (list
+    (bind-value id (for-all a (function a a a)))
+    (bind-value hello (apply id "Hello world!"))))
