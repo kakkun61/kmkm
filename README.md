@@ -249,6 +249,29 @@ Procedures can be called in other procedures with `call` and `bind` keywords.
 
 `main.main` is typed in `(procedure kmkm.prim.int)`.
 
+### Polymorphism
+
+Parametric polymorphism is supported. Now only one for functions are supported.
+
+Use `for-all` keyword to make parametrically polymorphic.
+
+```lisp
+(module
+  main
+  (list
+    kmkm.io
+    kmkm.prim
+    kmkm.proc)
+  (list
+    (bind-value
+      main
+      (procedure
+        (list
+          (call (apply kmkm.io.print (apply id "Hello world!")))
+          (call (apply kmkm.proc.pureInt 0)))))
+    (bind-value id (for-all a (function a a a)))))
+```
+
 ### Foreign function interfaces
 
 #### Values
