@@ -57,7 +57,7 @@ $cases = Get-ChildItem -Path (Join-Path $test case) | ForEach-Object { $_.Name }
 foreach ($case in $cases) {
   Push-Location -Path (Join-Path $test 'case' $case)
   try {
-    & $kmkm -o (Join-Path $testOut $case) -l $library "$case.s.km"
+    & $kmkm -o (Join-Path $testOut $case) -l $library -s compile "$case.s.km"
     Write-Host "$case " -NoNewline
     if ($LASTEXITCODE -ne 0) {
       Write-Host "ERROR" -ForegroundColor Red

@@ -6,10 +6,12 @@ import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMi
                       Location (Location), Position (Position), compile)
 
 import           Control.Exception.Safe (catch)
-import           Control.Monad          (replicateM)
+import           Control.Monad          (replicateM, when)
 import           Control.Monad.IO.Class (MonadIO (liftIO))
+import           Data.Char              (toLower)
 import qualified Data.List              as L
 import qualified Data.List.NonEmpty     as N
+import           Data.Monoid            (Last (Last, getLast))
 import qualified Data.Set               as S
 import           Data.Text              (Text)
 import qualified Data.Text              as T
@@ -19,47 +21,72 @@ import           Main.Utf8              (withUtf8)
 import qualified Options.Declarative    as O
 import           System.Console.ANSI    (Color (Red), ColorIntensity (Vivid), ConsoleLayer (Foreground),
                                          SGR (Reset, SetColor), hSetSGR)
-import           System.Directory       (createDirectoryIfMissing, doesFileExist)
+import           System.Directory       (createDirectoryIfMissing, doesFileExist, setCurrentDirectory)
 import           System.Exit            (exitFailure)
-import           System.FilePath        ((</>))
+import           System.FilePath        (takeDirectory, takeFileName, (</>))
 import qualified System.FilePath        as F
+import qualified System.FilePath.Glob   as G
 import           System.IO              (Handle, IOMode (ReadMode), hPutStr, hPutStrLn, openFile, stderr)
+import           System.Process         (callProcess)
+
+type Verbosity = Int
+
+data Step
+  = Compile
+  | C
+  deriving (Show, Read, Eq, Ord, Enum)
+
+instance O.ArgRead Step where
+  argRead ss =
+    getLast $ mconcat $ Last . read' <$> ss
+    where
+      read' s =
+        case toLower <$> s of
+          "compile" -> Just Compile
+          "c"       -> Just C
+          _         -> Nothing
 
 main :: IO ()
 main = withUtf8 $ O.run_ main'
 
 main'
-  :: O.Flag "o" '["output"] "DIRECTORY" "output directory" (O.Def "." FilePath)
+  :: O.Flag "o" '["output"] "PATH" "output file path" (O.Def "out" FilePath)
   -> O.Flag "l" '["library"] "PATH" "library path to find" [FilePath]
   -> O.Flag "n" '["dry-run"] "" "dry run" Bool
+  -> O.Flag "s" '["step"] "STEP" "to which step to run" (O.Def "c" Step)
   -> O.Arg "SOURCE" String
   -> O.Cmd "Kmkm compiler" ()
-main' output libraries dryRun src =
+main' output libraries dryRun step src = do
+  verbosity <- O.getVerbosity
+  liftIO $ do
+    compile' (takeDirectory $ O.get output) (O.get libraries) (O.get dryRun) verbosity (O.get src)
+    when (not (O.get dryRun) && C <= O.get step) $
+      gcc (O.get output) verbosity
+
+compile' :: FilePath -> [FilePath] -> Bool -> Verbosity -> String -> IO ()
+compile' output libraries dryRun verbosity src =
   catch
     do
       let
         findFile path =
-          liftIO $ do
-            go $ "." : O.get libraries
+          do
+            go $ "." : libraries
           where
             go (dir : dirs) = do
               let p = dir </> path
               found <- doesFileExist p
               if found then pure p else go dirs
             go [] = fail $ "not found: " ++ path
-        readFile :: MonadIO m => FilePath -> m Text
-        readFile = liftIO . T.readFile
         writeFile path text =
-          if O.get dryRun
+          if dryRun
             then pure ()
             else do
-              let path' = O.get output </> path
-              liftIO $ createDirectoryIfMissing True $  F.takeDirectory path'
-              liftIO $ TU.writeFile path' text
-        writeLog = O.logStr 1 . T.unpack
-      compile findFile readFile writeFile writeLog =<< removeFileExtension "s.km" (O.get src)
-    $ \e ->
-        liftIO $ do
+              let path' = output </> path
+              createDirectoryIfMissing True $ F.takeDirectory path'
+              TU.writeFile path' text
+        writeLog = when (1 <= verbosity) . T.putStrLn
+      compile findFile T.readFile writeFile writeLog =<< removeFileExtension "s.km" src
+    $ \e -> do
           case e of
             ParseException m -> do
               hPutStrLn stderr "parsing error:"
@@ -109,9 +136,8 @@ removeFileExtension ext path = do
     (f, e) | e == '.' : ext -> pure f
     _                       -> fail $ "extension is not \"" ++ ext ++ "\""
 
-printLocation :: MonadIO m => Handle -> Location -> m ()
-printLocation outHandle (Location filePath (Position beginLine beginColumn) (Position endLine endColumn)) =
-  liftIO $ do
+printLocation :: Handle -> Location -> IO ()
+printLocation outHandle (Location filePath (Position beginLine beginColumn) (Position endLine endColumn)) = do
     handle <- openFile filePath ReadMode
     hSkipLines handle $ beginLine - 1
     ls <- replicateM (endLine' - beginLine' + 1) $ T.hGetLine handle
@@ -153,3 +179,10 @@ hPutStrLnRed h s = do
   hSetSGR h [SetColor Foreground Vivid Red]
   T.hPutStrLn h s
   hSetSGR h [Reset]
+
+gcc :: FilePath -> Verbosity -> IO ()
+gcc output verbosity = do
+  setCurrentDirectory $ takeDirectory output
+  sourceFiles <- G.glob "**/*.c"
+  let verbosity' = ["-" ++ replicate verbosity 'v' | verbosity /= 0]
+  callProcess "gcc" (sourceFiles ++ verbosity' ++ ["-o", takeFileName output])
