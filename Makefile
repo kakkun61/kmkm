@@ -14,3 +14,9 @@ vscode:
 .PHONY: test
 test:
 	$(PWSH) -File test/run.ps1
+
+.PHONY: clean
+clean:
+	-$(PWSH) -Command "Remove-Item -Recurse out"
+	-$(MAKE) -C compiler clean
+	-cd editor/vscode && npm run clean

@@ -42,10 +42,12 @@
         ]
     },
     "devDependencies": {
+        "glob": "^7.2.0",
         "vsce": "^1.93.0"
     },
     "scripts": {
         "package": "vsce package",
-        "publish": "vsce publish"
+        "publish": "vsce publish",
+        "clean": "node dev/clean.js"
     }
 }
