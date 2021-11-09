@@ -59,7 +59,12 @@ main'
 main' output libraries dryRun step src = do
   verbosity <- O.getVerbosity
   liftIO $ do
-    compile' (takeDirectory $ O.get output) (O.get libraries) (O.get dryRun) verbosity (O.get src)
+    let
+      output' =
+        if O.get step == C
+          then takeDirectory $ O.get output
+          else O.get output
+    compile' output' (O.get libraries) (O.get dryRun) verbosity (O.get src)
     when (not (O.get dryRun) && C <= O.get step) $
       gcc (O.get output) verbosity
 
