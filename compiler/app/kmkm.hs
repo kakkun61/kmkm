@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -23,11 +24,17 @@ import           System.Console.ANSI    (Color (Red), ColorIntensity (Vivid), Co
                                          SGR (Reset, SetColor), hSetSGR)
 import           System.Directory       (createDirectoryIfMissing, doesFileExist, setCurrentDirectory)
 import           System.Exit            (exitFailure)
-import           System.FilePath        (takeDirectory, takeFileName, (</>))
+import           System.FilePath        ((</>))
 import qualified System.FilePath        as F
 import qualified System.FilePath.Glob   as G
 import           System.IO              (Handle, IOMode (ReadMode), hPutStr, hPutStrLn, openFile, stderr)
-import           System.Process         (callProcess)
+
+#ifdef CYGPATH
+import System.Process (callProcess, readProcess)
+#else
+import System.Process (callProcess)
+#endif
+
 
 type Verbosity = Int
 
@@ -50,23 +57,20 @@ main :: IO ()
 main = withUtf8 $ O.run_ main'
 
 main'
-  :: O.Flag "o" '["output"] "PATH" "output file path" (O.Def "out" FilePath)
+  :: O.Flag "o" '["output"] "PATH" "output executable file path that is relative to --directory" (O.Def "prog" FilePath)
+  -> O.Flag "d" '["directory"] "PATH" "output directory path" (O.Def "out" FilePath)
   -> O.Flag "l" '["library"] "PATH" "library path to find" [FilePath]
   -> O.Flag "n" '["dry-run"] "" "dry run" Bool
-  -> O.Flag "s" '["step"] "STEP" "to which step to run" (O.Def "c" Step)
+  -> O.Flag "s" '["step"] "STEP" "to which step to run (compile, c)" (O.Def "c" Step)
+  -> O.Flag "c" '["compiler"] "COMMAND" "compiler command" (O.Def "gcc" FilePath)
   -> O.Arg "SOURCE" String
   -> O.Cmd "Kmkm compiler" ()
-main' output libraries dryRun step src = do
+main' output directory libraries dryRun step compiler src = do
   verbosity <- O.getVerbosity
   liftIO $ do
-    let
-      output' =
-        if O.get step == C
-          then takeDirectory $ O.get output
-          else O.get output
-    compile' output' (O.get libraries) (O.get dryRun) verbosity (O.get src)
+    compile' (O.get directory) (O.get libraries) (O.get dryRun) verbosity (O.get src)
     when (not (O.get dryRun) && C <= O.get step) $
-      gcc (O.get output) verbosity
+      gcc (O.get compiler) (O.get output) (O.get directory) verbosity
 
 compile' :: FilePath -> [FilePath] -> Bool -> Verbosity -> String -> IO ()
 compile' output libraries dryRun verbosity src =
@@ -185,9 +189,17 @@ hPutStrLnRed h s = do
   T.hPutStrLn h s
   hSetSGR h [Reset]
 
-gcc :: FilePath -> Verbosity -> IO ()
-gcc output verbosity = do
-  setCurrentDirectory $ takeDirectory output
-  sourceFiles <- G.glob "**/*.c"
+gcc :: FilePath -> FilePath -> FilePath -> Verbosity -> IO ()
+gcc cc output directory verbosity = do
+  setCurrentDirectory directory
+  sourceFiles <- traverse convertPath =<< G.glob "**/*.c"
   let verbosity' = ["-" ++ replicate verbosity 'v' | verbosity /= 0]
-  callProcess "gcc" (sourceFiles ++ verbosity' ++ ["-o", takeFileName output])
+  when (0 < verbosity) $ putStrLn $ unwords $ cc : (sourceFiles ++ verbosity' ++ ["-o", output])
+  callProcess cc (sourceFiles ++ verbosity' ++ ["-o", output])
+
+convertPath :: FilePath -> IO FilePath
+#ifdef CYGPATH
+convertPath path = init <$> readProcess "cygpath" [path] "" -- empty string is something wrong.
+#else
+convertPath = pure
+#endif

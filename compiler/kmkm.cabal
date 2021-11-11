@@ -17,6 +17,10 @@ tested-with: GHC == 8.6.5, GHC == 8.8.4, GHC == 8.10.4, GHC == 9.0.1
 extra-source-files: README.md,
                     CHANGELOG.md
 
+flag cygpath
+  description: Converet paths with cygpath command before passing them to GCC.
+  default: False
+
 common common
   build-depends: base >= 4 && < 5
   ghc-options: -Wall
@@ -96,6 +100,8 @@ executable kmkm
                  safe-exceptions,
                  text,
                  with-utf8
+  if flag(cygpath)
+    cpp-options: -DCYGPATH
 
 test-suite doctest
   import: common
