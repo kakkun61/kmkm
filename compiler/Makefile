@@ -1,4 +1,5 @@
 PWSH = pwsh
+INSTALL_DIR = $(APPDATA)\kmkm\bin
 
 .PHONY: build
 build: build-deps
@@ -40,8 +41,11 @@ doc:
 	cabal v2-haddock --haddock-quickjump --haddock-hyperlinked-source
 
 .PHONY: install
-install:
-	cabal install --overwrite-policy=always
+install: $(INSTALL_DIR)
+	cabal install --overwrite-policy=always --installdir=$(INSTALL_DIR)
+
+$(INSTALL_DIR):
+	$(PWSH) -Command "New-Item -ItemType Directory -Path $(INSTALL_DIR)"
 
 .PHONY: clean
 clean:

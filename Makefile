@@ -1,4 +1,5 @@
 PWSH = pwsh
+INSTALL_DIR = $(APPDATA)\kmkm
 
 .PHONY: all
 all: compiler vscode
@@ -14,6 +15,14 @@ vscode:
 .PHONY: test
 test:
 	$(PWSH) -File test/run.ps1
+
+.PHONY: install
+install: $(INSTALL_DIR)
+	$(MAKE) -C compiler install INSTALL_DIR=$(INSTALL_DIR)\bin
+	$(PWSH) -Command "Copy-Item -Recurse library $(INSTALL_DIR)"
+
+$(INSTALL_DIR):
+	$(PWSH) -Command "New-Item -ItemType Directory -Path $(INSTALL_DIR)"
 
 .PHONY: clean
 clean:
