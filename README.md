@@ -249,9 +249,37 @@ Procedures can be called in other procedures with `call` and `bind` keywords.
 
 `main.main` is typed in `(procedure kmkm.prim.int)`.
 
+### Data types
+
+This is an example of an algebraic data type of boolean type.
+
+```lisp
+(module
+  main
+  (list)
+  (list
+    (define
+      bool
+      (list
+        false
+        true))))
+```
+
+Fields are available.
+
+```lisp
+(define
+  fraction
+  (list
+    (fraction
+      (list
+        (numerator kmkm.prim.int)
+        (denominator kmkm.prim.int)))))
+```
+
 ### Polymorphism
 
-Parametric polymorphism is supported. Now only one for functions are supported.
+Parametric polymorphism is supported.
 
 Use `for-all` keyword to make parametrically polymorphic.
 
@@ -270,6 +298,22 @@ Use `for-all` keyword to make parametrically polymorphic.
           (call (apply kmkm.io.print (apply id "Hello world!")))
           (call (apply kmkm.proc.pureInt 0)))))
     (bind-value id (for-all a (function a a a)))))
+```
+
+`solo` is a single tuple as a parametrically polymorphic data type.
+
+```lisp
+(module
+  main
+  (list
+    kmkm.prim)
+  (list
+    (define
+      (solo
+        (for-all
+          a
+          (list
+            (solo a)))))))
 ```
 
 ### Foreign function interfaces
