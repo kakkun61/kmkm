@@ -8,7 +8,7 @@ jobs:
   test:
     strategy:
       matrix:
-        ghc: ['8.10']
+        ghc: ['9.0']
 
     runs-on: windows-latest
 
