@@ -115,7 +115,7 @@ readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile
       when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.location moduleName
       (g, m, f) <- acc
       let
-        m' = M.insert moduleName' module' m -- TODO ¡ main ƒ‚ƒWƒ…[ƒ‹‚ÅA‚·‚Å‚É main ƒ‚ƒWƒ…[ƒ‹‚ª‚ ‚Á‚½‚çƒGƒ‰[
+        m' = M.insert moduleName' module' m -- TODO ä»Š main ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ã§ã€ã™ã§ã« main ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ãŒã‚ã£ãŸã‚‰ã‚¨ãƒ©ãƒ¼
         f' = M.insert moduleName' (normalisePath path) f
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
         depSet = S.map (moduleNameToFilePath . copoint) $ S.fromList $ copoint deps

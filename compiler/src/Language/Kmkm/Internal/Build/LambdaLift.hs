@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | gLambda liftingh pass.
+-- | â€œLambda liftingâ€ pass.
 module Language.Kmkm.Internal.Build.LambdaLift
   ( lambdaLift
   ) where

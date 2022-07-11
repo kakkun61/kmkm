@@ -208,7 +208,7 @@ foreignValueBind s =
       let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
       evs <- list (runEmbeddedParsers evps) sevs
       t <- typ st
-      case mapMaybe isEmbeddedValue $ copoint evs of -- ëIï ÇÕÉpÉCÉvÉâÉCÉìÇÃå„ÇÃçHíˆÇ≈çsÇ§
+      case mapMaybe isEmbeddedValue $ copoint evs of -- ÔøΩIÔøΩ ÇÕÉpÔøΩCÔøΩvÔøΩÔøΩÔøΩCÔøΩÔøΩÔøΩÃåÔøΩÃçHÔøΩÔøΩÔøΩ≈çsÔøΩÔøΩ
         [ev] -> pure $ S.ForeignValueBind i ev t
         _ -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ S.location s]
     _ -> throwError [SexpException "unexpected format" "foreignValueBind" $ S.location s]
@@ -388,9 +388,9 @@ stringTripleDoubleQuotationText = do
         do
           void $ P.text "\"\"\""
           let
-            -- | rightest match of Åg"""Åh
+            -- | rightest match of ÔøΩg"""ÔøΩh
             go
-              :: Int -- ^ the length of sequence of Åg"Åh
+              :: Int -- ^ the length of sequence of ÔøΩg"ÔøΩh
               -> ParsecT Void Text Identity Text
             go n = do
               c <- P.anyChar
@@ -576,8 +576,8 @@ instance E.Exception [Exception] where
 -- | Laws are
 --
 -- @
---   throwError e \<|\> m Åﬂ m
---   m \<|\> throwError e Åﬂ m
+--   throwError e \<|\> m ‚â° m
+--   m \<|\> throwError e ‚â° m
 -- @
 class (Alternative m, MonadError e m) => MonadAlternativeError e m
 
