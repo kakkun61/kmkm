@@ -24,7 +24,6 @@ import qualified Control.Exception      as E
 import           Control.Exception.Safe (MonadThrow, throw)
 import           Control.Monad          (join)
 import           Data.Copointed         (Copointed (copoint))
-import           Data.Foldable          (Foldable (fold))
 import qualified Data.List.NonEmpty     as N
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
