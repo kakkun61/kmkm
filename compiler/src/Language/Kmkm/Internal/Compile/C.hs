@@ -23,6 +23,7 @@ import qualified Language.Kmkm.Internal.Parse.Sexp.C          as KPC
 import qualified Language.Kmkm.Internal.Syntax                as KS
 
 import qualified Barbies.Bare           as B
+import           Control.Applicative    (Alternative)
 import qualified Control.Exception      as E
 import           Control.Exception.Safe (MonadCatch, MonadThrow, throw)
 import           Data.Copointed         (Copointed (copoint))
@@ -39,7 +40,7 @@ import           GHC.Generics           (Generic)
 import qualified System.FilePath        as F
 
 compile
-  :: MonadCatch m
+  :: (Alternative m, MonadCatch m)
   => (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (FilePath -> Text -> m ()) -- ^ File writer.

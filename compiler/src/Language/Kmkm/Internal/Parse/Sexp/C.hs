@@ -1,32 +1,37 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Internal.Parse.Sexp.C
   ( embeddedParser
   ) where
 
-import           Language.Kmkm.Internal.Parse.Sexp (EmbeddedType, EmbeddedValue, Parser, list, string, withPosition)
 import qualified Language.Kmkm.Internal.Parse.Sexp as R
 import qualified Language.Kmkm.Internal.Syntax     as S
 
-import           Control.Monad     (void)
-import qualified Text.Parser.Token as P
+import qualified Barbies.Bare                       as B
+import           Data.Traversable                   (for)
+import qualified Language.Kmkm.Internal.Syntax.Sexp as S
 
-embeddedParser :: R.EmbeddedParser S.EmbeddedCType S.EmbeddedCValue
-embeddedParser = R.EmbeddedParser embeddedValue embeddedType
+embeddedParser :: (Traversable f, S.HasLocation f) => R.EmbeddedParser f
+embeddedParser = R.EmbeddedParser value type'
 
-embeddedValue :: Parser et ev (S.WithLocation EmbeddedValue)
-embeddedValue =
-  withPosition $ do
-    void $ P.textSymbol "c-value"
-    i <- withPosition string
-    ps <- list $ withPosition string
-    b <- withPosition string
-    pure $ S.EmbeddedValueC $ S.EmbeddedCValue i ps b
+value :: (Traversable f, S.HasLocation f) => f (S.Sexp B.Covered f) -> Either [R.Exception] (f (S.EmbeddedValue B.Covered f))
+value s =
+  for s $ \case
+    S.List [sv, si, sps, sb] -> do
+      R.symbol "c-value" "value" sv
+      i <- R.string si
+      ps <- R.list R.string sps
+      b <- R.string sb
+      pure $ S.EmbeddedValueC $ S.EmbeddedCValue i ps b
+    _ -> Left [R.SexpException "unexpected format" "value" $ S.location s]
 
-embeddedType :: Parser et ev (S.WithLocation EmbeddedType)
-embeddedType =
-  withPosition $ do
-    void $ P.textSymbol "c-type"
-    i <- withPosition string
-    b <- withPosition string
-    pure $ S.EmbeddedTypeC $ S.EmbeddedCType i b
+type' :: (Traversable f, S.HasLocation f) => f (S.Sexp B.Covered f) -> Either [R.Exception] (f (S.EmbeddedType B.Covered f))
+type' s =
+  for s $ \case
+    S.List [st, si, sb] -> do
+      R.symbol "c-type" "type'" st
+      i <- R.string si
+      b <- R.string sb
+      pure $ S.EmbeddedTypeC $ S.EmbeddedCType i b
+    _ -> Left [R.SexpException "unexpected format" "type'" $ S.location s]

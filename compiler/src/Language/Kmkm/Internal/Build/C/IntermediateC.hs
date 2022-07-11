@@ -161,7 +161,7 @@ definition definedVariables n d =
                   in Right $ I.Definition $ I.ExpressionDefinition t' [I.Constant] (qualifiedIdentifier i) (constantDeriver <$> ds) $ I.ExpressionInitializer $ Left b
                 ]
             S.EmbeddedCValue _ ps _ -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length ps) (S.location e)
-        S.FunctionType (S.FunctionTypeN ts r) ->
+        S.FunctionType t' | (S.FunctionTypeN ts r) <- copoint t' ->
           case copoint e of
             S.EmbeddedCValue n ps b
               | ps_ <- copoint ps
@@ -281,7 +281,9 @@ value definedVariables n v =
     case copoint v' of
       S.Variable i -> pure $ I.Variable $ qualifiedIdentifier i
       S.Literal l -> pure $ I.Literal $ literal l
-      S.Application (S.ApplicationN v vs) -> I.Call <$> value definedVariables n v <*> traverse (value definedVariables n) (copoint vs)
+      S.Application a ->
+        let S.ApplicationN v vs = copoint a
+        in I.Call <$> value definedVariables n v <*> traverse (value definedVariables n) (copoint vs)
       S.Procedure ps -> I.StatementExpression . join <$> traverse (fmap (fmap Right) . procedureStep definedVariables n) (N.toList $ copoint ps)
       S.Let ds v1 -> do
         let definedVariables' = M.fromList (mapMaybe definedVariable $ copoint ds) `M.union` definedVariables
@@ -289,23 +291,27 @@ value definedVariables n v =
         v1' <- value definedVariables n v1
         pure $ I.StatementExpression $ (fmap elementStatement <$> es) ++ [Right $ I.BlockStatement $ I.ExpressionStatement v1']
       S.ForAll _ v1 -> value definedVariables n v1
+      S.Function _ -> X.unreachable
+      S.TypeAnnotation _ -> X.unreachable
 
-literal :: S.Literal -> I.Literal
-literal (S.Integer i b) =
-  I.Integer i $
-    case b of
-      2  -> I.IntBinary
-      8  -> I.IntOctal
-      10 -> I.IntDecimal
-      16 -> I.IntHexadecimal
-      _  -> error $ "literal: base: " ++ show b
-literal (S.Fraction s f e b) =
-  I.Fraction s f e $
-    case b of
-      10 -> I.FractionDecimal
-      16 -> I.FractionHexadecimal
-      _  -> error $ "literal: base " ++ show b
-literal (S.String s) = I.String s -- XXX バックスラッシュでバイナリー表記にした方がいいかも
+literal :: Copointed f => f S.Literal -> I.Literal
+literal l =
+  case copoint l of
+    S.Integer i b ->
+      I.Integer i $
+        case b of
+          2  -> I.IntBinary
+          8  -> I.IntOctal
+          10 -> I.IntDecimal
+          16 -> I.IntHexadecimal
+          _  -> error $ "literal: base: " ++ show b
+    S.Fraction s f e b ->
+      I.Fraction s f e $
+        case b of
+          10 -> I.FractionDecimal
+          16 -> I.FractionHexadecimal
+          _  -> error $ "literal: base " ++ show b
+    S.String s -> I.String s -- XXX バックスラッシュでバイナリー表記にした方がいいかも
 
 procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
 procedureStep definedVariables n s =
@@ -326,14 +332,14 @@ typ :: Copointed f => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> 
 typ definedVariables t =
   case copoint t of
     S.TypeVariable n ->  fromMaybe (([], I.Void), [I.Pointer []]) $ M.lookup (copoint n) definedVariables
-    S.FunctionType (S.FunctionTypeN _ t) -> typ definedVariables t
+    S.FunctionType t' | (S.FunctionTypeN _ t) <- copoint t' -> typ definedVariables t
     S.ProcedureType t -> typ definedVariables t
     _ -> undefined
 
 derivers :: Copointed f => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Type f) -> [I.Deriver]
 derivers definedVariables t =
   case copoint t of
-    S.FunctionType (S.FunctionTypeN ts _) ->
+    S.FunctionType t' | (S.FunctionTypeN ts _) <- copoint t' ->
         [ I.Pointer []
         , I.Function $ go <$> copoint ts
         ]

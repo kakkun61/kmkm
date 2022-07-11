@@ -159,7 +159,8 @@ typeBind variableTypes valueBinds prim typedValueBinds recursionIdentifiers =
 annotatedType :: Copointed f => f (Value 'S.Untyped et ev f) -> Maybe (f (Type f))
 annotatedType v
   | S.UntypedValue v <- copoint v
-  , S.TypeAnnotation (S.TypeAnnotation' _ t) <- copoint v = Just t
+  , S.TypeAnnotation a <- copoint v
+  , S.TypeAnnotation' _ t <- copoint a = Just t
 annotatedType _ = Nothing
 
 replaceValue :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
@@ -189,9 +190,11 @@ dep identifiers v =
           | i' <- copoint i
           , i' `S.member` identifiers -> [i']
           | otherwise -> []
-        S.Function (S.FunctionC i _ v') -> dep (S.delete (copoint i) identifiers) v'
+        S.Function f
+          | S.FunctionC i _ v' <- copoint f -> dep (S.delete (copoint i) identifiers) v'
         S.Literal _ -> []
-        S.Application (S.ApplicationC v1 v2) -> mconcat $ dep identifiers <$> [v1, v2]
+        S.Application a
+          | S.ApplicationC v1 v2 <- copoint a -> mconcat $ dep identifiers <$> [v1, v2]
         S.Procedure ps ->
           fst $ foldl' go ([], identifiers) $ copoint ps
           where
@@ -199,7 +202,8 @@ dep identifiers v =
               case copoint s of
                 S.BindProcedureStep i v' -> (dep ss v' ++ is, S.delete (copoint i) ss)
                 S.CallProcedureStep v'   -> (dep ss v' ++ is, ss)
-        S.TypeAnnotation (S.TypeAnnotation' v' _) -> dep identifiers v'
+        S.TypeAnnotation a
+          | S.TypeAnnotation' v' _ <- copoint a -> dep identifiers v'
         S.Let ds v ->
           let
             valueBinds = M.fromList $ mapMaybe valueBind $ copoint ds
@@ -231,42 +235,48 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
             case M.lookup i' variableTypes of
               Nothing -> throw $ NotFoundException i' $ S.location i
               Just t  -> pure $ S.TypedValue (S.Variable i <$ v') t <$ v
-        S.Literal (S.Integer v_ b) ->
-          let int = S.GlobalIdentifier ["kmkm", "prim"] "int"
-          in
-            if primInt
-              then pure $ S.TypedValue (S.Literal (S.Integer v_ b) <$ v') (S.TypeVariable (int <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException int $ S.location v
-        S.Literal (S.Fraction s d e b) ->
-          let frac2 = S.GlobalIdentifier ["kmkm", "prim"] "frac2"
-          in
-            if primFrac2
-              then pure $ S.TypedValue (S.Literal (S.Fraction s d e b) <$ v') (S.TypeVariable (frac2 <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException frac2 $ S.location v
-        S.Literal (S.String t) ->
-          let string = S.GlobalIdentifier ["kmkm", "prim"] "string"
-          in
-            if primString
-              then pure $ S.TypedValue (S.Literal (S.String t) <$ v') (S.TypeVariable (string <$ v) <$ v) <$ v
-              else throw $ PrimitiveTypeException string $ S.location v
-        S.Function (S.FunctionC i t v'') -> do
-          v''' <- typeOfTerm (M.insert (copoint i) t variableTypes) prim v''
-          let S.TypedValue _ t' = copoint v'''
-          pure $ S.TypedValue (S.Function (S.FunctionC i t v''') <$ v') (S.FunctionType (S.FunctionTypeC t t') <$ v) <$ v
-        S.Application (S.ApplicationC v0 v1) -> do
-          v0' <- typeOfTerm variableTypes prim v0
-          v1' <- typeOfTerm variableTypes prim v1
-          let
-            S.TypedValue _ t0 = copoint v0'
-            S.TypedValue _ t1 = copoint v1'
-          case copoint t0 of
-            S.FunctionType (S.FunctionTypeC t00 t01)
-              | S.TypeVariable i <- copoint t00 -> do
-                let t01' = substitute i t1 t01
-                pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01' <$ v
-              | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1') <$ v') t01 <$ v
-              | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.location t1
-            _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.location t0
+        S.Literal l ->
+          case copoint l of
+            S.Integer v_ b ->
+              let int = S.GlobalIdentifier ["kmkm", "prim"] "int"
+              in
+                if primInt
+                  then pure $ S.TypedValue (S.Literal (S.Integer v_ b <$ l) <$ v') (S.TypeVariable (int <$ v) <$ v) <$ v
+                  else throw $ PrimitiveTypeException int $ S.location v
+            S.Fraction s d e b ->
+              let frac2 = S.GlobalIdentifier ["kmkm", "prim"] "frac2"
+              in
+                if primFrac2
+                  then pure $ S.TypedValue (S.Literal (S.Fraction s d e b <$ l) <$ v') (S.TypeVariable (frac2 <$ v) <$ v) <$ v
+                  else throw $ PrimitiveTypeException frac2 $ S.location v
+            S.String t ->
+              let string = S.GlobalIdentifier ["kmkm", "prim"] "string"
+              in
+                if primString
+                  then pure $ S.TypedValue (S.Literal (S.String t <$ l) <$ v') (S.TypeVariable (string <$ v) <$ v) <$ v
+                  else throw $ PrimitiveTypeException string $ S.location v
+        S.Function f
+          | S.FunctionC i t v'' <- copoint f -> do
+              v''' <- typeOfTerm (M.insert (copoint i) t variableTypes) prim v''
+              let S.TypedValue _ t' = copoint v'''
+              pure $ S.TypedValue (S.Function (S.FunctionC i t v''' <$ f) <$ v') (S.FunctionType (S.FunctionTypeC t t' <$ v) <$ v) <$ v
+        S.Application a
+          | S.ApplicationC v0 v1 <- copoint a -> do
+              v0' <- typeOfTerm variableTypes prim v0
+              v1' <- typeOfTerm variableTypes prim v1
+              let
+                S.TypedValue _ t0 = copoint v0'
+                S.TypedValue _ t1 = copoint v1'
+              case copoint t0 of
+                S.FunctionType t ->
+                  case copoint t of
+                    S.FunctionTypeC t00 t01
+                      | S.TypeVariable i <- copoint t00 -> do
+                        let t01' = substitute i t1 t01
+                        pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01' <$ v
+                      | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01 <$ v
+                      | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.location t1
+                _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.location t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (variableTypes', p') <- typeOfProcedureStep variableTypes prim p
@@ -283,12 +293,13 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
               (variableTypes, ps) <- acc
               (variableTypes', p') <- typeOfProcedureStep variableTypes prim p
               pure (variableTypes', p' : ps)
-        S.TypeAnnotation (S.TypeAnnotation' v' t) -> do
-          v'' <- typeOfTerm variableTypes prim v'
-          let S.TypedValue _ t' = copoint v''
-          if S.strip t == S.strip t'
-            then pure v''
-            else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.location t'
+        S.TypeAnnotation a
+          | S.TypeAnnotation' v' t <- copoint a -> do
+              v'' <- typeOfTerm variableTypes prim v'
+              let S.TypedValue _ t' = copoint v''
+              if S.strip t == S.strip t'
+                then pure v''
+                else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.location t'
         S.Let ds v' -> do
           ds' <- definitions variableTypes prim ds
           let variableTypes' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` variableTypes
@@ -307,7 +318,7 @@ substitute i value target =
       | copoint i == copoint i' -> value
       | otherwise -> target
     S.TypeApplication t0 t1 -> S.TypeApplication (substitute i value t0) (substitute i value t1) <$ target
-    S.FunctionType (S.FunctionTypeC t0 t1) -> S.FunctionType (S.FunctionTypeC (substitute i value t0) (substitute i value t1)) <$ target
+    S.FunctionType t | S.FunctionTypeC t0 t1 <- copoint t -> S.FunctionType (S.FunctionTypeC (substitute i value t0) (substitute i value t1) <$ t) <$ target
     S.ProcedureType t0 -> S.ProcedureType (substitute i value t0) <$ target
     S.ForAllType i' t
       | copoint i == copoint i' -> target

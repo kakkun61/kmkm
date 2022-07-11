@@ -1,126 +1,188 @@
+{-# LANGUAGE DataKinds                #-}
 {-# LANGUAGE FlexibleInstances        #-}
-{-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE OverloadedLists          #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE PolyKinds                #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 
 module Language.Kmkm.Internal.Parse.SexpSpec where
 
-import Language.Kmkm.Internal.Parse.Sexp
-import Language.Kmkm.Internal.Syntax
+import           Language.Kmkm.Internal.Parse.Sexp
+import qualified Language.Kmkm.Internal.Parse.Sexp.C as C
+import           Language.Kmkm.Internal.Syntax
+import           Language.Kmkm.Internal.Syntax.Sexp
 
 import           Barbies.Bare.Layered
-import           Control.Monad.Catch
+import           Control.Monad.Catch         (MonadCatch, MonadThrow)
+import           Control.Monad.Except        (Except)
+import           Control.Monad.Reader        (ReaderT)
 import           Data.Copointed
 import           Data.Functor.Barbie.Layered
 import           Data.Functor.Identity
 import qualified Data.Kind                   as K
 import           Data.Text
+import           Data.Void                   (Void)
 import           Test.Hspec
 import qualified Text.Megaparsec             as M
+import           Text.Megaparsec.Parsers     (ParsecT (unParsecT))
+import qualified Text.Parser.Combinators     as P
 
 spec :: Spec
 spec = do
-  describe "parse" $ do
+  describe "parsec" $ do
+    describe "string" $ do
+      it "\"\"" $ do
+        pc stringSingleDoubleQuotationText "\"\"" `shouldReturn` ""
+
+      it "\"foo\"" $ do
+        pc stringSingleDoubleQuotationText "\"foo\"" `shouldReturn` "foo"
+
+      it "\"\\\"\"" $ do
+        pc stringSingleDoubleQuotationText "\"\\\"\"" `shouldReturn` "\""
+
+      it "\"\"\"foo\"\"\"" $ do
+        pc stringTripleDoubleQuotationText "\"\"\"foo\"\"\"" `shouldReturn` "foo"
+
+      it "\"\"\"\"foo\"\"\"\"" $ do
+        pc stringTripleDoubleQuotationText "\"\"\"\"foo\"\"\"\"" `shouldReturn` "\"foo\""
+
+  describe "parseText" $ do
+    it "parses a simple atom" $ do
+      pt "spec" "foo" `shouldReturn` "foo"
+
+    it "parses a null list" $ do
+      pt "spec" "()" `shouldReturn` []
+
+    it "parses a singleton list" $ do
+      pt "spec" "(foo)" `shouldReturn` ["foo"]
+
+    it "parses a 2-element list" $ do
+      pt "spec" "(foo bar)" `shouldReturn` ["foo", "bar"]
+
+    it "parses a string with space" $ do
+      pt "spec" "(\"foo bar\")" `shouldReturn` ["\"foo bar\""]
+
+  describe "parseSexp'" $ do
     describe "integer" $ do
       it "123" $ do
-        p (integer <* M.eof) "spec" "123" `shouldReturn` Integer 123 10
+        ps integer "spec" "123" `shouldReturn` Integer 123 10
 
       it "0o123" $ do
-        p (integer <* M.eof) "spec" "0o123" `shouldReturn` Integer 0o123 8
+        ps integer "spec" "0o123" `shouldReturn` Integer 0o123 8
 
       it "0x123" $ do
-        p (integer <* M.eof) "spec" "0x123" `shouldReturn` Integer 0x123 16
+        ps integer "spec" "0x123" `shouldReturn` Integer 0x123 16
 
       it "0b101" $ do
-        p (integer <* M.eof) "spec" "0b101" `shouldReturn` Integer 5 2
+        ps integer "spec" "0b101" `shouldReturn` Integer 5 2
 
     describe "fraction" $ do
       it "3.14" $ do
-        p (fraction <* M.eof) "spec" "3.14" `shouldReturn` Fraction 314 2 0 10
+        ps fraction "spec" "3.14" `shouldReturn` Fraction 314 2 0 10
 
       it "314e-2" $ do
-        p (fraction <* M.eof) "spec" "314e-2" `shouldReturn` Fraction 314 0 (-2) 10
+        ps fraction "spec" "314e-2" `shouldReturn` Fraction 314 0 (-2) 10
 
       it "31.4e-1" $ do
-        p (fraction <* M.eof) "spec" "31.4e-1" `shouldReturn` Fraction 314 1 (-1) 10
+        ps fraction "spec" "31.4e-1" `shouldReturn` Fraction 314 1 (-1) 10
 
       it "1e1" $ do
-        p (fraction <* M.eof) "spec" "1e1" `shouldReturn` Fraction 1 0 1 10
+        ps fraction "spec" "1e1" `shouldReturn` Fraction 1 0 1 10
 
       it "1e-1" $ do
-        p (fraction <* M.eof) "spec" "1e-1" `shouldReturn` Fraction 1 0 (-1) 10
+        ps fraction "spec" "1e-1" `shouldReturn` Fraction 1 0 (-1) 10
 
       it "0x1p1" $ do
-        p (fraction <* M.eof) "spec" "0x1p1" `shouldReturn` Fraction 1 0 1 16
+        ps fraction "spec" "0x1p1" `shouldReturn` Fraction 1 0 1 16
 
       it "0x1p-1" $ do
-        p (fraction <* M.eof) "spec" "0x1p-1" `shouldReturn` Fraction 1 0 (-1) 16
+        ps fraction "spec" "0x1p-1" `shouldReturn` Fraction 1 0 (-1) 16
 
       it "0x1.1p1" $ do
-        p (fraction <* M.eof) "spec" "0x1.1p1" `shouldReturn` Fraction 17 1 1 16
+        ps fraction "spec" "0x1.1p1" `shouldReturn` Fraction 17 1 1 16
 
     describe "string" $ do
       it "\"hello\"" $ do
-        p (string <* M.eof) "spec" "\"hello\"" `shouldReturn` "hello"
+        ps string "spec" "\"hello\"" `shouldReturn` "hello"
 
       it "\"\\\"\"" $ do
-        p (string <* M.eof) "spec" "\"\\\"\"" `shouldReturn` "\""
+        ps string "spec" "\"\\\"\"" `shouldReturn` "\""
 
     describe "identifier" $ do
       it "foo" $ do
-        p (identifier <* M.eof) "spec" "foo"
-          `shouldSatisfy`
-            (\case
-              Right i -> copoint i == "foo"
-              Left _  -> False
-            )
+        ps identifier "spec" "foo" `shouldReturn` "foo"
 
     describe "valueBind" $ do
       it "bind-value foo 123" $ do
-        p (valueBind <* M.eof) "spec" "bind-value foo 123"
-          `shouldSatisfy`
-            (\case
-              Right b -> bstripFrom copoint b == ValueBind (ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10)
-              Left _  -> False
+        ps valueBind "spec" ["bind-value", "foo", "123"]
+          `shouldReturn`
+            ( ValueBindU "foo" (Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 123 10)
+                :: ValueBind 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
             )
+
+    describe "foreignValueBind" $ do
+      it "bind-value-foreign foo (list (c-value \"\" (list) \"\")) foo" $
+        ps foreignValueBind "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
+          `shouldReturn`
+            ( ForeignValueBind (Identity "foo") (Identity $ EmbeddedCValue "" (Identity []) "") (Identity $ TypeVariable "foo")
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+            )
+
+    describe "foreignTypeBind" $ do
+      it "bind-type-foreign foo (list (c-type \"\" \"\"))" $
+        ps foreignTypeBind "spec" ["bind-type-foreign", "foo", ["list", ["c-type", "\"\"", "\"\""]]]
+          `shouldReturn`
+            ForeignTypeBind (Identity "foo") (Identity $ EmbeddedCType "" "")
 
     describe "dataDefinition" $ do
       it "define bool (false true)" $ do
-        p (dataDefinition <* M.eof) "spec" "define bool (list false true)"
-          `shouldSatisfy`
-            (\case
-              Right b -> bstripFrom copoint b == DataDefinition "bool" [("false", []), ("true", [])]
-              Left _  -> False
+        ps dataDefinition "spec" ["define", "bool", ["list", "false", "true"]]
+          `shouldReturn`
+            ( DataDefinition "bool" (Identity [Identity ("false", Identity []), Identity ("true", Identity [])])
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
             )
 
-      it "define book (list book (list (title string) (author string)))" $ do
-        p (dataDefinition <* M.eof) "spec" "define book (list (book (list (title string) (author string))))"
-          `shouldSatisfy`
-            (\case
-              Right b -> bstripFrom copoint b == DataDefinition "book" [("book", [("title", TypeVariable "string"), ("author", TypeVariable "string")])]
-              Left _ -> False
+      it "define book (list (book (list (title string) (author string))))" $ do
+        ps dataDefinition "spec" ["define", "book", ["list", ["book", ["list", ["title", "string"], ["author", "string"]]]]]
+          `shouldReturn`
+            ( DataDefinition "book" (Identity [Identity (Identity "book", Identity [Identity (Identity "title", Identity $ TypeVariable "string"), Identity (Identity "author", Identity $ TypeVariable "string")])])
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+            )
+
+    describe "definition" $ do
+      it "bind-type-foreign foo (list (c-type \"\" \"unsigned int\"))" $
+        ps definition "spec" ["bind-type-foreign", "foo", ["list", ["c-type", "\"\"", "\"unsigned int\""]]]
+          `shouldReturn`
+            ForeignTypeBind (Identity "foo") (Identity $ EmbeddedCType "" "unsigned int")
+
+      it "bind-value-foreign foo (list (c-value \"\" (list) \"\")) foo" $
+        ps definition "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
+          `shouldReturn`
+            ( ForeignValueBind (Identity "foo") (Identity $ EmbeddedCValue "" (Identity []) "") (Identity $ TypeVariable "foo")
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
             )
 
     describe "module" $ do
       it "(module math (list) (list (bind-value foo 123)" $ do
-        p (module' <* M.eof) "spec" "(module math (list) (list (bind-value foo 123)))"
-          `shouldSatisfy`
-            (\case
-              Right m -> bstripFrom copoint (copoint m) == Module "math" [] [ValueBind $ ValueBindU "foo" $ UntypedValue $ Literal $ Integer 123 10]
-              Left _ -> False
-            )
+        ps module' "spec" ["module", "math", ["list"], ["list", ["bind-value", "foo", "123"]]]
+          `shouldReturn`
+            Module "math" (Identity []) (Identity [Identity $ ValueBind $ ValueBindU "foo" $ Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 123 10])
 
       it "(module math (list) (list (define bool (false true)))" $ do
-        p (module' <* M.eof) "spec" "(module math (list) (list (define bool (list false true))))"
-          `shouldSatisfy`
-            (\case
-              Right m -> bstripFrom copoint (copoint m) == Module "math" [] [DataDefinition "bool" [("false", []), ("true", [])]]
-              Left _ -> False
-            )
+        ps module' "spec" ["module", "math", ["list"], ["list", ["define", "bool", ["list", "false", "true"]]]]
+          `shouldReturn` Module (Identity "math") (Identity []) (Identity [Identity $ DataDefinition (Identity "bool") (Identity [Identity (Identity "false", Identity []), Identity (Identity "true", Identity [])])])
 
-p :: MonadThrow m => Parser (Const2 () Covered Identity) (Const2 () Covered Identity) a -> String -> Text -> m a
-p = parse' [] (const Nothing) (const Nothing)
+pt :: MonadThrow m => String -> Text -> m (Sexp Bare Identity)
+pt label text = copoint . fmap (bstripFrom copoint) <$> parseText label text
+
+ps :: MonadCatch m => (Identity (Sexp Covered Identity) -> ReaderT (Env EmbeddedCType EmbeddedCValue Identity) (Except [Exception]) (Identity a)) -> String -> Sexp Bare Identity -> m a
+ps parser label sexp = runIdentity <$> parseSexp' parser [C.embeddedParser] (traverse $ \(EmbeddedTypeC t) -> Just t) (traverse $ \(EmbeddedValueC v) -> Just v) label (Identity $ bcover sexp)
+
+pc :: MonadFail m => ParsecT Void Text Identity a -> Text -> m a
+pc parser input =
+  case M.runParser (unParsecT $ parser <* P.eof) "spec" input of
+    Right s -> pure s
+    Left e  -> fail $ M.errorBundlePretty e
 
 type Const2 :: K.Type -> k -> l -> m -> n -> K.Type
 newtype Const2 a b c d e =
@@ -133,3 +195,5 @@ instance FunctorB (Const2 a b c Covered) where
 instance BareB (Const2 a b c) where
   bstrip (Const2 a) = Const2 a
   bcover (Const2 a) = Const2 a
+
+newtype Unit2 a b = Unit2 () deriving (Show, Read, Eq, Ord)

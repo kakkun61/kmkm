@@ -1,321 +1,324 @@
-{-# LANGUAGE CPP                      #-}
 {-# LANGUAGE DataKinds                #-}
 {-# LANGUAGE DeriveGeneric            #-}
 {-# LANGUAGE FlexibleContexts         #-}
+{-# LANGUAGE FlexibleInstances        #-}
+{-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE MultiParamTypeClasses    #-}
 {-# LANGUAGE NamedFieldPuns           #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 
 module Language.Kmkm.Internal.Parse.Sexp
   ( parse
-  , parse'
+  , parseText
+  , parseSexp
+  , parseSexp'
   , module'
   , definition
   , dataDefinition
   , valueBind
-  , identifier
-  , value
-  , literal
+  , foreignTypeBind
+  , foreignValueBind
   , integer
   , fraction
   , string
-  , withPosition
+  , identifier
+  , symbol
   , list
-  , list1
-  , Parser
+  , stringSingleDoubleQuotationText
+  , stringTripleDoubleQuotationText
+  , SexpParser
   , EmbeddedParser (..)
-  , EmbeddedValue
-  , EmbeddedType
+  , Env (..)
   , Exception (..)
+  , MonadAlternativeError
   ) where
 
-import qualified Language.Kmkm.Internal.Exception as X
-import qualified Language.Kmkm.Internal.Syntax    as S
+import           Barbies.Bare                          (Covered)
+import qualified Barbies.Bare                          as B
+import qualified Barbies.Bare.Layered                  as BL
+import           Control.Applicative                   (Alternative (many, some), liftA2, (<|>))
+import           Control.Exception.Safe                (MonadCatch, MonadThrow, throw)
+import qualified Control.Exception.Safe                as E
+import           Control.Monad                         (void)
+import           Control.Monad.Except                  (Except, ExceptT, MonadError (throwError), liftEither, runExcept)
+import           Control.Monad.Reader                  (MonadReader (ask), ReaderT (runReaderT))
+import           Data.Bool                             (bool)
+import qualified Data.Char                             as C
+import           Data.Copointed                        (Copointed (copoint))
+import           Data.Foldable                         (for_)
+import           Data.Functor                          (($>))
+import           Data.Functor.Identity                 (Identity)
+import qualified Data.Kind                             as K
+import qualified Data.List                             as L
+import           Data.List.NonEmpty                    (NonEmpty)
+import qualified Data.List.NonEmpty                    as N
+import           Data.Maybe                            (fromMaybe, mapMaybe)
+import           Data.Text                             (Text)
+import qualified Data.Text                             as T
+import           Data.Traversable                      (for)
+import qualified Data.Typeable                         as Y
+import           Data.Void                             (Void)
+import           GHC.Generics                          (Generic)
+import qualified Language.Kmkm.Internal.Exception      as X
+import           Language.Kmkm.Internal.Parse.Location (withLocation)
+import qualified Language.Kmkm.Internal.Syntax         as S
+import qualified Language.Kmkm.Internal.Syntax.Sexp    as SS
+import qualified Text.Megaparsec                       as M
+import qualified Text.Megaparsec.Char.Lexer            as M
+import           Text.Megaparsec.Parsers               (ParsecT (unParsecT))
+import qualified Text.Parser.Char                      as P
+import qualified Text.Parser.Combinators               as P
+import qualified Text.Parser.Token                     as P
 
-import qualified Barbies.Bare               as B
-import           Control.Applicative        (Alternative (many, (<|>)))
-import qualified Control.Exception          as E
-import           Control.Exception.Safe     (MonadThrow, throw)
-import           Control.Monad              (void)
-import           Control.Monad.Reader       (MonadReader (ask), Reader, runReader)
-import           Data.Bool                  (bool)
-import qualified Data.Char                  as C
-import           Data.Copointed             (Copointed (copoint))
-import           Data.Functor               (($>))
-import qualified Data.Kind                  as K
-import qualified Data.List                  as L
-import           Data.List.NonEmpty         (NonEmpty)
-import qualified Data.List.NonEmpty         as N
-import           Data.Maybe                 (fromMaybe, mapMaybe)
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import qualified Data.Typeable              as Y
-import           Data.Void                  (Void)
-import           GHC.Generics               (Generic)
-import qualified Text.Megaparsec            as M
-import qualified Text.Megaparsec.Char.Lexer as M
-import           Text.Megaparsec.Parsers    (ParsecT (ParsecT))
-import qualified Text.Parser.Char           as P
-import qualified Text.Parser.Combinators    as P
-import qualified Text.Parser.Token          as P
+type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type ValueBind et ev = S.ValueBind 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered S.WithLocation
+type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered
 
-type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered S.WithLocation
+type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered
 
-type Value et ev = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type Value et ev = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type Function et ev = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type Function et ev = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered S.WithLocation
+type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
-type EmbeddedValue = S.EmbeddedValue B.Covered S.WithLocation
+type EmbeddedValue = S.EmbeddedValue B.Covered
 
-type EmbeddedType = S.EmbeddedType B.Covered S.WithLocation
+type EmbeddedType = S.EmbeddedType B.Covered
 
-type Parser et ev = ParsecT Void Text (Reader (Env et ev))
+type Sexp = SS.Sexp Covered
 
-type Env :: (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type
-data Env et ev =
+type SexpParser f m a = f (Sexp f) -> m a
+
+type Env :: (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
+data Env et ev f =
   Env
     { filePath        :: FilePath
-    , embeddedParsers :: [EmbeddedParser et ev]
-    , isEmbeddedType  :: S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation)
-    , isEmbeddedValue :: S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation)
+    , embeddedParsers :: [EmbeddedParser f]
+    , isEmbeddedType  :: f (EmbeddedType f) -> Maybe (f (et B.Covered f))
+    , isEmbeddedValue :: f (EmbeddedValue f) -> Maybe (f (ev B.Covered f))
     }
 
 parse
-  :: MonadThrow m
-  => [EmbeddedParser et ev] -- ^ Embedded parser.
-  -> (S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation)) -- ^ Embedded type filter.
-  -> (S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation)) -- ^ Embedded value filter.
-  -> String -- ^ File name.
+  :: MonadCatch m
+  => [EmbeddedParser S.WithLocation] -- ^ Embedded parser.
+  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et B.Covered S.WithLocation))) -- ^ Embedded type filter.
+  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev B.Covered S.WithLocation))) -- ^ Embedded value filter.
+  -> FilePath
   -> Text -- ^ Input.
-  -> m (S.WithLocation (Module et ev))
-parse eps fv ft = parse' eps fv ft $ module' <* P.eof
+  -> m (S.WithLocation (Module et ev S.WithLocation))
+parse embeddedParsers isEmbeddedType isEmbeddedValue filePath input = do
+  s <- parseText filePath input
+  parseSexp embeddedParsers isEmbeddedType isEmbeddedValue filePath s
 
-parse'
-  :: MonadThrow m
-  => [EmbeddedParser et ev]
-  -> (S.EmbeddedType B.Covered S.WithLocation -> Maybe (et B.Covered S.WithLocation))
-  -> (S.EmbeddedValue B.Covered S.WithLocation -> Maybe (ev B.Covered S.WithLocation))
-  -> Parser et ev a
-  -> String
-  -> Text
-  -> m a
-parse' eps ft fv (ParsecT p) n s =
-  case runReader (M.runParserT p n s) (Env n eps ft fv) of
-    Right a -> pure a
-    Left e  -> throw $ Exception $ M.errorBundlePretty e
+parseText :: MonadThrow m => FilePath -> Text -> m (S.WithLocation (Sexp S.WithLocation))
+parseText filePath input =
+  case M.runParser (unParsecT $ sexp filePath <* P.eof) filePath input of
+    Right s -> return s
+    Left e  -> throw [TextException $ M.errorBundlePretty e]
 
-parse'' :: (MonadFail m, MonadReader (Env et ev) m) => Parser et ev a -> String -> Text -> m a
-parse'' (ParsecT p) n s = do
-  env <- ask
-  case runReader (M.runParserT p n s) env of
-    Right a -> pure a
+parseInParsec :: MonadFail m => FilePath -> ParsecT Void Text Identity a -> Text -> m a
+parseInParsec filePath parser input =
+  case M.runParser (unParsecT $ parser <* P.eof) filePath input of
+    Right s -> return s
     Left e  -> fail $ M.errorBundlePretty e
 
-module' :: Parser et ev (S.WithLocation (Module et ev))
-module' =
-  M.label "module" $
-    withPosition $
-      P.parens $ do
-        void $ P.textSymbol "module"
-        S.Module <$> moduleName <*> list moduleName <*> list definition
+parseSexp
+  :: MonadCatch m
+  => [EmbeddedParser S.WithLocation] -- ^ Embedded parser.
+  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et B.Covered S.WithLocation))) -- ^ Embedded type filter.
+  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev B.Covered S.WithLocation))) -- ^ Embedded value filter.
+  -> FilePath
+  -> S.WithLocation (Sexp S.WithLocation)
+  -> m (S.WithLocation (Module et ev S.WithLocation))
+parseSexp embeddedParsers isEmbeddedType isEmbeddedValue filePath s =
+  case runExcept $ flip runReaderT Env { filePath, embeddedParsers, isEmbeddedType, isEmbeddedValue } $ module' s of
+    Right a -> pure a
+    Left e  -> throw e
 
-list :: Parser et ev a -> Parser et ev (S.WithLocation [a])
-list p =
-  M.label "list" $
-    withPosition $
-      P.parens $ do
-        void $ P.textSymbol "list"
-        P.many p
+parseSexp'
+  :: MonadCatch m
+  => (f (Sexp f) -> ReaderT (Env et ev f) (Except [Exception]) a)
+  -> [EmbeddedParser f]
+  -> (f (EmbeddedType f) -> Maybe (f (et B.Covered f)))
+  -> (f (EmbeddedValue f) -> Maybe (f (ev B.Covered f)))
+  -> FilePath
+  -> f (Sexp f)
+  -> m a
+parseSexp' p embeddedParsers isEmbeddedType isEmbeddedValue filePath s =
+  case runExcept $ flip runReaderT Env { filePath, embeddedParsers, isEmbeddedType, isEmbeddedValue } $ p s of
+    Right a -> pure a
+    Left e  -> throw e
 
-list1 :: Parser et ev a -> Parser et ev (S.WithLocation (NonEmpty a))
-list1 p =
-  M.label "list1" $
-    withPosition $
-      P.parens $ do
-        void $ P.textSymbol "list"
-        fromMaybe X.unreachable . N.nonEmpty <$> P.some p
-
-definition :: Parser et ev (S.WithLocation (Definition et ev))
-definition =
-  M.label "definition" $
-    withPosition $
-      P.parens $
-        P.choice
-          [ dataDefinition
-          , foreignValueBind
-          , valueBind
-          , foreignTypeBind
-          ]
-
-dataDefinition :: Parser et ev (Definition et ev)
-dataDefinition =
-  M.label "dataDefinition" $ do
-    void $ P.textSymbol "define"
-    S.DataDefinition <$> identifier <*> list valueConstructor
-
-valueConstructor :: Parser et ev (S.WithLocation (S.WithLocation S.Identifier, S.WithLocation [S.WithLocation (S.WithLocation S.Identifier, S.WithLocation Type)]))
-valueConstructor =
-  M.label "valueConstructor" $
-    withPosition $
+sexp :: FilePath -> ParsecT Void Text Identity (S.WithLocation (Sexp S.WithLocation))
+sexp filePath = do
+  P.token $
+    withLocation filePath $
       P.choice
-        [ (,) <$> identifier <*> withPosition (pure [])
-        , P.parens $ (,) <$> identifier <*> list field
+        [ SS.List <$> P.parens (many $ sexp filePath)
+        , SS.Atom <$> atom
+        ]
+  where
+    atom :: ParsecT Void Text Identity Text
+    atom =
+      P.choice
+        [ ("\"\"\"" <>) . (<> "\"\"\"") <$> stringTripleDoubleQuotationText
+        , ("\"" <>) . (<> "\"") <$> stringSingleDoubleQuotationText
+        , T.pack <$> some (P.satisfy $ not . (C.isSpace <||> (== '(') <||> (== ')')))
+        ]
+    (<||>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+    (<||>) = liftA2 (||)
+
+module' :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Module et ev f))
+module' s =
+  for s $ \case
+    SS.List [sm, sn, sis, sds] -> do
+      symbol "module" "module'" sm
+      S.Module <$> moduleName sn <*> list moduleName sis <*> list definition sds
+    _ -> throwError [SexpException "tree expected" "module'" $ S.location s]
+
+moduleName :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.ModuleName)
+moduleName s = fmap S.ModuleName <$> atom "moduleName" dotSeparatedIdentifier s
+
+definition :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
+definition s =
+  P.choice
+    [ dataDefinition s
+    , foreignValueBind s
+    , fmap S.ValueBind <$> valueBind s
+    , foreignTypeBind s
+    ]
+
+foreignValueBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
+foreignValueBind s =
+  for s $ \case
+    SS.List [sb, si, sevs, st] -> do
+      symbol "bind-value-foreign" "foreignValueBind" sb
+      i <- identifier si
+      Env { embeddedParsers, isEmbeddedValue } <- ask
+      let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
+      evs <- list (runEmbeddedParsers evps) sevs
+      t <- typ st
+      case mapMaybe isEmbeddedValue $ copoint evs of -- ëIï ÇÕÉpÉCÉvÉâÉCÉìÇÃå„ÇÃçHíˆÇ≈çsÇ§
+        [ev] -> pure $ S.ForeignValueBind i ev t
+        _ -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ S.location s]
+    _ -> throwError [SexpException "unexpected format" "foreignValueBind" $ S.location s]
+
+foreignTypeBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
+foreignTypeBind s =
+  for s $ \case
+    SS.List [sb, si, sets] -> do
+      symbol "bind-type-foreign" "foreignTypeBind" sb
+      i <- identifier si
+      Env { embeddedParsers, isEmbeddedType } <- ask
+      let etps = (\EmbeddedParser { embeddedTypeParser } -> embeddedTypeParser) <$> embeddedParsers
+      ets <- list (runEmbeddedParsers etps) sets
+      case mapMaybe isEmbeddedType $ copoint ets of
+        [et] -> pure $ S.ForeignTypeBind i et
+        _    -> throwError [SexpException "no or more than one embedded type parsers" "foreignTypeBind" $ S.location s]
+    _ -> throwError [SexpException "unexpected format" "foreignTypeBind" $ S.location s]
+
+runEmbeddedParsers :: (MonadAlternativeError [Exception] m, S.HasLocation f) => [f a -> Either [Exception] c] -> f a -> m c
+runEmbeddedParsers [] s   = throwError [SexpException "no embedded-parser" "runEmbeddedParsers" $ S.location s]
+runEmbeddedParsers evps s = P.choice $ liftEither . ($ s) <$> evps
+
+dataDefinition :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
+dataDefinition s =
+  for s $ \case
+    SS.List [sd, si, sc] -> do
+      symbol "define" "dataDefinition" sd
+      S.DataDefinition <$> identifier si <*> list valueConstructor sc
+    _ -> throwError [SexpException "atom not expected" "dataDefinition" $ S.location s]
+
+valueConstructor :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f [f (f S.Identifier, f (Type f))]))
+valueConstructor s =
+  for s $ \case
+    SS.Atom _ -> do
+        i <- identifier s
+        pure (i, [] <$ s)
+    SS.List [si, sfs] -> do
+        i <- identifier si
+        fs <- list field sfs
+        pure (i, fs)
+    _ -> throwError [SexpException "unexpected format" "valueConstructor" $ S.location s]
+
+field :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f (Type f)))
+field s =
+  for s $ \case
+    SS.List [si, st] -> (,) <$> identifier si <*> typ st
+    _                -> throwError [SexpException "unexpected format" "field" $ S.location s]
+
+typ :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Type f))
+typ s =
+  for s $ \case
+    SS.Atom _ -> S.TypeVariable <$> eitherIdentifier s
+    l@(SS.List _) ->
+      P.choice
+        [ S.FunctionType <$> functionType s
+        , case l of
+            SS.List [sk, st1, st2] -> do
+              symbol "apply" "typeApplication" sk
+              S.TypeApplication <$> typ st1 <*> typ st2
+            _ -> throwError [SexpException "unexpected format" "typeApplication" $ S.location s]
+        , S.ProcedureType <$> procedureType s
         ]
 
-field :: Parser et ev (S.WithLocation (S.WithLocation S.Identifier, S.WithLocation Type))
-field = M.label "field" $ withPosition $ P.parens $ (,) <$> identifier <*> typ
+functionType :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (FunctionType f))
+functionType s =
+  for s $ \case
+    SS.List [si, st1, st2] -> do
+      symbol "function" "functionType" si
+      S.FunctionTypeC <$> typ st1 <*> typ st2
+    _ -> throwError [SexpException "unexpected format" "functionType" $ S.location s]
 
-valueBind :: Parser et ev (Definition et ev)
-valueBind =
-  M.label "valueBind" $ do
-    void $ P.textSymbol "bind-value"
-    S.ValueBind <$> (S.ValueBindU <$> identifier <*> value)
+procedureType :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Type f))
+procedureType s =
+  case copoint s of
+    SS.List [sk, st] -> do
+      symbol "procedure" "procedureType" sk
+      typ st
+    _ -> throwError [SexpException "unexpected format" "procedureType" $ S.location s]
 
-foreignValueBind :: Parser et ev (Definition et ev)
-foreignValueBind =
-  M.label "foreignValueBind" $ do
-    void $ P.textSymbol "bind-value-foreign"
-    Env { embeddedParsers, isEmbeddedValue } <- ask
-    let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
-    i <- identifier
-    evs <- list $ P.parens $ P.choice evps
-    t <- typ
-    case mapMaybe (traverse isEmbeddedValue) $ copoint evs of
-      [ev] -> pure $ S.ForeignValueBind i ev t
-      _    -> fail "no or more than one embedded value parsers"
+valueBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ValueBind et ev f))
+valueBind s =
+  for s $ \case
+    SS.List [s1, s2, s3] ->
+      case copoint s1 of
+        SS.Atom "bind-value" -> S.ValueBindU <$> identifier s2 <*> value s3
+        SS.Atom n -> throwError [SexpException ("'valueBind' expected, but got " <> T.unpack n) "valueBind" $ S.location s1]
+        _ -> throwError [SexpException "atom expected" "valueBind" $ S.location s1]
+    s' -> throwError [SexpException ("3-element list expected, but got '" ++ show (BL.bstripFrom copoint s') ++ "'") "valueBind" $ S.location s]
 
-foreignTypeBind :: Parser et ev (Definition et ev)
-foreignTypeBind =
-  M.label "foreignTypeBind" $ do
-    void $ P.textSymbol "bind-type-foreign"
-    Env { embeddedParsers, isEmbeddedType } <- ask
-    let etps = (\EmbeddedParser { embeddedTypeParser } -> embeddedTypeParser) <$> embeddedParsers
-    i <- identifier
-    ets <- list $ P.parens $ P.choice etps
-    case mapMaybe (traverse isEmbeddedType) $ copoint ets of
-      [et] -> pure $ S.ForeignTypeBind i et
-      _    -> fail "no or more than one embedded type parsers"
+literal :: (MonadAlternativeError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.Literal)
+literal s =
+  P.choice
+    [ fraction s
+    , integer s
+    , fmap S.String <$> string s
+    ]
 
-identifier :: Parser et ev (S.WithLocation S.Identifier)
-identifier =
-  M.label "identifier" $
-    P.token $
-      withPosition $ do
-        a <- asciiAlphabet
-        b <- many $ P.choice [asciiAlphabet, P.digit]
-        pure $ S.UserIdentifier $ T.pack $ a : b
-
-eitherIdentifier :: Parser et ev (S.WithLocation S.EitherIdentifier)
-eitherIdentifier =
-  M.label "eitherIdentifier" $
-    P.token $
-      withPosition $ do
-        is <- dotSeparatedIdentifier
-        let n = S.UserIdentifier $ N.last is
-        case N.nonEmpty (N.init is) of
-          Nothing -> pure $ S.UnqualifiedIdentifier n
-          Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
-
-moduleName :: Parser et ev (S.WithLocation S.ModuleName)
-moduleName = M.label "moduleName" $ fmap S.ModuleName <$> P.token (withPosition dotSeparatedIdentifier)
-
-dotSeparatedIdentifier :: Parser et ev (N.NonEmpty Text)
-dotSeparatedIdentifier =
-  M.label "dotSeparatedIdentifier" $ P.sepByNonEmpty identifierSegment (P.char '.')
-
-identifierSegment :: Parser et ev Text
-identifierSegment = do
-  a <- asciiAlphabet
-  b <- many $ P.choice [asciiAlphabet, P.digit]
-  pure $ T.pack $ a : b
-
-value :: Parser et ev (S.WithLocation (Value et ev))
-value =
-  M.label "value'" $
-    withPosition $
-      fmap S.UntypedValue $
-        withPosition $
-          P.choice
-            [ S.Variable <$> eitherIdentifier
-            , S.Literal <$> literal
-            , P.parens $
-                P.choice
-                  [ S.Function <$> function
-                  , S.Application <$> application
-                  , S.Procedure <$> procedure
-                  , S.TypeAnnotation <$> typeAnnotation
-                  , S.Let <$> (P.textSymbol "let" *> list definition) <*> value
-                  , uncurry S.ForAll <$> forAll
-                  ]
-            ]
-
-literal :: Parser et ev S.Literal
-literal =
-  M.label "literal" $
+integer :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.Literal)
+integer =
+  atom "integer" $
     P.choice
-      [ P.try fraction
-      , integer
-      , S.String <$> string
+      [ P.text "0b" >> flip S.Integer 2 <$> M.binary
+      , P.text "0o" >> flip S.Integer 8 <$> M.octal
+      , P.text "0x" >> flip S.Integer 16 <$> M.hexadecimal
+      , flip S.Integer 10 <$> M.decimal
       ]
 
-application :: Parser et ev (Application et ev)
-application =
-  M.label "application" $ do
-    void $ P.textSymbol "apply"
-    S.ApplicationC <$> value <*> value
-
-procedure :: Parser et ev (S.WithLocation (NonEmpty (S.WithLocation (ProcedureStep et ev))))
-procedure =
-  M.label "procedure" $ do
-    void $ P.textSymbol "procedure"
-    list1 step
-  where
-    step :: Parser et ev (S.WithLocation (ProcedureStep et ev))
-    step =
-      M.label "procedure.p" $
-        withPosition $
-          P.parens $
-            P.choice
-              [ do
-                  void $ P.textSymbol "bind"
-                  S.BindProcedureStep <$> identifier <*> value
-              , do
-                  void $ P.textSymbol "call"
-                  S.CallProcedureStep <$> value
-              ]
-
-typeAnnotation :: Parser et ev (TypeAnnotation et ev)
-typeAnnotation =
-  M.label "typeAnnotation" $ do
-    void $ P.textSymbol "type"
-    S.TypeAnnotation' <$> value <*> typ
-
-integer :: Parser et ev S.Literal
-integer =
-  M.label "integer" $ do
-    P.token $
-      P.choice
-        [ P.text "0b" >> flip S.Integer 2 <$> M.binary
-        , P.text "0o" >> flip S.Integer 8 <$> M.octal
-        , P.text "0x" >> flip S.Integer 16 <$> M.hexadecimal
-        , flip S.Integer 10 <$> M.decimal
-        ]
-
-fraction :: Parser et ev S.Literal
+fraction :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.Literal)
 fraction =
-  M.label "fraction" $ do P.token $ hexadecimal <|> decimal
+  atom "fraction" $ do hexadecimal <|> decimal
   where
     hexadecimal = do
       void $ P.text "0x"
@@ -324,11 +327,11 @@ fraction =
       let
         fractionDigits :: Word
         fractionDigits = fromIntegral $ T.length fstr
-      significand <- parse'' M.hexadecimal "fraction.hexadecimal.significand" $ istr <> fstr
+      significand <- parseInParsec "fraction.hexadecimal.significand" M.hexadecimal $ istr <> fstr
       void $ P.text "p"
       epos <- sign
       estr <- digits 16
-      exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.hexadecimal.exponent" estr
+      exponent <- if T.null estr then pure 0 else parseInParsec "fraction.hexadecimal.exponent" M.decimal estr
       pure $ S.Fraction significand fractionDigits (sign' epos exponent) 16
     decimal = do
       istr <- digits 10
@@ -349,133 +352,235 @@ fraction =
       let
         fractionDigits :: Word
         fractionDigits = fromIntegral $ T.length fstr
-      significand <- parse'' M.decimal "fraction.decimal.significand" $ istr <> fstr
-      exponent <- if T.null estr then pure 0 else parse'' M.decimal "fraction.decimal.exponent" estr
+      significand <- parseInParsec "fraction.decimal.significand" M.decimal $ istr <> fstr
+      exponent <- if T.null estr then pure 0 else parseInParsec "fraction.decimal.exponent" M.decimal estr
       pure $ S.Fraction significand fractionDigits (sign' epos exponent) 10
     sign' :: Num n => Bool -> n -> n
     sign' = bool negate id
 
-digits :: Word -> Parser et ev Text
-digits b = do
-  let bs = L.genericTake b ['0' .. '9'] ++ ((++) <$> id <*> (C.toUpper <$>) $ L.genericTake (b - 10) ['a' ..])
-  T.pack <$> many (P.choice $ P.char <$> bs)
+    digits :: Word -> ParsecT Void Text Identity Text
+    digits b = do
+      let bs = L.genericTake b ['0' .. '9'] ++ ((++) <$> id <*> (C.toUpper <$>) $ L.genericTake (b - 10) ['a' ..])
+      T.pack <$> many (P.choice $ P.char <$> bs)
 
-sign :: Parser et ev Bool
-sign =  P.option True $ P.text "-" $> False <|> P.text "+" $> True
+    sign :: ParsecT Void Text Identity Bool
+    sign = P.option True $ P.text "-" $> False <|> P.text "+" $> True
 
-string :: Parser et ev Text
-string =
-  M.label "string" $ do
+string :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f Text)
+string = atom "string" $ stringTripleDoubleQuotationText <|> stringSingleDoubleQuotationText
+
+stringSingleDoubleQuotationText :: ParsecT Void Text Identity Text
+stringSingleDoubleQuotationText = do
+  M.label "stringSingleDoubleQuotationText" $ do
     P.token $
-      P.choice
-        [ do
-            void $ P.text "\"\"\""
-            let
-              go n = do
-                c <- P.anyChar
-                case c of
-                  '"' ->
-                    if n == 2
-                      then pure T.empty
-                      else go (n + 1)
-                  _ ->
-                    if n == 0
-                      then (T.singleton c <>) <$> go n
-                      else ((T.replicate n "\"" <> T.singleton c) <>) <$> go 0
-            go 0
-        , doubleQuote $
-            fmap mconcat $
-              many $
-                P.choice
-                  [ P.text "\\\"" $> "\""
-                  , T.singleton <$> P.notChar '"'
-                  ]
-        ]
+        doubleQuote $
+          fmap mconcat $
+            many $
+              P.choice
+                [ P.text "\\\"" $> "\""
+                , T.singleton <$> P.notChar '"'
+                ]
 
-function :: Parser et ev (Function et ev)
-function =
-  M.label "function" $ do
-    void $ P.textSymbol "function"
-    S.FunctionC <$> identifier <*> typ <*> value
+stringTripleDoubleQuotationText :: ParsecT Void Text Identity Text
+stringTripleDoubleQuotationText = do
+  M.label "stringTripleDoubleQuotationText" $ do
+    P.token $
+        do
+          void $ P.text "\"\"\""
+          let
+            -- | rightest match of Åg"""Åh
+            go
+              :: Int -- ^ the length of sequence of Åg"Åh
+              -> ParsecT Void Text Identity Text
+            go n = do
+              c <- P.anyChar
+              case c of
+                '"' ->
+                  if n == 2
+                    then do
+                      P.choice
+                        [ do
+                            P.notFollowedBy $ P.char '"'
+                            pure T.empty
+                        , (T.singleton c <>) <$> go n
+                        ]
+                    else go (n + 1)
+                _ ->
+                  if n == 0
+                    then (T.singleton c <>) <$> go n
+                    else ((T.replicate n "\"" <> T.singleton c) <>) <$> go 0
+          go 0
 
-typ :: Parser et ev (S.WithLocation Type)
-typ =
-  M.label "type" $
-    withPosition $
-      P.choice
-        [ S.TypeVariable <$> eitherIdentifier
-        , P.parens $
-            P.choice
-              [ S.FunctionType <$> functionType
-              , uncurry S.TypeApplication <$> typeApplication
-              , S.ProcedureType <$> procedureType
-              ]
-        ]
-
-functionType :: Parser et ev FunctionType
-functionType =
-  M.label "functionType" $ do
-    void $ P.textSymbol "function"
-    S.FunctionTypeC <$> typ <*> typ
-
-typeApplication :: Parser et ev (S.WithLocation Type, S.WithLocation Type)
-typeApplication =
-  M.label "typeApplication" $ do
-    void $ P.textSymbol "apply"
-    (,) <$> typ <*> typ
-
-procedureType :: Parser et ev (S.WithLocation Type)
-procedureType =
-  M.label "procedureType" $ do
-    void $ P.textSymbol "procedure"
-    typ
-
-forAll :: Parser et ev (S.WithLocation S.Identifier, S.WithLocation (Value et ev))
-forAll =
-  M.label "forAll" $ do
-    void $ P.textSymbol "for-all"
-    (,) <$> identifier <*> value
-
-doubleQuote :: Parser et ev a -> Parser et ev a
+doubleQuote :: ParsecT Void Text Identity a -> ParsecT Void Text Identity a
 doubleQuote = M.label "doubleQuote" . (`P.surroundedBy` P.text "\"")
 
-asciiAlphabet :: Parser et ev Char
+asciiAlphabet :: ParsecT Void Text Identity Char
 asciiAlphabet = P.choice [asciiUpper, asciiLower]
 
-asciiUpper :: Parser et ev Char
+asciiUpper :: ParsecT Void Text Identity Char
 asciiUpper = P.choice $ P.char <$> ['A' .. 'Z']
 
-asciiLower :: Parser et ev Char
+asciiLower :: ParsecT Void Text Identity Char
 asciiLower = P.choice $ P.char <$> ['a' .. 'z']
 
-withPosition :: Parser et ev a -> Parser et ev (S.WithLocation a)
-withPosition p = do
-  Env { filePath } <- ask
-  M.SourcePos _ beginLine beginColumn <- M.getSourcePos
-  a <- p
-  M.SourcePos _ endLine endColumn <- M.getSourcePos
-  pure $
-    S.WithLocation
-      ( S.Location
-          filePath
-          (S.Position (fromIntegral $ M.unPos beginLine) (fromIntegral $ M.unPos beginColumn))
-          (S.Position (fromIntegral $ M.unPos endLine) (fromIntegral $ M.unPos endColumn))
-      )
-      a
+eitherIdentifier :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.EitherIdentifier)
+eitherIdentifier =
+  atom "eitherIdentifier" $ do
+    is <- dotSeparatedIdentifier
+    let n = S.UserIdentifier $ N.last is
+    case N.nonEmpty (N.init is) of
+      Nothing -> pure $ S.UnqualifiedIdentifier n
+      Just m  -> pure $ S.QualifiedIdentifier $ S.GlobalIdentifier (S.ModuleName m) n
 
-data EmbeddedParser et ev =
+dotSeparatedIdentifier :: ParsecT Void Text Identity (N.NonEmpty Text)
+dotSeparatedIdentifier =
+  M.label "dotSeparatedIdentifier" $ P.sepByNonEmpty identifierSegment (P.char '.')
+
+identifierSegment :: ParsecT Void Text Identity Text
+identifierSegment = do
+  a <- asciiAlphabet
+  b <- many $ P.choice [asciiAlphabet, P.digit]
+  pure $ T.pack $ a : b
+
+identifier :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.Identifier)
+identifier =
+  atom "identifier" $ do
+    a <- asciiAlphabet
+    b <- many $ P.choice [asciiAlphabet, P.digit]
+    pure $ S.UserIdentifier $ T.pack $ a : b
+
+value :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Value et ev f))
+value s =
+  (<$ s) . S.UntypedValue <$>
+    P.choice
+      [ (<$ s) . S.Variable <$> eitherIdentifier s
+      , (<$ s) . S.Literal <$> literal s
+      , (<$ s) . S.Function <$> function s
+      , (<$ s) . S.Application <$> application s
+      , (<$ s) . S.Procedure <$> procedure s
+      , (<$ s) . S.TypeAnnotation <$> typeAnnotation s
+      , fmap (uncurry S.Let) <$> let' s
+      , fmap (uncurry S.ForAll) <$> forAll s
+      ]
+
+procedure :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (NonEmpty (f (ProcedureStep et ev f))))
+procedure s =
+  case copoint s of
+    SS.List [sk, sss] -> do
+      symbol "procedure" "procedure" sk
+      list1 step sss
+    _ -> throwError [SexpException "unexpected format" "procedure" $ S.location s]
+  where
+    step :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ProcedureStep et ev f))
+    step s =
+      for s $ \case
+        SS.List [sk, si, sv] -> do
+          symbol "bind" "procedure.step" sk
+          S.BindProcedureStep <$> identifier si <*> value sv
+        SS.List [sk, sv] -> do
+          symbol "call" "procedure.step" sk
+          S.CallProcedureStep <$> value sv
+        _ -> throwError [SexpException "unexpected format" "procedure.step" $ S.location s]
+
+let' :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f [f (Definition et ev f)], f (Value et ev f)))
+let' s =
+  for s $ \case
+    SS.List [sk, sds, sv] -> do
+      symbol "let" "let'" sk
+      (,) <$> list definition sds <*> value sv
+    _ -> throwError [SexpException "unexpected format" "let'" $ S.location s]
+
+forAll :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f (Value et ev f)))
+forAll s =
+  for s $ \case
+    SS.List [sk, si, sv] -> do
+      symbol "for-all" "forAll" sk
+      (,) <$> identifier si <*> value sv
+    _ -> throwError [SexpException "unexpected format" "forAll" $ S.location s]
+
+typeAnnotation :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (TypeAnnotation et ev f))
+typeAnnotation s =
+  for s $ \case
+    SS.List [sk, sv, st] -> do
+      symbol "type" "typeAnnotation" sk
+      S.TypeAnnotation' <$> value sv <*> typ st
+    _ -> throwError [SexpException "unexpected format" "typeAnnotation" $ S.location s]
+
+application :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Application et ev f))
+application s =
+  for s $ \case
+    SS.List [sk, sv1, sv2] -> do
+      symbol "apply" "application" sk
+      S.ApplicationC <$> value sv1 <*> value sv2
+    _ -> throwError [SexpException "unexpected format" "application" $ S.location s]
+
+function :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Function et ev f))
+function s =
+  for s $ \case
+    SS.List [sk, si, st, sv] -> do
+      symbol "function" "function" sk
+      S.FunctionC <$> identifier si <*> typ st <*> value sv
+    _ -> throwError [SexpException "unexpected format" "function" $ S.location s]
+
+list :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f a) -> SexpParser f m (f [f a])
+list p s =
+  for s $ \case
+    SS.List (l : ss) -> do
+      symbol "list" "list" l
+      traverse p ss
+    _ -> throwError [SexpException "\"list\" is expected" "list" $ S.location s]
+
+list1 :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f a) -> SexpParser f m (f (NonEmpty (f a)))
+list1 p s =
+  for s $ \case
+    SS.List (l : ss) -> do
+      symbol "list" "list1" l
+      fromMaybe X.unreachable . N.nonEmpty <$> traverse p ss
+    _ -> throwError [SexpException "\"list\" is expected" "list" $ S.location s]
+
+atom :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => String -> ParsecT Void Text Identity a -> SexpParser f m (f a)
+atom label parser s =
+  for s $ \case
+    SS.Atom t ->
+      case M.runParser (unParsecT $ parser <* P.eof) label t of
+        Right i -> pure i
+        Left e  -> throwError [SexpException (M.errorBundlePretty e) label $ S.location s]
+    _ -> throwError [SexpException (label ++ " must be an atom") label $ S.location s]
+
+symbol :: (MonadError [Exception] m, Foldable f, S.HasLocation f) => Text -> String -> SexpParser f m ()
+symbol sym tag s =
+  for_ s $ \case
+    SS.Atom sym'
+      | sym == sym' -> pure ()
+      | otherwise -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected, but got \"" ++ T.unpack sym' ++ "\"") tag $ S.location s]
+    _ -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected") tag $ S.location s]
+
+data EmbeddedParser f =
   EmbeddedParser
-    { embeddedValueParser :: Parser et ev (S.WithLocation EmbeddedValue)
-    , embeddedTypeParser  :: Parser et ev (S.WithLocation EmbeddedType)
+    { embeddedValueParser :: f (Sexp f) -> Either [Exception] (f (EmbeddedValue f))
+    , embeddedTypeParser  :: f (Sexp f) -> Either [Exception] (f (EmbeddedType f))
     }
   deriving Generic
 
-newtype Exception
-  = Exception String
-  deriving (Show, Read, Eq, Ord, Generic)
+data Exception
+  = TextException String
+  | SexpException String String (Maybe S.Location)
+  deriving (Show, Eq, Generic)
 
-instance E.Exception Exception where
+instance E.Exception [Exception] where
   toException = E.toException . X.Exception
   fromException e = do
     X.Exception e <- E.fromException e
     Y.cast e
+
+-- | Laws are
+--
+-- @
+--   throwError e \<|\> m Åﬂ m
+--   m \<|\> throwError e Åﬂ m
+-- @
+class (Alternative m, MonadError e m) => MonadAlternativeError e m
+
+instance (Monad m, Monoid e) => MonadAlternativeError e (ExceptT e m)
+
+instance MonadAlternativeError e m => MonadAlternativeError e (ReaderT r m)

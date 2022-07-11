@@ -65,13 +65,14 @@ term tids v =
   in
     case copoint v1 of
       S.Variable i
-        | copoint i `S.member` tids -> S.TypedValue (S.Application (S.ApplicationN (S.TypedValue (S.Variable i <$ v1) (S.FunctionType (S.FunctionTypeN ([] <$ v1) t) <$ t) <$ v1) ([] <$ v1)) <$ v1) t <$ v
-        | otherwise                          -> v
-      S.Application (S.ApplicationN v vs) ->
-        S.TypedValue (S.Application (S.ApplicationN v' $ vs' <$ vs) <$ v1) t <$ v
-        where
-          v' = term tids v
-          vs' = term tids <$> copoint vs
+        | copoint i `S.member` tids -> S.TypedValue (S.Application (S.ApplicationN (S.TypedValue (S.Variable i <$ v1) (S.FunctionType (S.FunctionTypeN ([] <$ v1) t <$ t) <$ t) <$ v1) ([] <$ v1) <$ v1) <$ v1) t <$ v
+        | otherwise                 -> v
+      S.Application a
+        | S.ApplicationN v vs <- copoint a ->
+            let
+              v' = term tids v
+              vs' = term tids <$> copoint vs
+            in S.TypedValue (S.Application (S.ApplicationN v' (vs' <$ vs) <$ a) <$ v1) t <$ v
       S.Procedure ps ->
         let
           p :| ps' = copoint ps

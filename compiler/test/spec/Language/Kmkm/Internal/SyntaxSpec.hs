@@ -28,14 +28,14 @@ spec = do
       it "Literal" $ do
         let
           actual :: Value' 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped E E Bare Identity
-          actual = bstrip $ Literal $ Integer 1 10
+          actual = bstrip $ Literal $ Identity $ Integer 1 10
           expected = Literal $ Integer 1 10
         actual `shouldBe` expected
 
       it "Application" $ do
         let
           actual :: Value' 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped E E Bare Identity
-          actual = bstrip $ Application $ ApplicationC (Identity $ UntypedValue $ Identity $ Variable $ Identity "foo") (Identity $ UntypedValue $ Identity $ Variable $ Identity "foo")
+          actual = bstrip $ Application $ Identity $ ApplicationC (Identity $ UntypedValue $ Identity $ Variable $ Identity "foo") (Identity $ UntypedValue $ Identity $ Variable $ Identity "foo")
           expected = Application $ ApplicationC (UntypedValue $ Variable "foo") (UntypedValue $ Variable "foo")
         actual `shouldBe` expected
 

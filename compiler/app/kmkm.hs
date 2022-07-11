@@ -4,12 +4,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
-                      Location (Location), Position (Position), compile)
+                      Location (Location), ParseExceptionMessage (ParseSexpMessage, ParseTextMessage),
+                      Position (Position), compile)
 
 import           Control.Exception.Safe (catch)
 import           Control.Monad          (replicateM, when)
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Char              (toLower)
+import           Data.Foldable          (for_)
 import qualified Data.List              as L
 import qualified Data.List.NonEmpty     as N
 import           Data.Monoid            (Last (Last, getLast))
@@ -27,14 +29,13 @@ import           System.Exit            (exitFailure)
 import           System.FilePath        ((</>))
 import qualified System.FilePath        as F
 import qualified System.FilePath.Glob   as G
-import           System.IO              (Handle, IOMode (ReadMode), hPutStr, hPutStrLn, openFile, stderr)
+import           System.IO              (Handle, IOMode (ReadMode), hPutStrLn, openFile, stderr)
 
 #ifdef CYGPATH
 import System.Process (callProcess, readProcess)
 #else
 import System.Process (callProcess)
 #endif
-
 
 type Verbosity = Int
 
@@ -78,7 +79,6 @@ compile' output libraries dryRun verbosity src =
     do
       let
         findFile path =
-          do
             go $ "." : libraries
           where
             go (dir : dirs) = do
@@ -97,9 +97,17 @@ compile' output libraries dryRun verbosity src =
       compile findFile T.readFile writeFile writeLog =<< removeFileExtension "s.km" src
     $ \e -> do
           case e of
-            ParseException m -> do
-              hPutStrLn stderr "parsing error:"
-              hPutStr stderr m
+            ParseException ms -> do
+              hPutStrLn stderr "parsing text error:"
+              let count = length ms
+              for_ (zip ms [1 ..]) $ \(m, i) -> do
+                hPutStrLn stderr $ "possible fix #" ++ show (i :: Word) ++ "/" ++ show count ++ ":"
+                case m of
+                  ParseTextMessage m ->
+                    hPutStrLn stderr m
+                  ParseSexpMessage m l -> do
+                    hPutStrLn stderr m
+                    maybe (pure ()) (printLocation stderr) l
             NameResolveUnknownIdentifierException i l -> do
               T.hPutStrLn stderr $ "name-resolving error: unknown identifier error: " <> i
               maybe (pure ()) (printLocation stderr) l
@@ -140,28 +148,28 @@ compile' output libraries dryRun verbosity src =
           exitFailure
 
 removeFileExtension :: MonadFail m => String -> FilePath -> m FilePath
-removeFileExtension ext path = do
+removeFileExtension ext path =
   case L.splitAt (length path - length ext - 1) path of
     (f, e) | e == '.' : ext -> pure f
     _                       -> fail $ "extension is not \"" ++ ext ++ "\""
 
 printLocation :: Handle -> Location -> IO ()
 printLocation outHandle (Location filePath (Position beginLine beginColumn) (Position endLine endColumn)) = do
-    handle <- openFile filePath ReadMode
-    hSkipLines handle $ beginLine - 1
-    ls <- replicateM (endLine' - beginLine' + 1) $ T.hGetLine handle
-    let
-      us = underlines ls
-      nd = maximum $ length . show <$> [beginLine, endLine]
-      gutter = 1 + nd + 1
-    hPutStrLn outHandle filePath
-    T.hPutStrLn outHandle $ T.replicate gutter " " <> "| "
-    alternate
-      do zipWith (\l n -> T.hPutStrLn outHandle $ marginLeft gutter (T.pack (show n) <> " ") <> "| " <> l) ls [beginLine .. endLine]
-      do
-        flip fmap us $ \u -> do
-          T.hPutStr outHandle $ T.replicate gutter " " <> "| "
-          hPutStrLnRed outHandle $ "" <> u
+  handle <- openFile filePath ReadMode
+  hSkipLines handle $ beginLine - 1
+  ls <- replicateM (endLine' - beginLine' + 1) $ T.hGetLine handle
+  let
+    us = underlines ls
+    nd = maximum $ length . show <$> [beginLine, endLine]
+    gutter = 1 + nd + 1
+  hPutStrLn outHandle filePath
+  T.hPutStrLn outHandle $ T.replicate gutter " " <> "| "
+  alternate
+    do zipWith (\l n -> T.hPutStrLn outHandle $ marginLeft gutter (T.pack (show n) <> " ") <> "| " <> l) ls [beginLine .. endLine]
+    do
+      flip fmap us $ \u -> do
+        T.hPutStr outHandle $ T.replicate gutter " " <> "| "
+        hPutStrLnRed outHandle $ "" <> u
   where
     hSkipLines _ 0      = pure ()
     hSkipLines handle n = T.hGetLine handle >> hSkipLines handle (n - 1)
@@ -198,8 +206,7 @@ gcc cc output directory verbosity = do
   callProcess cc (sourceFiles ++ verbosity' ++ ["-o", output])
 
 convertPath :: FilePath -> IO FilePath
-#ifdef CYGPATH
-convertPath path = init <$> readProcess "cygpath" [path] "" -- empty string is something wrong.
-#else
+
+
+
 convertPath = pure
-#endif

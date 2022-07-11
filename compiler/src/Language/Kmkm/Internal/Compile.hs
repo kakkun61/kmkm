@@ -25,6 +25,7 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as G
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Barbies.Bare                         as B (Bare, Covered)
 import qualified Barbies.Bare.Layered                 as B (BareB)
+import           Control.Applicative                  (Alternative)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch, MonadThrow, throw)
 import           Control.Monad                        (when)
@@ -47,7 +48,8 @@ import           System.FilePath                      (isPathSeparator, pathSepa
 import qualified System.FilePath                      as F
 
 compile
-  :: ( MonadCatch m
+  :: ( Alternative m
+     , MonadCatch m
      , Show (et B.Bare Identity)
      , Show (ev B.Bare Identity)
      , B.BareB et
@@ -55,9 +57,9 @@ compile
      , Ord (et B.Covered KS.WithLocation)
      , Ord (ev B.Covered KS.WithLocation)
      )
-  => [KP.EmbeddedParser et ev]
-  -> (KS.EmbeddedType B.Covered KS.WithLocation -> Maybe (et B.Covered KS.WithLocation)) -- ^ Embedded type filter.
-  -> (KS.EmbeddedValue B.Covered KS.WithLocation -> Maybe (ev B.Covered KS.WithLocation)) -- ^ Embedded value filter.
+  => [KP.EmbeddedParser KS.WithLocation]
+  -> (KS.WithLocation (KS.EmbeddedType B.Covered KS.WithLocation) -> Maybe (KS.WithLocation (et B.Covered KS.WithLocation))) -- ^ Embedded type filter.
+  -> (KS.WithLocation (KS.EmbeddedValue B.Covered KS.WithLocation) -> Maybe (KS.WithLocation (ev B.Covered KS.WithLocation))) -- ^ Embedded value filter.
   -> (Set (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev B.Covered KS.WithLocation)) -> Map KS.ModuleName FilePath -> m ()) -- ^ Last step.
   -> (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
@@ -84,10 +86,10 @@ compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFil
       pure (M.union acc1 v1, S.insert v2 acc2)
 
 readRecursively
-  :: MonadThrow m
-  => [KP.EmbeddedParser et ev]
-  -> (KS.EmbeddedType B.Covered KS.WithLocation -> Maybe (et B.Covered KS.WithLocation))
-  -> (KS.EmbeddedValue B.Covered KS.WithLocation -> Maybe (ev B.Covered KS.WithLocation))
+  :: (Alternative m, MonadCatch m)
+  => [KP.EmbeddedParser KS.WithLocation]
+  -> (KS.WithLocation (KS.EmbeddedType B.Covered KS.WithLocation) -> Maybe (KS.WithLocation (et B.Covered KS.WithLocation)))
+  -> (KS.WithLocation (KS.EmbeddedValue B.Covered KS.WithLocation) -> Maybe (KS.WithLocation (ev B.Covered KS.WithLocation)))
   -> (FilePath -> m FilePath)
   -> (FilePath -> m Text)
   -> FilePath
@@ -113,7 +115,7 @@ readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile
       when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.location moduleName
       (g, m, f) <- acc
       let
-        m' = M.insert moduleName' module' m -- TODO ä»Š main ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ã§ã€ã™ã§ã« main ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ãŒã‚ã£ãŸã‚‰ã‚¨ãƒ©ãƒ¼
+        m' = M.insert moduleName' module' m -- TODO ¡ main ƒ‚ƒWƒ…[ƒ‹‚ÅA‚·‚Å‚É main ƒ‚ƒWƒ…[ƒ‹‚ª‚ ‚Á‚½‚çƒGƒ‰[
         f' = M.insert moduleName' (normalisePath path) f
         g' = g `G.overlay` (G.vertex moduleName' `G.connect` G.overlays (G.vertex <$> deps'))
         depSet = S.map (moduleNameToFilePath . copoint) $ S.fromList $ copoint deps

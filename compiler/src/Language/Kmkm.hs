@@ -11,9 +11,11 @@ module Language.Kmkm
     compile
     -- * Exceptions
   , Exception (..)
+  , ParseExceptionMessage (..)
     -- * Locations
   , S.Location (..)
   , S.Position (..)
+    --
   ) where
 
 import qualified Language.Kmkm.Internal.Build.C.IntermediateC as I
@@ -24,6 +26,7 @@ import qualified Language.Kmkm.Internal.Exception             as X
 import qualified Language.Kmkm.Internal.Parse.Sexp            as P
 import qualified Language.Kmkm.Internal.Syntax                as S
 
+import           Control.Applicative    (Alternative)
 import           Control.Exception.Safe (MonadCatch, catch, throw)
 import qualified Control.Exception.Safe as E
 import           Data.List.NonEmpty     (NonEmpty)
@@ -32,7 +35,7 @@ import qualified Data.Set               as H
 import           Data.Text              (Text)
 
 compile
-  :: MonadCatch m
+  :: (Alternative m, MonadCatch m)
   => (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (FilePath -> Text -> m ()) -- ^ File writer.
@@ -46,7 +49,7 @@ compile findFile readFile writeFile writeLog src = do
 
 data Exception
   = -- | An exception on parsing.
-    ParseException String -- ^ message.
+    ParseException [ParseExceptionMessage]
   | -- | An identifier is not found while name resolving.
     NameResolveUnknownIdentifierException
       Text -- ^ identifier.
@@ -90,10 +93,15 @@ data Exception
 
 instance E.Exception Exception
 
+data ParseExceptionMessage
+  = ParseTextMessage String
+  | ParseSexpMessage String (Maybe S.Location)
+  deriving (Show, Read, Eq, Ord)
+
 convertException :: X.Exception -> Exception
 convertException e =
   case (cast e, cast e, cast e, cast e, cast e) of
-    (Just (P.Exception m), Nothing, Nothing, Nothing, Nothing) -> ParseException m
+    (Just es, Nothing, Nothing, Nothing, Nothing) -> ParseException $ convertParseExceptionMessage <$> es
     (Nothing, Just (N.UnknownIdentifierException i r), Nothing, Nothing, Nothing) -> NameResolveUnknownIdentifierException (S.pretty i) r
     (Nothing, Nothing, Just (T.NotFoundException i r), Nothing, Nothing) -> TypeCheckNotFoundException (S.pretty i) r
     (Nothing, Nothing, Just (T.MismatchException e a r), Nothing, Nothing) -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
@@ -108,3 +116,5 @@ convertException e =
   where
     cast :: (E.Exception e1, E.Exception e2) => e1 -> Maybe e2
     cast = E.fromException . E.toException
+    convertParseExceptionMessage (P.TextException m)     = ParseTextMessage m
+    convertParseExceptionMessage (P.SexpException m p r) = ParseSexpMessage (m ++ " at " ++ p) r

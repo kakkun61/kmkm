@@ -12,11 +12,12 @@ module Language.Kmkm.Internal.Build.Uncurry
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Barbies.Bare       as B
-import           Data.Copointed     (Copointed (copoint))
-import           Data.List.NonEmpty (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty as N
-import           Prelude            (Functor (fmap, (<$)), flip, ($), (<$>))
+import qualified Barbies.Bare                     as B
+import           Data.Copointed                   (Copointed (copoint))
+import           Data.List.NonEmpty               (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty               as N
+import qualified Language.Kmkm.Internal.Exception as X
+import           Prelude                          (Functor (fmap, (<$)), flip, otherwise, ($), (<$>))
 
 type Module c et ev f = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
 
@@ -81,51 +82,60 @@ typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t
 value' :: (Functor f, Copointed f, S.HasLocation f) => f (Value' 'S.Curried et ev f) -> f (Value' 'S.Uncurried et ev f)
 value' v =
   flip fmap v $ \case
-    S.Variable i    -> S.Variable i
-    S.Literal l     -> S.Literal $ literal l
-    S.Function f    -> S.Function $ function f v
-    S.Application a -> S.Application $ application a v
-    S.Procedure ps  -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
-    S.Let ds v      -> S.Let (fmap definition <$> ds) $ typedValue v
-    S.ForAll i v    -> S.ForAll i $ typedValue v
+    S.Variable i       -> S.Variable i
+    S.Literal l        -> S.Literal $ literal <$> l
+    S.Function f       -> S.Function $ function f
+    S.Application a    -> S.Application $ application a
+    S.Procedure ps     -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
+    S.Let ds v         -> S.Let (fmap definition <$> ds) $ typedValue v
+    S.ForAll i v       -> S.ForAll i $ typedValue v
+    S.TypeAnnotation _ -> X.unreachable
 
 literal :: S.Literal -> S.Literal
 literal (S.Integer v b)      = S.Integer v b
 literal (S.Fraction s f e b) = S.Fraction s f e b
 literal (S.String t)         = S.String t
 
-functionType :: (Functor f, Copointed f, S.HasLocation f) => FunctionType 'S.Curried f -> FunctionType 'S.Uncurried f
-functionType (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t =
-  let
-    S.FunctionTypeN ts t = functionType a
-    t0' = typ t0
-  in S.FunctionTypeN ((t0' :) <$> ts) t
-functionType (S.FunctionTypeC t0 t) = S.FunctionTypeN ([typ t0] <$ t0) $ typ t
+functionType :: (Functor f, Copointed f, S.HasLocation f) => f (FunctionType 'S.Curried f) -> f (FunctionType 'S.Uncurried f)
+functionType f =
+  flip fmap f $ \case
+    (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t ->
+      let
+        S.FunctionTypeN ts t = copoint $ functionType a
+        t0' = typ t0
+      in S.FunctionTypeN ((t0' :) <$> ts) t
+    (S.FunctionTypeC t0 t) -> S.FunctionTypeN ([typ t0] <$ t0) $ typ t
 
-application :: (Functor f, Copointed f, S.HasLocation f) => Application 'S.Curried et ev f -> f a -> Application 'S.Uncurried et ev f
-application a v =
-  S.ApplicationN v' (vs <$ v)
+application :: (Functor f, Copointed f, S.HasLocation f) => f (Application 'S.Curried et ev f) -> f (Application 'S.Uncurried et ev f)
+application a =
+  S.ApplicationN v' (vs <$ a) <$ a
   where
     v' :| vs = N.reverse $ go a
-    go (S.ApplicationC v0 v1)
-      | S.TypedValue v0' _ <- copoint v0
-      , S.Application a <- copoint v0' = typedValue v1 :| N.toList (go a)
-    go (S.ApplicationC v0 v1)                                = typedValue v1 :| [typedValue v0]
+    go a =
+      case copoint a of
+        S.ApplicationC v0 v1
+          | S.TypedValue v0' _ <- copoint v0
+          , S.Application a <- copoint v0' -> typedValue v1 :| N.toList (go a)
+          | otherwise -> typedValue v1 :| [typedValue v0]
 
 procedureStep :: (Functor f, Copointed f, S.HasLocation f) => ProcedureStep 'S.Curried et ev f -> ProcedureStep 'S.Uncurried et ev f
 procedureStep (S.BindProcedureStep i v) = S.BindProcedureStep i $ typedValue v
 procedureStep (S.CallProcedureStep v)   = S.CallProcedureStep $ typedValue v
 
-function :: (Functor f, Copointed f, S.HasLocation f) => Function 'S.Curried et ev f -> f a -> Function 'S.Uncurried et ev f
-function (S.FunctionC i t v') v
-  | S.TypedValue v'' _ <- copoint v'
-  , S.Function f <- copoint v'' =
+function :: (Functor f, Copointed f, S.HasLocation f) => f (Function 'S.Curried et ev f) -> f (Function 'S.Uncurried et ev f)
+function f =
   let
-    t' = typ t
-    S.FunctionN ps v''' = function f v''
-  in S.FunctionN ((((i, t') <$ v) : copoint ps) <$ v) v'''
-function (S.FunctionC i t v') v =
-  let
-    t' = typ t
-    v'' = typedValue v'
-  in S.FunctionN ([(i, t') <$ v] <$ v) v''
+    S.FunctionC i t v' = copoint f
+    S.TypedValue v'' _ = copoint v'
+  in
+    case copoint v'' of
+      S.Function f' ->
+        let
+          t' = typ t
+          S.FunctionN ps v''' = copoint $ function f'
+        in S.FunctionN ((((i, t') <$ f) : copoint ps) <$ f) v''' <$ f
+      _ ->
+        let
+          t' = typ t
+          v'' = typedValue v'
+        in S.FunctionN ([(i, t') <$ f] <$ f) v'' <$ f

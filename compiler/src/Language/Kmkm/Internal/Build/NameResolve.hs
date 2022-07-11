@@ -171,7 +171,7 @@ value' valueAffiliations typeAffiliations moduleName v =
   for v $ \case
     S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations i
     S.Procedure ss -> S.Procedure <$> sequence (traverse (procedureStep valueAffiliations typeAffiliations moduleName) <$> ss)
-    S.Literal l -> pure $ S.Literal $ literal l
+    S.Literal l -> pure $ S.Literal $ literal <$> l
     S.Function f -> S.Function <$> function valueAffiliations typeAffiliations moduleName f
     S.TypeAnnotation a -> S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
     S.Application a -> S.Application <$> application valueAffiliations typeAffiliations moduleName a
@@ -222,10 +222,11 @@ typeAnnotation
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
-  -> TypeAnnotation 'S.NameUnresolved et ev f
-  -> m (TypeAnnotation 'S.NameResolved et ev f)
-typeAnnotation valueAffiliations typeAffiliations moduleName (S.TypeAnnotation' v t) =
-  S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
+  -> f (TypeAnnotation 'S.NameUnresolved et ev f)
+  -> m (f (TypeAnnotation 'S.NameResolved et ev f))
+typeAnnotation valueAffiliations typeAffiliations moduleName =
+  traverse $ \(S.TypeAnnotation' v t) ->
+    S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
 
 application
   :: ( MonadThrow m
@@ -238,10 +239,11 @@ application
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
-  -> Application 'S.NameUnresolved et ev f
-  -> m (Application 'S.NameResolved et ev f)
-application valueAffiliations typeAffiliations moduleName (S.ApplicationC v1 v2) =
-  S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
+  -> f (Application 'S.NameUnresolved et ev f)
+  -> m (f (Application 'S.NameResolved et ev f))
+application valueAffiliations typeAffiliations moduleName =
+  traverse $ \(S.ApplicationC v1 v2) ->
+    S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
 
 function
   :: ( MonadThrow m
@@ -254,11 +256,12 @@ function
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
-  -> Function 'S.NameUnresolved et ev f
-  -> m (Function 'S.NameResolved et ev f)
-function valueAffiliations typeAffiliations moduleName (S.FunctionC i t v) =
-  let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
-  in S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
+  -> f (Function 'S.NameUnresolved et ev f)
+  -> m (f (Function 'S.NameResolved et ev f))
+function valueAffiliations typeAffiliations moduleName =
+  traverse $ \(S.FunctionC i t v) ->
+    let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
+    in S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
 
 typ
   :: ( MonadThrow m
@@ -275,7 +278,7 @@ typ typeAffiliations moduleName =
     S.TypeVariable i  -> S.TypeVariable <$> referenceIdentifier typeAffiliations i
     S.ProcedureType t -> S.ProcedureType <$> typ typeAffiliations moduleName t
     S.TypeApplication t1 t2 -> S.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
-    S.FunctionType f -> S.FunctionType <$> functionType typeAffiliations moduleName f
+    S.FunctionType t -> S.FunctionType <$> functionType typeAffiliations moduleName t
     S.ForAllType i t -> do
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
       S.ForAllType (S.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
@@ -288,10 +291,11 @@ functionType
      )
   => Map S.Identifier Affiliation
   -> S.ModuleName
-  -> FunctionType 'S.NameUnresolved f
-  -> m (FunctionType 'S.NameResolved f)
-functionType typeAffiliations moduleName (S.FunctionTypeC t1 t2) =
-  S.FunctionTypeC <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+  -> f (FunctionType 'S.NameUnresolved f)
+  -> m (f (FunctionType 'S.NameResolved f))
+functionType typeAffiliations moduleName =
+  traverse $ \(S.FunctionTypeC t1 t2) ->
+    S.FunctionTypeC <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
 
 referenceIdentifier
   :: ( MonadThrow m

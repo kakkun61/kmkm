@@ -1,18 +1,19 @@
 {-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | ‚ÄúLambda lifting‚Äù pass.
+-- | ÅgLambda liftingÅh pass.
 module Language.Kmkm.Internal.Build.LambdaLift
   ( lambdaLift
   ) where
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Barbies.Bare               as B
-import           Control.Monad.State.Strict (State, evalState)
-import qualified Control.Monad.State.Strict as S
-import           Data.Copointed             (Copointed (copoint))
-import qualified Data.List.NonEmpty         as N
+import qualified Barbies.Bare                     as B
+import           Control.Monad.State.Strict       (State, evalState)
+import qualified Control.Monad.State.Strict       as S
+import           Data.Copointed                   (Copointed (copoint))
+import qualified Data.List.NonEmpty               as N
+import qualified Language.Kmkm.Internal.Exception as X
 
 type Module l et ev f = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
 
@@ -45,7 +46,8 @@ definition =
       scope $
         case copoint v of
           S.TypedValue v1 _
-            | S.Function (S.FunctionN is v2) <- copoint v1 -> do
+            | S.Function f <- copoint v1
+            , S.FunctionN is v2 <- copoint f -> do
                 (v', ds) <- term v2
                 let S.TypedValue _ t = copoint v'
                 pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v
@@ -64,15 +66,17 @@ term v =
         S.Variable i -> pure (S.TypedValue (S.Variable i <$ v') t <$ v, [])
         S.Literal l -> do
           pure (S.TypedValue (S.Literal l <$ v') t <$ v, [])
-        S.Function (S.FunctionN is v'') -> do
-          i <- (<$ v) <$> newIdentifier
-          (v''', ds) <- term v''
-          let m = S.ValueBind (S.ValueBindN i is v''')
-          pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
-        S.Application (S.ApplicationN v1 vs) -> do
-          (v1', ds) <- term v1
-          (vs', dss) <- unzip <$> sequence (term <$> copoint vs)
-          pure (S.TypedValue (S.Application (S.ApplicationN v1' $ vs' <$ vs) <$ v') t <$ v, mconcat $ ds : dss)
+        S.Function f
+          | S.FunctionN is v'' <- copoint f -> do
+              i <- (<$ v) <$> newIdentifier
+              (v''', ds) <- term v''
+              let m = S.ValueBind (S.ValueBindN i is v''')
+              pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
+        S.Application a
+          | S.ApplicationN v1 vs <- copoint a -> do
+              (v1', ds) <- term v1
+              (vs', dss) <- unzip <$> sequence (term <$> copoint vs)
+              pure (S.TypedValue (S.Application (S.ApplicationN v1' (vs' <$ vs) <$ a) <$ v') t <$ v, mconcat $ ds : dss)
         S.Procedure ps -> do
           (ps', dss) <- N.unzip <$> sequence (procedureStep <$> copoint ps)
           pure (S.TypedValue (S.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)
@@ -83,6 +87,7 @@ term v =
         S.ForAll i v1 -> do
           (v1', ds) <- term v1
           pure (S.TypedValue (S.ForAll i v1' <$ v') t <$ v, ds)
+        S.TypeAnnotation _ -> X.unreachable
 
 procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 procedureStep s =

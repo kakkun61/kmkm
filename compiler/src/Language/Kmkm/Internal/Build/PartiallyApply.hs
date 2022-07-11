@@ -52,9 +52,11 @@ term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value et ev f) -> Pa
 term v =
   for v $ \v'@(S.TypedValue v1 t) ->
     case copoint v1 of
-      S.Application (S.ApplicationN v2 vs)
-        | S.TypedValue _ t' <- copoint v2
-        , S.FunctionType (S.FunctionTypeN t0s t0) <- copoint t' -> do
+      S.Application a
+        | S.ApplicationN v2 vs <- copoint a
+        , S.TypedValue _ t' <- copoint v2
+        , S.FunctionType t'' <- copoint t'
+        , S.FunctionTypeN t0s t0 <- copoint t'' -> do
             let
               vs' = copoint vs
               nApp = length vs'
@@ -67,7 +69,7 @@ term v =
                 vs1 <- sequence $ term <$> vs'
                 if nApp == nFun
                   then
-                    pure $ S.TypedValue (S.Application (S.ApplicationN v2' (vs1 <$ vs)) <$ v1) t
+                    pure $ S.TypedValue (S.Application (S.ApplicationN v2' (vs1 <$ vs) <$ a) <$ v1) t
                   else do -- nApp < nFun
                     let nCls = nFun - nApp
                     is <- replicateM nCls newIdentifier
@@ -76,7 +78,7 @@ term v =
                       vs'' = vs1 ++ ((<$ v) <$> (S.TypedValue <$> ((<$ v1) . S.Variable . (<$ v) . S.LocalIdentifier <$> is) <*> t0s1))
                     pure $
                       S.TypedValue
-                        (S.Function (S.FunctionN (zipWith (\i t -> (i, t) <$ v) ((<$ v) . S.LocalIdentifier <$> is) t0s1 <$ v) (S.TypedValue (S.Application (S.ApplicationN v2' (vs'' <$ vs)) <$ v) t0 <$ v)) <$ v)
+                        (S.Function (S.FunctionN (zipWith (\i t -> (i, t) <$ v) ((<$ v) . S.LocalIdentifier <$> is) t0s1 <$ v) (S.TypedValue (S.Application (S.ApplicationN v2' (vs'' <$ vs) <$ v) <$ v) t0 <$ v) <$ v) <$ v)
                         t
       S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> sequence (traverse procedureStep <$> ps)
       _ -> pure v'

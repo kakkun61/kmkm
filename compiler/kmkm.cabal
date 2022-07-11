@@ -2,8 +2,8 @@ cabal-version: 2.2
 
 name: kmkm
 version: 0.1.0.0
-synopsis: 
-description: 
+synopsis:
+description:
 homepage: https://github.com/kakkun61/kmkm
 bug-reports: https://github.com/kakkun61/kmkm/issues
 license: GPL-3.0-only
@@ -63,14 +63,18 @@ library
                    Language.Kmkm.Internal.Compile
                    Language.Kmkm.Internal.Compile.C
                    Language.Kmkm.Internal.Exception
+                   Language.Kmkm.Internal.Parse.Location
                    Language.Kmkm.Internal.Parse.Sexp
                    Language.Kmkm.Internal.Parse.Sexp.C
                    Language.Kmkm.Internal.Syntax
+                   Language.Kmkm.Internal.Syntax.Sexp
+                   Language.Kmkm.Internal.Syntax.Sexp.Token
   build-depends: algebraic-graphs,
                  barbies,
                  barbies-layered,
                  containers,
                  data-default-class,
+                 exceptions,
                  filepath,
                  megaparsec,
                  hashable,
@@ -80,6 +84,8 @@ library
                  pointed,
                  safe-exceptions,
                  text
+
+                 ,recover-rtti
   default-extensions: Strict
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
@@ -130,6 +136,9 @@ test-suite spec
                  exceptions,
                  hspec,
                  megaparsec,
+                 mtl,
+                 parsers,
+                 parsers-megaparsec,
                  pointed,
                  text
   ghc-options: -threaded
