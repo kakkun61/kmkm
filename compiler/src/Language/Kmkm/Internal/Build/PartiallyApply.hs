@@ -39,7 +39,7 @@ partiallyApply = flip evalState 0 . module'
 module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module et ev f) -> Pass (f (Module et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
-      ds' <- sequence $ traverse definition <$> ds
+      ds' <- mapM (traverse definition) ds
       pure $ S.Module mn ms ds'
 
 definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition et ev f) -> Pass (f (Definition et ev f))
@@ -66,7 +66,7 @@ term v =
               then unreachable
               else do
                 v2' <- term v2
-                vs1 <- sequence $ term <$> vs'
+                vs1 <- mapM term vs'
                 if nApp == nFun
                   then
                     pure $ S.TypedValue (S.Application (S.ApplicationN v2' (vs1 <$ vs) <$ a) <$ v1) t
@@ -80,7 +80,7 @@ term v =
                       S.TypedValue
                         (S.Function (S.FunctionN (zipWith (\i t -> (i, t) <$ v) ((<$ v) . S.LocalIdentifier <$> is) t0s1 <$ v) (S.TypedValue (S.Application (S.ApplicationN v2' (vs'' <$ vs) <$ v) <$ v) t0 <$ v) <$ v) <$ v)
                         t
-      S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> sequence (traverse procedureStep <$> ps)
+      S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> mapM (traverse procedureStep) ps
       _ -> pure v'
 
 procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep et ev f) -> Pass (f (ProcedureStep et ev f))

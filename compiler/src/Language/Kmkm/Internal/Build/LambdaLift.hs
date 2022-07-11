@@ -9,6 +9,7 @@ module Language.Kmkm.Internal.Build.LambdaLift
 import qualified Language.Kmkm.Internal.Syntax as S
 
 import qualified Barbies.Bare                     as B
+import           Control.Monad                    (mapAndUnzipM)
 import           Control.Monad.State.Strict       (State, evalState)
 import qualified Control.Monad.State.Strict       as S
 import           Data.Copointed                   (Copointed (copoint))
@@ -31,7 +32,7 @@ lambdaLift = flip evalState 0 . module'
 module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
-    ds' <- sequence $ traverse definition <$> ds
+    ds' <- mapM (traverse definition) ds
     pure $ S.Module mn ms ds'
 
 definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
@@ -75,13 +76,13 @@ term v =
         S.Application a
           | S.ApplicationN v1 vs <- copoint a -> do
               (v1', ds) <- term v1
-              (vs', dss) <- unzip <$> sequence (term <$> copoint vs)
+              (vs', dss) <- mapAndUnzipM term (copoint vs)
               pure (S.TypedValue (S.Application (S.ApplicationN v1' (vs' <$ vs) <$ a) <$ v') t <$ v, mconcat $ ds : dss)
         S.Procedure ps -> do
-          (ps', dss) <- N.unzip <$> sequence (procedureStep <$> copoint ps)
+          (ps', dss) <- N.unzip <$> mapM procedureStep (copoint ps)
           pure (S.TypedValue (S.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)
         S.Let ds v1 -> do
-          ds' <- sequence (traverse definition <$> ds)
+          ds' <- mapM (traverse definition) ds
           (v1', vds) <- term v1
           pure (S.TypedValue (S.Let ds' v1' <$ v') t <$ v, vds)
         S.ForAll i v1 -> do

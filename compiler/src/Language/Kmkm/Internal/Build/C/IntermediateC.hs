@@ -78,8 +78,8 @@ definition definedVariables n d =
   case copoint d of
     S.DataDefinition i cs ->
       pure $
-        fold $
-          fmap Right <$>
+        foldMap
+          (fmap Right)
             [ tagEnum
             , [structure]
             , I.Definition . constructor (length cs_) <$> cs_

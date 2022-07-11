@@ -54,8 +54,8 @@ compile findFile readFile writeFile writeLog src =
     lastStep ms fs = do
       let ms' = S.map KBCT.thunk ms
       let definedVariables = M.unions $ S.map KBCI.definedVariables ms'
-      docs <- sequence $ build2_ definedVariables <$> S.toList ms'
-      sequence_ $ write <$> docs
+      docs <- mapM (build2_ definedVariables) $ S.toList ms'
+      mapM_ write docs
       where
         write (k, (c, h)) = do
           let path = fs M.! k

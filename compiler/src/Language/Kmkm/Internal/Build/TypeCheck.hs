@@ -152,7 +152,7 @@ typeBind variableTypes valueBinds prim typedValueBinds recursionIdentifiers =
       let
         variableTypes' = ((\v -> let S.TypedValue _ t = copoint v in t) <$> typedValueBinds') `M.union` variableTypes
         recursionValueBinds = M.filterWithKey (const . flip GN.hasVertex recursionIdentifiers) valueBinds
-      recursionTypedValueBinds <- sequence $ typeOfTerm variableTypes' prim <$> recursionValueBinds
+      recursionTypedValueBinds <- mapM (typeOfTerm variableTypes' prim) recursionValueBinds
       pure $ recursionTypedValueBinds `M.union` typedValueBinds'
     $ const $ throw $ RecursionException $ S.fromList $ N.toList $ GN.vertexList1 recursionIdentifiers
 

@@ -83,7 +83,7 @@ module' valueIdentifiers typeIdentifiers =
       valueAffiliations = importedAffiliations valueIdentifiers' $ S.fromList ms'
       typeIdentifiers' = M.insert moduleName' (S.unions $ boundTypeIdentifier <$> copoint ds) typeIdentifiers
       typeAffiliations = importedAffiliations typeIdentifiers' $ S.fromList ms'
-    S.Module moduleName ms <$> sequence (traverse (definition valueAffiliations typeAffiliations moduleName' $ Global moduleName') <$> ds)
+    S.Module moduleName ms <$> mapM (traverse $ definition valueAffiliations typeAffiliations moduleName' $ Global moduleName') ds
 
 definition
   :: ( MonadThrow m
@@ -105,11 +105,11 @@ definition valueAffiliations typeAffiliations moduleName affiliation =
     S.TypeBind i t -> S.TypeBind (S.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
     S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) c
     S.DataDefinition i cs ->
-      S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> sequence (traverse constructor <$> cs)
+      S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> mapM (traverse constructor) cs
       where
         constructor =
           traverse $ \(i, fs) -> do
-            fs' <- sequence (traverse field <$> fs)
+            fs' <- mapM (traverse field) fs
             pure (S.GlobalIdentifier moduleName <$> i, fs')
         field =
           traverse $ \(i, t) -> do
@@ -170,7 +170,7 @@ value'
 value' valueAffiliations typeAffiliations moduleName v =
   for v $ \case
     S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations i
-    S.Procedure ss -> S.Procedure <$> sequence (traverse (procedureStep valueAffiliations typeAffiliations moduleName) <$> ss)
+    S.Procedure ss -> S.Procedure <$> mapM (traverse $ procedureStep valueAffiliations typeAffiliations moduleName) ss
     S.Literal l -> pure $ S.Literal $ literal <$> l
     S.Function f -> S.Function <$> function valueAffiliations typeAffiliations moduleName f
     S.TypeAnnotation a -> S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
@@ -182,7 +182,7 @@ value' valueAffiliations typeAffiliations moduleName v =
         valueAffiliations' = localAffiliations `M.union` valueAffiliations
       in
         S.Let
-          <$> sequence (traverse (definition valueAffiliations' typeAffiliations moduleName Local) <$> ds)
+          <$> mapM (traverse $ definition valueAffiliations' typeAffiliations moduleName Local) ds
           <*> value valueAffiliations' typeAffiliations moduleName v
     S.ForAll i v ->
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations

@@ -69,15 +69,15 @@ compile
 compile _ _ _ _ _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFile writeLog src = do
   (nameDeps, modules1, paths) <- readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile src
-  sequence_ $ writeLog . ("original module: " <>) . T.pack . show . second KS.strip <$> M.toList modules1
+  mapM_ (writeLog . ("original module: " <>) . T.pack . show . second KS.strip) $ M.toList modules1
   let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
-  modules2 <- sequence $ KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers <$> modules1
-  sequence_ $ writeLog . ("name resolved: " <>) . T.pack . show . second KS.strip <$> M.toList modules2
+  modules2 <- mapM (KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers) modules1
+  mapM_ (writeLog . ("name resolved: " <>) . T.pack . show . second KS.strip) $ M.toList modules2
   let deps = G.gmap (fromMaybe X.unreachable . flip M.lookup modules2) nameDeps
   sortedModules <- sortModules deps
   modules3 <- snd <$> foldr (accumulate $ flip typeCheck) (pure mempty) sortedModules
-  sequence_ $ writeLog . ("typed module: " <>) . T.pack . show . KS.strip <$> S.toList modules3
-  modules4 <- sequence $ build1 writeLog <$> S.toList modules3
+  mapM_ (writeLog . ("typed module: " <>) . T.pack . show . KS.strip) $ S.toList modules3
+  modules4 <- mapM (build1 writeLog) $ S.toList modules3
   lastStep (S.fromList modules4) paths
   where
     accumulate f v acc = do
@@ -130,7 +130,7 @@ sortModules
   => G.AdjacencyMap (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev B.Covered KS.WithLocation))
   -> m [KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev B.Covered KS.WithLocation)]
 sortModules deps =
-  sequence (go . GN.vertexList1 <$> fromRight KE.unreachable (G.topSort $ G.scc deps))
+  mapM (go . GN.vertexList1) $ fromRight KE.unreachable (G.topSort $ G.scc deps)
   where
     go ms@(m :| ms') = if null ms' then pure m else throw $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
 
