@@ -33,15 +33,15 @@ import qualified Data.Text              as T
 import qualified Data.Typeable          as Y
 import           GHC.Generics           (Generic)
 
-type Module f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
+type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered
 
-type Definition f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
+type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered
 
-type Type f = S.Type 'S.NameResolved 'S.Uncurried B.Covered f
+type Type = S.Type 'S.NameResolved 'S.Uncurried B.Covered
 
-type Value f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
+type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered
 
-type ProcedureStep f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered f
+type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue B.Covered
 
 translate
   :: ( MonadThrow m
@@ -90,10 +90,10 @@ definition definedVariables n d =
         tagEnum =
           case cs_ of
             [c]
-              | (_, fs) <- copoint c
+              | S.ValueConstructor _ fs <- copoint c
               , _:_ <- copoint fs ->
                 []
-            _ -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . fst . copoint <$> cs_) [] Nothing []]
+            _ -> [I.Declaration ([], I.EnumerableLiteral (Just $ tagEnumIdent i) $ tagEnumIdent . (\(S.ValueConstructor i _) -> i) . copoint <$> cs_) [] Nothing []]
         structType = ([], I.Structure $ qualifiedIdentifier i)
         structure =
           I.Declaration ([], I.StructureLiteral (Just $ qualifiedIdentifier i) fields) [] Nothing []
@@ -101,36 +101,41 @@ definition definedVariables n d =
             fields =
               case cs_ of
                 [c]
-                  | (_, fs) <- copoint c
+                  | S.ValueConstructor _ fs <- copoint c
                   , fs_@(_:_) <- copoint fs ->
                     field <$> fs_
                 _ -> I.Field tagEnumType "tag" [] : [ I.Field ([], I.Union $ constructor <$> cs_) "body" [] | hasFields ]
+            field :: Copointed f => f (S.Field 'S.NameResolved 'S.Uncurried l et ev B.Covered f) -> I.Field
             field f =
               let
-                (i, t) = copoint f
+                S.Field i t = copoint f
                 (t', ds) = typ definedVariables t
               in
                 I.Field t' (qualifiedIdentifier i) ds
+            constructor :: Copointed f => f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted S.EmbeddedCType S.EmbeddedCValue B.Covered f) -> I.Field
             constructor c =
-              let (i, fs) = copoint c
+              let S.ValueConstructor i fs = copoint c
               in I.Field ([], I.StructureLiteral Nothing $ field <$> copoint fs) (qualifiedIdentifier i) []
             hasFields =
               or $ go <$> cs_
               where
+                go :: Copointed f => f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted S.EmbeddedCType S.EmbeddedCValue B.Covered f) -> Bool
                 go c =
-                  let (_, fs) = copoint c
+                  let S.ValueConstructor _ fs = copoint c
                   in not $ null $ copoint fs
+        constructor :: Copointed f => Int -> f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev B.Covered f) -> I.Definition
         constructor n c =
           case copoint c of
-            (c', fs) ->
+            S.ValueConstructor c' fs ->
               case copoint fs of
                 [] -> I.ExpressionDefinition structType [I.Constant] (qualifiedIdentifier c') [] $ I.ListInitializer [I.ExpressionInitializer $ Right $ I.Variable $ tagEnumIdent c']
                 fs_ ->
                   I.StatementDefinition structType [] (qualifiedIdentifier c') [I.Function $ parameter <$> fs_] $ Right [blockItem]
                   where
+                    parameter :: Copointed f => f (S.Field 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev B.Covered f) -> (I.QualifiedType, [I.VariableQualifier], Maybe (Either a I.Identifier), [I.Deriver])
                     parameter p =
                       let
-                        (i, t) = copoint p
+                        S.Field i t = copoint p
                         (t', ds) = typ definedVariables t
                       in
                         (t', [I.Constant], Just $ Right $ qualifiedIdentifier i, constantDeriver <$> ds)
@@ -139,7 +144,8 @@ definition definedVariables n d =
                       case (n, fs_) of
                         (1, _:_) -> argument <$> fs_
                         _        -> I.ExpressionInitializer (Right $ I.Variable $ tagEnumIdent c') : (argument <$> fs_)
-                    argument f | (i, _) <- copoint f = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
+                    argument :: Copointed f => f (S.Field 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev B.Covered f) -> I.Initializer
+                    argument f | S.Field i _ <- copoint f = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
     S.ValueBind (S.ValueBindV i v) -> do
       let
         S.TypedValue _ t = copoint v

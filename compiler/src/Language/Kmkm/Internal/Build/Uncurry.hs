@@ -17,25 +17,29 @@ import           Data.Copointed                   (Copointed (copoint))
 import           Data.List.NonEmpty               (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
-import           Prelude                          (Functor (fmap, (<$)), flip, otherwise, ($), (<$>))
+import           Prelude                          (Functor (fmap, (<$)), otherwise, ($), (<$>))
 
-type Module c et ev f = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type Definition c  et ev f = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Definition c et ev = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type Value c et ev f = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type ValueConstructor c et ev = S.ValueConstructor 'S.NameResolved c 'S.LambdaUnlifted et ev B.Covered
 
-type Value' c et ev f = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Field c et ev = S.Field 'S.NameResolved c 'S.LambdaUnlifted et ev B.Covered
 
-type ProcedureStep c et ev f = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Value c et ev = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type Application c et ev f = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Value' c et ev = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type Function c et ev f = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type ProcedureStep c et ev = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type Type c f = S.Type 'S.NameResolved c B.Covered f
+type Application c et ev = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
 
-type FunctionType c f = S.FunctionType 'S.NameResolved c B.Covered f
+type Function c et ev = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+
+type Type c = S.Type 'S.NameResolved c B.Covered
+
+type FunctionType c = S.FunctionType 'S.NameResolved c B.Covered
 
 uncurry
   :: ( Functor f
@@ -47,29 +51,26 @@ uncurry
 uncurry = module'
 
 module' :: (Functor f, Copointed f, S.HasLocation f) => f (Module 'S.Curried et ev f) -> f (Module 'S.Uncurried et ev f)
-module' m =
-  go <$> m
-  where
-    go (S.Module i ds ms) = S.Module i ds $ fmap definition <$> ms
+module' = fmap $ \(S.Module i ds ms) -> S.Module i ds $ fmap definition <$> ms
 
 definition :: (Functor f, Copointed f, S.HasLocation f) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
 definition =
   fmap $ \case
-    S.DataDefinition i cs ->
-      S.DataDefinition i $ fmap constructor <$> cs
-      where
-        constructor :: (Functor f, Copointed f, S.HasLocation f) => f (a, f [f (a1, f (Type 'S.Curried f))]) -> f (a, f [f (a1, f (Type 'S.Uncurried f))])
-        constructor = fmap $ \case (i, fs) -> (i, fmap field <$> fs)
-        field :: (Functor f, Copointed f, S.HasLocation f) => f (a, f (Type 'S.Curried f)) -> f (a, f (Type 'S.Uncurried f))
-        field = fmap $ \case (i, t) -> (i, typ t)
-    S.TypeBind i t -> S.TypeBind i $ typ t
-    S.ForeignTypeBind i c -> S.ForeignTypeBind i c
+    S.DataDefinition i cs          -> S.DataDefinition i $ fmap valueConstructor <$> cs
+    S.TypeBind i t                 -> S.TypeBind i $ typ t
+    S.ForeignTypeBind i c          -> S.ForeignTypeBind i c
     S.ValueBind (S.ValueBindU i v) -> S.ValueBind $ S.ValueBindU i $ typedValue v
-    S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
+    S.ForeignValueBind i c t       -> S.ForeignValueBind i c $ typ t
+
+valueConstructor :: (Functor f, Copointed f, S.HasLocation f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
+valueConstructor = fmap $ \(S.ValueConstructor i fs) -> S.ValueConstructor i (fmap field <$> fs)
+
+field :: (Functor f, Copointed f, S.HasLocation f) => f (Field 'S.Curried et ev f) -> f (Field 'S.Uncurried et ev f)
+field = fmap $ \(S.Field i t) -> S.Field i (typ t)
 
 typ :: (Functor f, Copointed f, S.HasLocation f) => f (Type 'S.Curried f) -> f (Type 'S.Uncurried f)
-typ v =
-  flip fmap v $ \case
+typ =
+  fmap $ \case
     S.TypeVariable i      -> S.TypeVariable i
     S.TypeApplication t s -> S.TypeApplication (typ t) $ typ s
     S.FunctionType a      -> S.FunctionType $ functionType a
@@ -80,8 +81,8 @@ typedValue :: (Functor f, Copointed f, S.HasLocation f) => f (Value 'S.Curried e
 typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t
 
 value' :: (Functor f, Copointed f, S.HasLocation f) => f (Value' 'S.Curried et ev f) -> f (Value' 'S.Uncurried et ev f)
-value' v =
-  flip fmap v $ \case
+value' =
+  fmap $ \case
     S.Variable i       -> S.Variable i
     S.Literal l        -> S.Literal $ literal <$> l
     S.Function f       -> S.Function $ function f
@@ -97,8 +98,8 @@ literal (S.Fraction s f e b) = S.Fraction s f e b
 literal (S.String t)         = S.String t
 
 functionType :: (Functor f, Copointed f, S.HasLocation f) => f (FunctionType 'S.Curried f) -> f (FunctionType 'S.Uncurried f)
-functionType f =
-  flip fmap f $ \case
+functionType =
+  fmap $ \case
     (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t ->
       let
         S.FunctionTypeN ts t = copoint $ functionType a

@@ -75,6 +75,10 @@ type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.U
 
 type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
+type ValueConstructor et ev = S.ValueConstructor 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+
+type Field et ev = S.Field 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+
 type ValueBind et ev = S.ValueBind 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
 
 type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered
@@ -208,7 +212,7 @@ foreignValueBind s =
       let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
       evs <- list (runEmbeddedParsers evps) sevs
       t <- typ st
-      case mapMaybe isEmbeddedValue $ copoint evs of -- �I�ʂ̓p�C�v���C���̌�̍H���ōs��
+      case mapMaybe isEmbeddedValue $ copoint evs of -- 選択は別ステップにする
         [ev] -> pure $ S.ForeignValueBind i ev t
         _ -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ S.location s]
     _ -> throwError [SexpException "unexpected format" "foreignValueBind" $ S.location s]
@@ -239,22 +243,17 @@ dataDefinition s =
       S.DataDefinition <$> identifier si <*> list valueConstructor sc
     _ -> throwError [SexpException "atom not expected" "dataDefinition" $ S.location s]
 
-valueConstructor :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f [f (f S.Identifier, f (Type f))]))
+valueConstructor :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ValueConstructor et ev f))
 valueConstructor s =
   for s $ \case
-    SS.Atom _ -> do
-        i <- identifier s
-        pure (i, [] <$ s)
-    SS.List [si, sfs] -> do
-        i <- identifier si
-        fs <- list field sfs
-        pure (i, fs)
-    _ -> throwError [SexpException "unexpected format" "valueConstructor" $ S.location s]
+    SS.Atom _         -> S.ValueConstructor <$> identifier s <*> pure ([] <$ s)
+    SS.List [si, sfs] -> S.ValueConstructor <$> identifier si <*> list field sfs
+    _                 -> throwError [SexpException "unexpected format" "valueConstructor" $ S.location s]
 
-field :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f (Type f)))
+field :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Field et ev f))
 field s =
   for s $ \case
-    SS.List [si, st] -> (,) <$> identifier si <*> typ st
+    SS.List [si, st] -> S.Field <$> identifier si <*> typ st
     _                -> throwError [SexpException "unexpected format" "field" $ S.location s]
 
 typ :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Type f))
@@ -388,9 +387,9 @@ stringTripleDoubleQuotationText = do
         do
           void $ P.text "\"\"\""
           let
-            -- | rightest match of �g"""�h
+            -- | rightest match of “"""”
             go
-              :: Int -- ^ the length of sequence of �g"�h
+              :: Int -- ^ the length of sequence of “"”
               -> ParsecT Void Text Identity Text
             go n = do
               c <- P.anyChar

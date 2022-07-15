@@ -25,6 +25,8 @@ module Language.Kmkm.Internal.Syntax
   ( -- * Modules and definitions
     Module (..)
   , Definition (..)
+  , ValueConstructor (..)
+  , Field (..)
   , ValueBind (..)
     -- * Types
   , Type (..)
@@ -116,7 +118,8 @@ instance
   bmap f (Module n ms ds) = Module (f n) (fmap f <$> f ms) (fmap (fmap (bmap f) . f) <$> f ds)
 
 instance
-  ( BareB (ValueBind n c l t et ev)
+  ( BareB (ValueConstructor n c l et ev)
+  , BareB (ValueBind n c l t et ev)
   , BareB (FunctionType n c)
   , BareB et
   , BareB ev
@@ -129,7 +132,7 @@ instance
 
 type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
 data Definition n c l t et ev b f
-  = DataDefinition (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n c b f))])])
+  = DataDefinition (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (ValueConstructor n c l et ev b f)])
   | TypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
   | ValueBind (ValueBind n c l t et ev b f)
   | ForeignTypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (et b f))
@@ -139,7 +142,7 @@ data Definition n c l t et ev b f
 type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
 type DefinitionConstraint cls n c l t et ev b f =
   ( cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n c b f))])])
+  , cls (B.Wear b f [B.Wear b f (ValueConstructor n c l et ev b f)])
   , cls (B.Wear b f (Type n c b f))
   , cls (ValueBind n c l t et ev b f)
   , cls (B.Wear b f CHeader)
@@ -152,40 +155,73 @@ deriving instance DefinitionConstraint Show n c l t et ev b f => Show (Definitio
 deriving instance DefinitionConstraint Eq n c l t et ev b f => Eq (Definition n c l t et ev b f)
 deriving instance DefinitionConstraint Ord n c l t et ev b f => Ord (Definition n c l t et ev b f)
 
-instance (FunctorB (Type n c B.Covered), FunctorB (ValueBind n c l t et ev B.Covered), FunctorB (et B.Covered), FunctorB (ev B.Covered)) => FunctorB (Definition n c l t et ev B.Covered) where
+instance (FunctorB (Type n c B.Covered), FunctorB (FunctionType n c B.Covered), FunctorB (ValueBind n c l t et ev B.Covered), FunctorB (et B.Covered), FunctorB (ev B.Covered)) => FunctorB (Definition n c l t et ev B.Covered) where
   bmap :: forall f g. (Functor f, Functor g) => (forall a. f a -> g a) -> Definition n c l t et ev B.Covered f -> Definition n c l t et ev B.Covered g
   bmap f (DataDefinition n cs) =
-    DataDefinition (f n) $ fmap constructor <$> f cs
-    where
-      constructor :: f (f (BindIdentifier n), f [f (f (BindIdentifier n), f (Type n c B.Covered f))]) -> g (g (BindIdentifier n), g [g (g (BindIdentifier n), g (Type n c B.Covered g))])
-      constructor = fmap (bimap f $ fmap (fmap field) . f) . f
-      field :: f (f (BindIdentifier n), f (Type n c B.Covered f)) -> g (g (BindIdentifier n), g (Type n c B.Covered g))
-      field = fmap (bimap f (fmap (bmap f) . f)) . f
+    DataDefinition (f n) $ fmap (fmap (bmap f) . f) <$> f cs
   bmap f (TypeBind i t) = TypeBind (f i) (bmap f <$> f t)
   bmap f (ValueBind b) = ValueBind (bmap f b)
   bmap f (ForeignTypeBind i c) =  ForeignTypeBind (f i) (bmap f <$> f c)
   bmap f (ForeignValueBind i c t) = ForeignValueBind (f i) (bmap f <$> f c) (bmap f <$> f t)
 
-instance (BareB (ValueBind n c l t et ev), BareB (FunctionType n c), BareB et, BareB ev) => BareB (Definition n c l t et ev) where
+instance (BareB (ValueConstructor n c l et ev), BareB (ValueBind n c l t et ev), BareB (FunctionType n c), BareB et, BareB ev) => BareB (Definition n c l t et ev) where
   bstrip (DataDefinition (Identity i) (Identity cs)) =
-    DataDefinition i (constructor <$> cs)
-    where
-      constructor (Identity (Identity i, Identity fs)) = (i, field <$> fs)
-      field (Identity (Identity i, Identity t)) = (i, bstrip t)
+    DataDefinition i $ bstrip . runIdentity <$> cs
   bstrip (TypeBind (Identity i) (Identity t)) = TypeBind i (bstrip t)
   bstrip (ValueBind b) = ValueBind (bstrip b)
   bstrip (ForeignTypeBind (Identity i) (Identity c)) = ForeignTypeBind i (bstrip c)
   bstrip (ForeignValueBind (Identity i) (Identity c) (Identity t)) = ForeignValueBind i (bstrip c) (bstrip t)
 
   bcover (DataDefinition i cs) =
-    DataDefinition (Identity i) (Identity $ constructor <$> cs)
-    where
-      constructor (i, fs) = Identity (Identity i, Identity $ field <$> fs)
-      field (i, t) = Identity (Identity i, Identity $ bcover t)
+    DataDefinition (Identity i) $ Identity $ Identity . bcover <$> cs
   bcover (TypeBind i t) = TypeBind (Identity i) (Identity $ bcover t)
   bcover (ValueBind b) = ValueBind (bcover b)
   bcover (ForeignTypeBind i c) = ForeignTypeBind (Identity i) (Identity $ bcover c)
   bcover (ForeignValueBind i c t) = ForeignValueBind (Identity i) (Identity $ bcover c) (Identity $ bcover t)
+
+-- ValueConstructor
+
+type ValueConstructor :: NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+data ValueConstructor n c l et ev b f = ValueConstructor (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (Field n c l et ev b f)])
+
+type ValueConstructorConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
+type ValueConstructorConstraint cls n c l et ev b f =
+  ( cls (B.Wear b f (BindIdentifier n))
+  , cls (B.Wear b f [B.Wear b f (Field n c l et ev b f)])
+  )
+
+deriving instance ValueConstructorConstraint Show n c l et ev b f => Show (ValueConstructor n c l et ev b f)
+deriving instance ValueConstructorConstraint Eq n c l et ev b f => Eq (ValueConstructor n c l et ev b f)
+deriving instance ValueConstructorConstraint Ord n c l et ev b f => Ord (ValueConstructor n c l et ev b f)
+
+instance FunctorB (FunctionType n c B.Covered) => FunctorB (ValueConstructor n c l et ev B.Covered) where
+  bmap f (ValueConstructor i fs) = ValueConstructor (f i) (fmap (fmap (bmap f) . f) <$> f fs)
+
+instance (FunctorB (FunctionType n c B.Covered), BareB (FunctionType n c)) => BareB (ValueConstructor n c l et ev) where
+  bstrip (ValueConstructor (Identity i) (Identity fs)) = ValueConstructor i $ bstrip . runIdentity <$> fs
+  bcover (ValueConstructor i fs) = ValueConstructor (Identity i) $ Identity $ Identity . bcover <$> fs
+
+-- Field
+
+type Field :: NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+data Field n c l et ev b f = Field (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
+
+type FieldConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
+type FieldConstraint cls n c l et ev b f =
+  ( cls (B.Wear b f (BindIdentifier n))
+  , cls (B.Wear b f (Type n c b f))
+  )
+
+deriving instance FieldConstraint Show n c l et ev b f => Show (Field n c l et ev b f)
+deriving instance FieldConstraint Eq n c l et ev b f => Eq (Field n c l et ev b f)
+deriving instance FieldConstraint Ord n c l et ev b f => Ord (Field n c l et ev b f)
+
+instance FunctorB (FunctionType n c B.Covered) => FunctorB (Field n c l et ev B.Covered) where
+  bmap f (Field i t) = Field (f i) (bmap f <$> f t)
+
+instance (FunctorB (FunctionType n c B.Covered), BareB (FunctionType n c)) => BareB (Field n c l et ev) where
+  bstrip (Field (Identity i) (Identity t)) = Field i $ bstrip t
+  bcover (Field i t) = Field (Identity i) $ Identity $ bcover t
 
 -- ValueBind
 

@@ -138,14 +138,14 @@ spec = do
       it "define bool (false true)" $ do
         ps dataDefinition "spec" ["define", "bool", ["list", "false", "true"]]
           `shouldReturn`
-            ( DataDefinition "bool" (Identity [Identity ("false", Identity []), Identity ("true", Identity [])])
+            ( DataDefinition "bool" (Identity [Identity (ValueConstructor "false" $ Identity []), Identity (ValueConstructor "true" $ Identity [])])
                 :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
             )
 
       it "define book (list (book (list (title string) (author string))))" $ do
         ps dataDefinition "spec" ["define", "book", ["list", ["book", ["list", ["title", "string"], ["author", "string"]]]]]
           `shouldReturn`
-            ( DataDefinition "book" (Identity [Identity (Identity "book", Identity [Identity (Identity "title", Identity $ TypeVariable "string"), Identity (Identity "author", Identity $ TypeVariable "string")])])
+            ( DataDefinition "book" (Identity [Identity (ValueConstructor "book" $ Identity [Identity (Field "title" $ Identity $ TypeVariable "string"), Identity (Field "author" $ Identity $ TypeVariable "string")])])
                 :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
             )
 
@@ -170,7 +170,7 @@ spec = do
 
       it "(module math (list) (list (define bool (false true)))" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["define", "bool", ["list", "false", "true"]]]]
-          `shouldReturn` Module (Identity "math") (Identity []) (Identity [Identity $ DataDefinition (Identity "bool") (Identity [Identity (Identity "false", Identity []), Identity (Identity "true", Identity [])])])
+          `shouldReturn` Module (Identity "math") (Identity []) (Identity [Identity $ DataDefinition (Identity "bool") (Identity [Identity (ValueConstructor "false" $ Identity []), Identity (ValueConstructor "true" $ Identity [])])])
 
 pt :: MonadThrow m => String -> Text -> m (Sexp Bare Identity)
 pt label text = copoint . fmap (bstripFrom copoint) <$> parseText label text

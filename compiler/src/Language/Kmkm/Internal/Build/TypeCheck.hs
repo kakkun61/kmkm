@@ -47,15 +47,15 @@ import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-type Module t et ev f = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
+type Module t et ev = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
 
-type Definition t et ev f = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
+type Definition t et ev = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
 
-type Type f = S.Type 'S.NameResolved 'S.Curried B.Covered f
+type Type = S.Type 'S.NameResolved 'S.Curried B.Covered
 
-type Value t et ev f = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
+type Value t et ev = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
 
-type ProcedureStep t et ev f = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered f
+type ProcedureStep t et ev = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
 
 type VariableTypes f = Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
 

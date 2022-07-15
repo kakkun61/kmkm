@@ -16,13 +16,17 @@ import           Data.Copointed                   (Copointed (copoint))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
 
-type Module l et ev f = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
+type Module l et ev = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered
 
-type Definition l et ev f = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
+type Definition l et ev = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered
 
-type Value l et ev f = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
+type ValueConstructor l et ev = S.ValueConstructor 'S.NameResolved 'S.Uncurried l et ev B.Covered
 
-type ProcedureStep l et ev f = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered f
+type Field l et ev = S.Field 'S.NameResolved 'S.Uncurried l et ev B.Covered
+
+type Value l et ev = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered
+
+type ProcedureStep l et ev = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed et ev B.Covered
 
 type Pass = State Word
 
@@ -39,7 +43,7 @@ definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition 'S.
 definition =
   traverse definition'
   where
-    definition' (S.DataDefinition i cs)    = pure $ S.DataDefinition i cs
+    definition' (S.DataDefinition i cs)    = S.DataDefinition i <$> traverse (traverse valueConstructor) cs
     definition' (S.TypeBind i t)           = pure $ S.TypeBind i t
     definition' (S.ForeignTypeBind i c)    = pure $ S.ForeignTypeBind i c
     definition' (S.ForeignValueBind i c t) = pure $ S.ForeignValueBind i c t
@@ -52,14 +56,19 @@ definition =
                 (v', ds) <- term v2
                 let S.TypedValue _ t = copoint v'
                 pure $ S.ValueBind $ S.ValueBindN i is $ S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v
-            | S.ForAll _ v1' <- copoint v1 -> do
-                definition' $ S.ValueBind (S.ValueBindU i v1')
+            | S.ForAll _ v1' <- copoint v1 -> definition' $ S.ValueBind $ S.ValueBindU i v1'
           _ -> do
             (v', ds) <- term v
             let S.TypedValue _ t = copoint v'
             pure $ S.ValueBind $ S.ValueBindV i $ S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v
 
-term :: (Traversable f, Copointed f, S.HasLocation f) =>f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
+valueConstructor :: Traversable f => f (ValueConstructor 'S.LambdaUnlifted et ev f) -> Pass (f (ValueConstructor 'S.LambdaLifted et ev f))
+valueConstructor = traverse $ \(S.ValueConstructor i fs) -> S.ValueConstructor i <$> traverse (traverse field) fs
+
+field :: Traversable f => f (Field 'S.LambdaUnlifted et ev f) -> Pass (f (Field 'S.LambdaLifted et ev f))
+field = traverse $ \(S.Field i t) -> pure $ S.Field i t
+
+term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 term v =
   case copoint v of
     S.TypedValue v' t ->
