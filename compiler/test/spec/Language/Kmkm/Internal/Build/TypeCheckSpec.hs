@@ -9,11 +9,10 @@ module Language.Kmkm.Internal.Build.TypeCheckSpec where
 import Language.Kmkm.Internal.Build.TypeCheck
 import Language.Kmkm.Internal.Syntax
 
-import Instance ()
+import Utility
 
-import Data.Functor.Const    (Const)
-import Data.Functor.Identity
-import Data.Map              (Map)
+import Data.Functor.Const (Const)
+import Data.Map           (Map)
 import Test.Hspec
 
 spec :: Spec
@@ -23,16 +22,16 @@ spec = do
       describe "integer" $ do
         it "10" $ do
           let
-            actual = typeCheck mempty (Identity $ Module "spec" [["kmkm", "prim"]] [Identity $ ValueBind $ Identity $ ValueBindU ["spec", "ten"] $ Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 10 10])
-            expected :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) Identity)
-            expected = Identity (Module "spec" [["kmkm", "prim"]] [Identity $ ValueBind $ Identity $ ValueBindU ["spec", "ten"] $ Identity $ TypedValue (Identity $ Literal $ Identity $ Integer 10 10) (Identity $ TypeVariable ["kmkm", "prim", "int"])])
+            actual = typeCheck mempty (I $ Module "spec" [["kmkm", "prim"]] [I $ ValueBind $ I $ ValueBindU ["spec", "ten"] $ I $ UntypedValue $ I $ Literal $ I $ Integer 10 10])
+            expected :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+            expected = I (Module "spec" [["kmkm", "prim"]] [I $ ValueBind $ I $ ValueBindU ["spec", "ten"] $ I $ TypedValue (I $ Literal $ I $ Integer 10 10) ["kmkm", "prim", "int"]])
           actual `shouldReturn` expected
 
         it "0x10" $ do
           let
-            actual = typeCheck mempty (Identity $ Module "spec" [["kmkm", "prim"]] [Identity $ ValueBind $ Identity $ ValueBindU ["spec", "sixteen"] (Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 16 16)])
-            expected :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) Identity)
-            expected = Identity (Module "spec" [["kmkm", "prim"]] [Identity $ ValueBind $ Identity $ ValueBindU ["spec", "sixteen"] $ Identity $ TypedValue (Identity $ Literal $ Identity $ Integer 16 16) (Identity $ TypeVariable ["kmkm", "prim", "int"])])
+            actual = typeCheck mempty (I $ Module "spec" [["kmkm", "prim"]] [I $ ValueBind $ I $ ValueBindU ["spec", "sixteen"] (I $ UntypedValue $ I $ Literal $ I $ Integer 16 16)])
+            expected :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+            expected = I (Module "spec" [["kmkm", "prim"]] [I $ ValueBind $ I $ ValueBindU ["spec", "sixteen"] $ I $ TypedValue (I $ Literal $ I $ Integer 16 16) ["kmkm", "prim", "int"]])
           actual `shouldReturn` expected
 
     describe "application" $ do
@@ -40,109 +39,109 @@ spec = do
         it "success" $ do
           let
             source =
-              Identity $ Module
+              I $ Module
                 "spec"
                 []
-                [ Identity $ ValueBind $
-                    Identity $ ValueBindU
+                [ I $ ValueBind $
+                    I $ ValueBindU
                       ["spec", "succ"]
-                      $ Identity $ UntypedValue $
-                          Identity $ TypeAnnotation $
-                            Identity $ TypeAnnotation'
-                              ( Identity $ UntypedValue $
-                                  Identity $ Function $
-                                    Identity $ FunctionC
+                      $ I $ UntypedValue $
+                          I $ TypeAnnotation $
+                            I $ TypeAnnotation'
+                              ( I $ UntypedValue $
+                                  I $ Function $
+                                    I $ FunctionC
                                       "a"
-                                      (Identity $ TypeVariable ["kmkm", "prim", "int"])
-                                      $ Identity $ UntypedValue $
-                                          Identity $ Application $
-                                            Identity $ ApplicationC
-                                              (Identity $ UntypedValue $ Identity $ Variable ["spec", "succ"])
-                                              (Identity $ UntypedValue $ Identity $ Variable "a")
+                                      ["kmkm", "prim", "int"]
+                                      $ I $ UntypedValue $
+                                          I $ Application $
+                                            I $ ApplicationC
+                                              ["spec", "succ"]
+                                              "a"
                               )
-                              $ Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["kmkm", "prim", "int"]) $ Identity $ TypeVariable ["kmkm", "prim", "int"]
+                              $ I $ FunctionType $ I $ FunctionTypeC ["kmkm", "prim", "int"] ["kmkm", "prim", "int"]
                 ]
-            result :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) Identity)
+            result :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
             result =
-              Identity $ Module
+              I $ Module
                 "spec"
                 []
-                [ Identity $ ValueBind $
-                    Identity $ ValueBindU ["spec", "succ"] $
-                      Identity $ TypedValue
-                        ( Identity $ Function $
-                            Identity $ FunctionC
+                [ I $ ValueBind $
+                    I $ ValueBindU ["spec", "succ"] $
+                      I $ TypedValue
+                        ( I $ Function $
+                            I $ FunctionC
                               "a"
-                              (Identity $ TypeVariable ["kmkm", "prim", "int"])
-                              $ Identity $ TypedValue
-                                  (Identity $ Application $
-                                    Identity $ ApplicationC
-                                      (Identity $ TypedValue (Identity $ Variable ["spec", "succ"]) (Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["kmkm", "prim", "int"]) (Identity $ TypeVariable ["kmkm", "prim", "int"])))
-                                      (Identity $ TypedValue (Identity $ Variable "a") (Identity $ TypeVariable ["kmkm", "prim", "int"]))
+                              ["kmkm", "prim", "int"]
+                              $ I $ TypedValue
+                                  (I $ Application $
+                                    I $ ApplicationC
+                                      (I $ TypedValue ["spec", "succ"] (I $ FunctionType $ I $ FunctionTypeC ["kmkm", "prim", "int"] ["kmkm", "prim", "int"]))
+                                      (I $ TypedValue "a" ["kmkm", "prim", "int"])
                                   )
-                                  $ Identity $ TypeVariable ["kmkm", "prim", "int"]
+                                  ["kmkm", "prim", "int"]
                         )
-                        $ Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["kmkm", "prim", "int"]) $ Identity $ TypeVariable ["kmkm", "prim", "int"]
+                        $ I $ FunctionType $ I $ FunctionTypeC ["kmkm", "prim", "int"] ["kmkm", "prim", "int"]
                 ]
-          typeCheck mempty (source) `shouldReturn` result
+          typeCheck mempty source `shouldReturn` result
 
         it "fail" $ do
           let
-            source :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const ()) (Const ()) Identity)
+            source :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const ()) (Const ()) I)
             source =
-              Identity $ Module
+              I $ Module
                 "spec"
                 []
-                [ Identity $ ValueBind $
-                    Identity $ ValueBindU
+                [ I $ ValueBind $
+                    I $ ValueBindU
                       ["spec", "succ"]
-                      $ Identity $ UntypedValue $
-                          Identity $ TypeAnnotation $
-                            Identity $ TypeAnnotation'
-                              ( Identity $ UntypedValue $
-                                  Identity $ Function $
-                                    Identity $ FunctionC
+                      $ I $ UntypedValue $
+                          I $ TypeAnnotation $
+                            I $ TypeAnnotation'
+                              ( I $ UntypedValue $
+                                  I $ Function $
+                                    I $ FunctionC
                                       "a"
-                                      (Identity $ TypeVariable ["kmkm", "prim", "int"])
-                                      (Identity $ UntypedValue $ Identity $ Variable ["spec", "succ"])
+                                      ["kmkm", "prim", "int"]
+                                      ["spec", "succ"]
                               )
-                              $ Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["kmkm", "prim", "int"]) $ Identity $ TypeVariable ["kmkm", "prim", "int"]
+                              $ I $ FunctionType $ I $ FunctionTypeC ["kmkm", "prim", "int"] ["kmkm", "prim", "int"]
                 ]
           typeCheck mempty source `shouldThrow` \MismatchException {} -> True
 
     describe "parametric polymorphism" $ do
       it "id \"hello\" is string" $ do
         let
-          source :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const ()) (Const ()) Identity)
+          source :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const ()) (Const ()) I)
           source =
-            Identity $ Module
+            I $ Module
               "spec"
               [["kmkm", "prim"]]
-              [ Identity $ ValueBind $
-                  Identity $ ValueBindU
+              [ I $ ValueBind $
+                  I $ ValueBindU
                     ["spec", "hello"]
-                    $ Identity $ UntypedValue $
-                        Identity $ Application $
-                          Identity $ ApplicationC
-                            (Identity $ UntypedValue $ Identity $ Variable ["spec", "id"])
-                            (Identity $ UntypedValue $ Identity $ Literal $ Identity $ String "hello")
+                    $ I $ UntypedValue $
+                        I $ Application $
+                          I $ ApplicationC
+                            ["spec", "id"]
+                            (I $ UntypedValue $ I $ Literal $ I $ String "hello")
               ]
-          variableTypes :: Map QualifiedIdentifier (Identity (Type 'NameResolved 'Curried Identity))
-          variableTypes = [(["spec", "id"], Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["a"]) $ Identity $ TypeVariable ["a"])]
-          result :: Identity (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) Identity)
+          variableTypes :: Map QualifiedIdentifier (I (Type 'NameResolved 'Curried I))
+          variableTypes = [(["spec", "id"], I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"])]
+          result :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
           result =
-            Identity $ Module
+            I $ Module
               "spec"
               [["kmkm", "prim"]]
-              [ Identity $ ValueBind $
-                  Identity $ ValueBindU
+              [ I $ ValueBind $
+                  I $ ValueBindU
                     ["spec", "hello"]
-                    $ Identity $ TypedValue
-                        ( Identity $ Application $
-                            Identity $ ApplicationC
-                              (Identity $ TypedValue (Identity $ Variable ["spec", "id"]) (Identity $ FunctionType $ Identity $ FunctionTypeC (Identity $ TypeVariable ["a"]) $ Identity $ TypeVariable ["a"]))
-                              (Identity $ TypedValue (Identity $ Literal $ Identity $ String "hello") (Identity $ TypeVariable ["kmkm", "prim", "string"]))
+                    $ I $ TypedValue
+                        ( I $ Application $
+                            I $ ApplicationC
+                              (I $ TypedValue ["spec", "id"] (I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"]))
+                              (I $ TypedValue (I $ Literal $ I $ String "hello") ["kmkm", "prim", "string"])
                         )
-                        $ Identity $ TypeVariable ["kmkm", "prim", "string"]
+                        ["kmkm", "prim", "string"]
               ]
-        typeCheck variableTypes (source) `shouldReturn` result
+        typeCheck variableTypes source `shouldReturn` result

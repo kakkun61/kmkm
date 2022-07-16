@@ -80,6 +80,7 @@ import           Data.Functor.Identity       (Identity (Identity))
 import qualified Data.Kind                   as K
 import           Data.List.NonEmpty          (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty          as N
+import           Data.Pointed                (Pointed (point))
 import           Data.String                 (IsString (fromString))
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -345,6 +346,15 @@ instance
   pretty (ProcedureType t)       = "(procedure " <> pretty t <> ")"
   pretty (ForAllType i t)        = "(for-all " <> pretty i <> " " <> pretty t <> ")"
 
+instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Type n c f) where
+  fromString = TypeVariable . point . fromString
+
+instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text, Pointed f, Copointed f) => IsList (Type n c f) where
+  type Item (Type n c f) = Text
+  fromList = TypeVariable . point . E.fromList
+  toList (TypeVariable v) = E.toList $ copoint v
+  toList _                = error "only type variable acceptable"
+
 -- FunctionType
 
 type FunctionType :: NameResolving -> Currying-> (K.Type -> K.Type) -> K.Type
@@ -460,6 +470,16 @@ instance
 
   bmap f (TypedValue v t) = TypedValue (bmap f <$> f v) (bmap f <$> f t)
 
+instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Value n c l 'Untyped et ev f) where
+  fromString = UntypedValue . point . fromString
+
+instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text, Pointed f, Copointed f) => IsList (Value n c l 'Untyped et ev f) where
+  type Item (Value n c l 'Untyped et ev f) = Text
+  fromList = UntypedValue . point . E.fromList
+  toList (UntypedValue v)
+    | Variable i <- copoint v = E.toList $ copoint i
+  toList _ = error "only variable acceptable"
+
 -- Value'
 
 data Value' n c l t et ev f
@@ -516,6 +536,15 @@ instance
   bmap f (TypeAnnotation a) = TypeAnnotation $ bmap f <$> f a
   bmap f (Let ds v)         = Let (fmap (fmap (bmap f) . f) <$> f ds) $ bmap f <$> f v
   bmap f (ForAll i v)       = ForAll (f i) $ bmap f <$> f v
+
+instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Value' n c l t et ev f) where
+  fromString = Variable . point . fromString
+
+instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text, Pointed f, Copointed f) => IsList (Value' n c l t et ev f) where
+  type Item (Value' n c l t et ev f) = Text
+  fromList = Variable . point . E.fromList
+  toList (Variable i) = E.toList $ copoint i
+  toList _            = error "only variable acceptable"
 
 -- TypeAnnotation
 

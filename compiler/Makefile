@@ -20,6 +20,10 @@ doctest: build-deps
 spec: build-deps
 	cabal v2-test spec
 
+.PHONY: spec.repl
+spec.repl:
+	cabal v2-repl spec
+
 .PHONY: repl
 repl:
 	cabal v2-repl
