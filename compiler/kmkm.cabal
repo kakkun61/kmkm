@@ -129,6 +129,7 @@ test-suite spec
                  Language.Kmkm.Internal.Build.TypeCheckSpec
                  Language.Kmkm.Internal.Parse.SexpSpec
                  Language.Kmkm.Internal.SyntaxSpec
+                 Instance
   build-depends: kmkm == 0.1.0.0,
                  barbies-layered,
                  containers,

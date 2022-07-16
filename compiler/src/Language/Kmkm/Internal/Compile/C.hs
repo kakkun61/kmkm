@@ -22,7 +22,6 @@ import qualified Language.Kmkm.Internal.Exception             as KE
 import qualified Language.Kmkm.Internal.Parse.Sexp.C          as KPC
 import qualified Language.Kmkm.Internal.Syntax                as KS
 
-import qualified Barbies.Bare           as B
 import           Control.Applicative    (Alternative)
 import qualified Control.Exception      as E
 import           Control.Exception.Safe (MonadCatch, MonadThrow, throw)
@@ -78,7 +77,7 @@ build2
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
   -> Map KS.ModuleName FilePath
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue B.Covered f)
+  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue f)
   -> m (Text, Text)
 build2 writeLog definedVariables fs m = do
   let KS.Module n ms _ = copoint m
@@ -123,7 +122,7 @@ build2'
      )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue B.Covered f)
+  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue f)
   -> m (Text, Text)
 build2' writeLog definedVariables m6 = do
   m7 <- KBCI.translate definedVariables m6

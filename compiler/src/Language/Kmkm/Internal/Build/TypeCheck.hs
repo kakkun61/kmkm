@@ -28,13 +28,12 @@ import qualified Algebra.Graph.AdjacencyMap           as G hiding (vertexList)
 import qualified Algebra.Graph.AdjacencyMap.Algorithm as G hiding (topSort)
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as GN
 import qualified Algebra.Graph.ToGraph                as G
-import qualified Barbies.Bare                         as B (Bare, Covered)
-import qualified Barbies.Bare.Layered                 as B (BareB)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch, MonadThrow, catchJust, throw)
 import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
-import           Data.Functor.Identity                (Identity)
+import qualified Data.Functor.Barbie.Layered          as B
+import           Data.Functor.Identity                (Identity (Identity, runIdentity))
 import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
@@ -47,32 +46,32 @@ import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 
-type Module t et ev = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
+type Module t et ev = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
-type Definition t et ev = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
+type Definition t et ev = S.Definition 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
-type Type = S.Type 'S.NameResolved 'S.Curried B.Covered
+type Type = S.Type 'S.NameResolved 'S.Curried
 
-type Value t et ev = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
+type Value t et ev = S.Value 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
-type ProcedureStep t et ev = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev B.Covered
+type ProcedureStep t et ev = S.ProcedureStep 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
-type VariableTypes f = Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
+type VariableTypes f = Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried f))
 
 typeCheck
   :: ( MonadCatch m
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , Eq (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
-     , Show (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
+     , B.FunctorB et
+     , B.FunctorB ev
+     , Eq (f (S.Type 'S.NameResolved 'S.Curried f))
+     , Show (f (S.Type 'S.NameResolved 'S.Curried f))
      , Show (f S.QualifiedIdentifier)
-     , B.BareB et
-     , B.BareB ev
      )
-  => Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried B.Covered f))
-  -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered f)
-  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f))
+  => Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried f))
+  -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f)
+  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev f))
 typeCheck = typeCheck'
 
 typeCheck'
@@ -81,11 +80,12 @@ typeCheck'
      , Traversable f
      , Copointed f
      , S.HasLocation f
+     , B.FunctorB et
+     , B.FunctorB ev
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
-     , B.BareB et
-     , B.BareB ev)
+     )
   => VariableTypes f
   -> f (Module 'S.Untyped et ev f)
   -> m (f (Module 'S.Typed et ev f))
@@ -125,7 +125,10 @@ definitions variableTypes prim =
       pure $ replaceValue typedValueBinds <$> definitions'
 
 dependency :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
-dependency valueBinds d | S.ValueBind (S.ValueBindU i v) <- copoint d = G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
+dependency valueBinds d
+  | S.ValueBind b <- copoint d =
+      let S.ValueBindU i v = copoint b
+      in G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
 dependency _ _                                                        = G.empty
 
 typeBind
@@ -169,12 +172,14 @@ replaceValue typedValueBinds =
     S.DataDefinition i cs -> S.DataDefinition i cs
     S.TypeBind i t -> S.TypeBind i t
     S.ForeignTypeBind i c -> S.ForeignTypeBind i c
-    S.ValueBind (S.ValueBindU i _) ->
-      S.ValueBind (S.ValueBindU i $ fromMaybe unreachable $ M.lookup (copoint i) typedValueBinds)
+    S.ValueBind b -> S.ValueBind $ (\(S.ValueBindU i _) -> S.ValueBindU i $ fromMaybe unreachable $ M.lookup (copoint i) typedValueBinds) <$> b
     S.ForeignValueBind i c t -> S.ForeignValueBind i c t
 
 valueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Value t et ev f))
-valueBind d | S.ValueBind (S.ValueBindU i v) <- copoint d = Just (copoint i, v)
+valueBind d
+  | S.ValueBind b <- copoint d =
+      let S.ValueBindU i v = copoint b
+      in Just (copoint i, v)
 valueBind _                                               = Nothing
 
 foreignValueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Type f))
@@ -274,9 +279,9 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
                       | S.TypeVariable i <- copoint t00 -> do
                         let t01' = substitute i t1 t01
                         pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01' <$ v
-                      | S.strip t1 == S.strip t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01 <$ v
-                      | otherwise -> throw $ MismatchException (Right $ S.strip t00) (S.strip t1) $ S.location t1
-                _ -> throw $ MismatchException (Left "function") (S.strip t0) $ S.location t0
+                      | S.toIdentity t1 == S.toIdentity t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01 <$ v
+                      | otherwise -> throw $ MismatchException (Right $ S.toIdentity t00) (S.toIdentity t1) $ S.location t1
+                _ -> throw $ MismatchException (Left "function") (S.toIdentity t0) $ S.location t0
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (variableTypes', p') <- typeOfProcedureStep variableTypes prim p
@@ -297,9 +302,9 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
           | S.TypeAnnotation' v' t <- copoint a -> do
               v'' <- typeOfTerm variableTypes prim v'
               let S.TypedValue _ t' = copoint v''
-              if S.strip t == S.strip t'
+              if S.toIdentity t == S.toIdentity t'
                 then pure v''
-                else throw $ MismatchException (Right $ S.strip t) (S.strip t') $ S.location t'
+                else throw $ MismatchException (Right $ S.toIdentity t) (S.toIdentity t') $ S.location t'
         S.Let ds v' -> do
           ds' <- definitions variableTypes prim ds
           let variableTypes' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` variableTypes
@@ -333,7 +338,7 @@ typeOfProcedureStep
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
-  )
+     )
   => VariableTypes f
   -> PrimitivesImported
   -> f (ProcedureStep 'S.Untyped et ev f)
@@ -351,13 +356,13 @@ typeOfProcedureStep variableTypes prim s =
       let S.TypedValue _ t = copoint v'
       case copoint t of
         S.ProcedureType _ -> pure (variableTypes, S.CallProcedureStep v' <$ s)
-        _                 -> throw $ MismatchException (Left "procedure") (S.strip t) $ S.location t
+        _                 -> throw $ MismatchException (Left "procedure") (S.toIdentity t) $ S.location t
 
-primitivesImported :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImported
+primitivesImported :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImported
 primitivesImported m =
-  case S.strip m of
-    S.Module _ ms _ ->
-      if ["kmkm", "prim"] `elem` ms
+  case S.toIdentity m of
+    Identity (S.Module _ ms _) ->
+      if Identity ["kmkm", "prim"] `elem` runIdentity ms
         then PrimitivesImported { int = True, uint = True, frac2 = True, string = True }
         else PrimitivesImported { int = False, uint = False, frac2 = False, string = False }
 
@@ -372,7 +377,7 @@ data PrimitivesImported =
 
 data Exception
   = NotFoundException S.QualifiedIdentifier (Maybe S.Location)
-  | MismatchException { expected :: Either Text (S.Type 'S.NameResolved 'S.Curried B.Bare Identity), actual :: S.Type 'S.NameResolved 'S.Curried B.Bare Identity, location :: Maybe S.Location }
+  | MismatchException { expected :: Either Text (Identity (S.Type 'S.NameResolved 'S.Curried Identity)), actual :: Identity (S.Type 'S.NameResolved 'S.Curried Identity), location :: Maybe S.Location }
   | BindProcedureEndException (Maybe S.Location)
   | RecursionException (Set S.QualifiedIdentifier)
   | PrimitiveTypeException S.QualifiedIdentifier (Maybe S.Location)

@@ -10,20 +10,19 @@ module Language.Kmkm.Internal.Build.PartiallyApply
 import           Language.Kmkm.Internal.Exception (unreachable)
 import qualified Language.Kmkm.Internal.Syntax    as S
 
-import qualified Barbies.Bare               as B
 import           Control.Monad              (replicateM)
 import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
 import           Data.Copointed             (Copointed (copoint))
 import           Data.Traversable           (for)
 
-type Module et ev f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Module et ev f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f
 
-type Definition et ev f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Definition et ev f = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f
 
-type Value et ev f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type Value et ev f = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f
 
-type ProcedureStep et ev f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f
+type ProcedureStep et ev f = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f
 
 type Pass = State Word
 
@@ -32,8 +31,8 @@ partiallyApply
      , Copointed f
      , S.HasLocation f
      )
-  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
+  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
 partiallyApply = flip evalState 0 . module'
 
 module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module et ev f) -> Pass (f (Module et ev f))
@@ -45,8 +44,8 @@ module' =
 definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition et ev f) -> Pass (f (Definition et ev f))
 definition =
   traverse $ \case
-    S.ValueBind (S.ValueBindU i v) -> scope $ S.ValueBind . S.ValueBindU i <$> term v
-    d                              -> pure d
+    S.ValueBind b -> scope $ S.ValueBind <$> for b (\(S.ValueBindU i v) -> S.ValueBindU i <$> term v)
+    d             -> pure d
 
 term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value et ev f) -> Pass (f (Value et ev f))
 term v =

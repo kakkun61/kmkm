@@ -1,9 +1,11 @@
-{-# LANGUAGE DataKinds                #-}
-{-# LANGUAGE FlexibleInstances        #-}
-{-# LANGUAGE OverloadedLists          #-}
-{-# LANGUAGE OverloadedStrings        #-}
-{-# LANGUAGE PolyKinds                #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedLists   #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds         #-}
+{-# LANGUAGE TypeFamilies      #-}
+
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Language.Kmkm.Internal.Parse.SexpSpec where
 
@@ -12,20 +14,18 @@ import qualified Language.Kmkm.Internal.Parse.Sexp.C as C
 import           Language.Kmkm.Internal.Syntax
 import           Language.Kmkm.Internal.Syntax.Sexp
 
-import           Barbies.Bare.Layered
-import           Control.Monad.Catch         (MonadCatch, MonadThrow)
-import           Control.Monad.Except        (Except)
-import           Control.Monad.Reader        (ReaderT)
-import           Data.Copointed
-import           Data.Functor.Barbie.Layered
+import Instance ()
+
+import           Control.Monad.Catch     (MonadCatch, MonadThrow)
+import           Control.Monad.Except    (Except)
+import           Control.Monad.Reader    (ReaderT)
 import           Data.Functor.Identity
-import qualified Data.Kind                   as K
 import           Data.Text
-import           Data.Void                   (Void)
+import           Data.Void               (Void)
 import           Test.Hspec
-import qualified Text.Megaparsec             as M
-import           Text.Megaparsec.Parsers     (ParsecT (unParsecT))
-import qualified Text.Parser.Combinators     as P
+import qualified Text.Megaparsec         as M
+import           Text.Megaparsec.Parsers (ParsecT (unParsecT))
+import qualified Text.Parser.Combinators as P
 
 spec :: Spec
 spec = do
@@ -117,7 +117,7 @@ spec = do
         ps valueBind "spec" ["bind-value", "foo", "123"]
           `shouldReturn`
             ( ValueBindU "foo" (Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 123 10)
-                :: ValueBind 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+                :: ValueBind 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Identity
             )
 
     describe "foreignValueBind" $ do
@@ -125,7 +125,7 @@ spec = do
         ps foreignValueBind "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
           `shouldReturn`
             ( ForeignValueBind (Identity "foo") (Identity $ EmbeddedCValue "" (Identity []) "") (Identity $ TypeVariable "foo")
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Identity
             )
 
     describe "foreignTypeBind" $ do
@@ -139,14 +139,14 @@ spec = do
         ps dataDefinition "spec" ["define", "bool", ["list", "false", "true"]]
           `shouldReturn`
             ( DataDefinition "bool" (Identity [Identity (ValueConstructor "false" $ Identity []), Identity (ValueConstructor "true" $ Identity [])])
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Identity
             )
 
       it "define book (list (book (list (title string) (author string))))" $ do
         ps dataDefinition "spec" ["define", "book", ["list", ["book", ["list", ["title", "string"], ["author", "string"]]]]]
           `shouldReturn`
             ( DataDefinition "book" (Identity [Identity (ValueConstructor "book" $ Identity [Identity (Field "title" $ Identity $ TypeVariable "string"), Identity (Field "author" $ Identity $ TypeVariable "string")])])
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Identity
             )
 
     describe "definition" $ do
@@ -159,41 +159,27 @@ spec = do
         ps definition "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
           `shouldReturn`
             ( ForeignValueBind (Identity "foo") (Identity $ EmbeddedCValue "" (Identity []) "") (Identity $ TypeVariable "foo")
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Covered Identity
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue Identity
             )
 
     describe "module" $ do
       it "(module math (list) (list (bind-value foo 123)" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["bind-value", "foo", "123"]]]
           `shouldReturn`
-            Module "math" (Identity []) (Identity [Identity $ ValueBind $ ValueBindU "foo" $ Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 123 10])
+            Module "math" (Identity []) (Identity [Identity $ ValueBind $ Identity $ ValueBindU "foo" $ Identity $ UntypedValue $ Identity $ Literal $ Identity $ Integer 123 10])
 
       it "(module math (list) (list (define bool (false true)))" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["define", "bool", ["list", "false", "true"]]]]
           `shouldReturn` Module (Identity "math") (Identity []) (Identity [Identity $ DataDefinition (Identity "bool") (Identity [Identity (ValueConstructor "false" $ Identity []), Identity (ValueConstructor "true" $ Identity [])])])
 
-pt :: MonadThrow m => String -> Text -> m (Sexp Bare Identity)
-pt label text = copoint . fmap (bstripFrom copoint) <$> parseText label text
+pt :: MonadThrow m => String -> Text -> m (Identity (Sexp Identity))
+pt label text = toIdentity <$> parseText label text
 
-ps :: MonadCatch m => (Identity (Sexp Covered Identity) -> ReaderT (Env EmbeddedCType EmbeddedCValue Identity) (Except [Exception]) (Identity a)) -> String -> Sexp Bare Identity -> m a
-ps parser label sexp = runIdentity <$> parseSexp' parser [C.embeddedParser] (traverse $ \(EmbeddedTypeC t) -> Just t) (traverse $ \(EmbeddedValueC v) -> Just v) label (Identity $ bcover sexp)
+ps :: MonadCatch m => (Identity (Sexp Identity) -> ReaderT (Env EmbeddedCType EmbeddedCValue Identity) (Except [Exception]) (Identity a)) -> String -> Identity (Sexp Identity) -> m a
+ps parser label sexp = runIdentity <$> parseSexp' parser [C.embeddedParser] (traverse $ \(EmbeddedTypeC t) -> Just t) (traverse $ \(EmbeddedValueC v) -> Just v) label sexp
 
 pc :: MonadFail m => ParsecT Void Text Identity a -> Text -> m a
 pc parser input =
   case M.runParser (unParsecT $ parser <* P.eof) "spec" input of
     Right s -> pure s
     Left e  -> fail $ M.errorBundlePretty e
-
-type Const2 :: K.Type -> k -> l -> m -> n -> K.Type
-newtype Const2 a b c d e =
-  Const2 a
-  deriving (Show, Eq)
-
-instance FunctorB (Const2 a b c Covered) where
-  bmap _ (Const2 a) = Const2 a
-
-instance BareB (Const2 a b c) where
-  bstrip (Const2 a) = Const2 a
-  bcover (Const2 a) = Const2 a
-
-newtype Unit2 a b = Unit2 () deriving (Show, Read, Eq, Ord)

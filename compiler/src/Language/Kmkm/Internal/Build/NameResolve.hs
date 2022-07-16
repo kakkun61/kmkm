@@ -12,11 +12,11 @@ module Language.Kmkm.Internal.Build.NameResolve
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Barbies.Bare                     as B (Covered)
-import qualified Barbies.Bare.Layered             as B (BareB)
 import qualified Control.Exception                as E
 import           Control.Exception.Safe           (MonadThrow, throw)
 import           Data.Copointed                   (Copointed (copoint))
+import qualified Data.Functor.Barbie.Layered      as B
+import           Data.Functor.Identity            (Identity (Identity, runIdentity))
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as M
 import           Data.Set                         (Set)
@@ -26,44 +26,44 @@ import qualified Data.Typeable                    as Y
 import           GHC.Generics                     (Generic)
 import qualified Language.Kmkm.Internal.Exception as X
 
-type Module n et ev = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Module n et ev = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Definition n et ev = S.Definition n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Definition n et ev = S.Definition n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type ValueConstructor n et ev = S.ValueConstructor n 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+type ValueConstructor n et ev = S.ValueConstructor n 'S.Curried 'S.LambdaUnlifted et ev
 
-type Field n et ev = S.Field n 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+type Field n et ev = S.Field n 'S.Curried 'S.LambdaUnlifted et ev
 
-type ValueBind n et ev = S.ValueBind n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type ValueBind n et ev = S.ValueBind n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Value n et ev = S.Value n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Value n et ev = S.Value n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Value' n et ev = S.Value' n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Value' n et ev = S.Value' n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type ProcedureStep n et ev = S.ProcedureStep n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type ProcedureStep n et ev = S.ProcedureStep n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type TypeAnnotation n et ev = S.TypeAnnotation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type TypeAnnotation n et ev = S.TypeAnnotation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Application n et ev = S.Application n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Application n et ev = S.Application n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Function n et ev = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Function n et ev = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Type n = S.Type n 'S.Curried B.Covered
+type Type n = S.Type n 'S.Curried
 
-type FunctionType n = S.FunctionType n 'S.Curried B.Covered
+type FunctionType n = S.FunctionType n 'S.Curried
 
 nameResolve
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.ModuleName (Set S.Identifier)
   -> Map S.ModuleName (Set S.Identifier)
-  -> f (S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered f)
-  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered f))
+  -> f (S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f)
+  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f))
 nameResolve = module'
 
 module'
@@ -71,8 +71,8 @@ module'
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.ModuleName (Set S.Identifier)
   -> Map S.ModuleName (Set S.Identifier)
@@ -94,8 +94,8 @@ definition
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -128,27 +128,29 @@ valueBind
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
   -> S.ModuleName
   -> Affiliation
-  -> ValueBind 'S.NameUnresolved et ev f
-  -> m (ValueBind 'S.NameResolved et ev f)
-valueBind valueAffiliations typeAffiliations moduleName (Global _) (S.ValueBindU i v) =
-  S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
-valueBind valueAffiliations typeAffiliations moduleName Local (S.ValueBindU i v) =
-  S.ValueBindU (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+  -> f (ValueBind 'S.NameUnresolved et ev f)
+  -> m (f (ValueBind 'S.NameResolved et ev f))
+valueBind valueAffiliations typeAffiliations moduleName (Global _) =
+  traverse $ \(S.ValueBindU i v) ->
+    S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+valueBind valueAffiliations typeAffiliations moduleName Local =
+  traverse $ \(S.ValueBindU i v) ->
+    S.ValueBindU (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
 value
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -165,8 +167,8 @@ value'
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -199,8 +201,8 @@ procedureStep
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -222,8 +224,8 @@ typeAnnotation
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -239,8 +241,8 @@ application
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -256,8 +258,8 @@ function
      , Traversable f
      , Copointed f
      , S.HasLocation f
-     , B.BareB et
-     , B.BareB ev
+     , B.FunctorB et
+     , B.FunctorB ev
      )
   => Map S.Identifier Affiliation
   -> Map S.Identifier Affiliation
@@ -325,29 +327,29 @@ referenceIdentifier affiliations i =
         _                          -> throw $ UnknownIdentifierException (copoint i) $ S.location i
     S.QualifiedIdentifier i' -> pure $ i' <$ i
 
-boundIdentifiers :: (Functor f, Functor g, Copointed g, B.BareB et, B.BareB ev) => f (g (Module 'S.NameUnresolved et ev g)) -> (f (Set S.Identifier), f (Set S.Identifier))
+boundIdentifiers :: (Functor f, Functor g, Copointed g, B.FunctorB et, B.FunctorB ev) => f (g (Module 'S.NameUnresolved et ev g)) -> (f (Set S.Identifier), f (Set S.Identifier))
 boundIdentifiers modules =
   (eachModule boundValueIdentifier <$> modules, eachModule boundTypeIdentifier <$> modules)
   where
     eachModule f m = let S.Module _ _ ds = copoint m in S.unions $ f <$> copoint ds
 
-boundValueIdentifier :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
+boundValueIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
 boundValueIdentifier =
-  boundValueIdentifier' . S.strip
+  boundValueIdentifier' . runIdentity . S.toIdentity
   where
-    boundValueIdentifier' (S.DataDefinition _ cs)          = S.fromList $ (\(S.ValueConstructor i _) -> i) <$> cs
-    boundValueIdentifier' (S.ValueBind (S.ValueBindU i _)) = S.singleton i
-    boundValueIdentifier' (S.ForeignValueBind i _ _)       = S.singleton i
+    boundValueIdentifier' (S.DataDefinition _ (Identity cs))          = S.fromList $ (\(Identity (S.ValueConstructor (Identity i) _)) -> i) <$> cs
+    boundValueIdentifier' (S.ValueBind (Identity (S.ValueBindU (Identity i) _))) = S.singleton i
+    boundValueIdentifier' (S.ForeignValueBind (Identity i) _ _)       = S.singleton i
     boundValueIdentifier' _                                = S.empty
 
-boundTypeIdentifier :: (Functor f, Copointed f, B.BareB et, B.BareB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
+boundTypeIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
 boundTypeIdentifier =
-  boundTypeIdentifier' . S.strip
+  boundTypeIdentifier' . runIdentity . S.toIdentity
   where
-    boundTypeIdentifier' (S.DataDefinition i _)  = S.singleton i
-    boundTypeIdentifier' (S.TypeBind i _)        = S.singleton i
-    boundTypeIdentifier' (S.ForeignTypeBind i _) = S.singleton i
-    boundTypeIdentifier' _                       = S.empty
+    boundTypeIdentifier' (S.DataDefinition (Identity i) _)  = S.singleton i
+    boundTypeIdentifier' (S.TypeBind (Identity i) _)        = S.singleton i
+    boundTypeIdentifier' (S.ForeignTypeBind (Identity i) _) = S.singleton i
+    boundTypeIdentifier' _                                  = S.empty
 
 importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =

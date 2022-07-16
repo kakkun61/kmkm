@@ -12,42 +12,41 @@ module Language.Kmkm.Internal.Build.Uncurry
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Barbies.Bare                     as B
 import           Data.Copointed                   (Copointed (copoint))
 import           Data.List.NonEmpty               (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
 import           Prelude                          (Functor (fmap, (<$)), otherwise, ($), (<$>))
 
-type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type Definition c et ev = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Definition c et ev = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type ValueConstructor c et ev = S.ValueConstructor 'S.NameResolved c 'S.LambdaUnlifted et ev B.Covered
+type ValueConstructor c et ev = S.ValueConstructor 'S.NameResolved c 'S.LambdaUnlifted et ev
 
-type Field c et ev = S.Field 'S.NameResolved c 'S.LambdaUnlifted et ev B.Covered
+type Field c et ev = S.Field 'S.NameResolved c 'S.LambdaUnlifted et ev
 
-type Value c et ev = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Value c et ev = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type Value' c et ev = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Value' c et ev = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type ProcedureStep c et ev = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type ProcedureStep c et ev = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type Application c et ev = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Application c et ev = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type Function c et ev = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev B.Covered
+type Function c et ev = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
-type Type c = S.Type 'S.NameResolved c B.Covered
+type Type c = S.Type 'S.NameResolved c
 
-type FunctionType c = S.FunctionType 'S.NameResolved c B.Covered
+type FunctionType c = S.FunctionType 'S.NameResolved c
 
 uncurry
   :: ( Functor f
      , Copointed f
      , S.HasLocation f
      )
-  => f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev B.Covered f)
+  => f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev f)
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
 uncurry = module'
 
 module' :: (Functor f, Copointed f, S.HasLocation f) => f (Module 'S.Curried et ev f) -> f (Module 'S.Uncurried et ev f)
@@ -56,11 +55,11 @@ module' = fmap $ \(S.Module i ds ms) -> S.Module i ds $ fmap definition <$> ms
 definition :: (Functor f, Copointed f, S.HasLocation f) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
 definition =
   fmap $ \case
-    S.DataDefinition i cs          -> S.DataDefinition i $ fmap valueConstructor <$> cs
-    S.TypeBind i t                 -> S.TypeBind i $ typ t
-    S.ForeignTypeBind i c          -> S.ForeignTypeBind i c
-    S.ValueBind (S.ValueBindU i v) -> S.ValueBind $ S.ValueBindU i $ typedValue v
-    S.ForeignValueBind i c t       -> S.ForeignValueBind i c $ typ t
+    S.DataDefinition i cs    -> S.DataDefinition i $ fmap valueConstructor <$> cs
+    S.TypeBind i t           -> S.TypeBind i $ typ t
+    S.ForeignTypeBind i c    -> S.ForeignTypeBind i c
+    S.ValueBind b            -> S.ValueBind $ (\(S.ValueBindU i v) -> S.ValueBindU i $ typedValue v) <$> b
+    S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
 
 valueConstructor :: (Functor f, Copointed f, S.HasLocation f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
 valueConstructor = fmap $ \(S.ValueConstructor i fs) -> S.ValueConstructor i (fmap field <$> fs)

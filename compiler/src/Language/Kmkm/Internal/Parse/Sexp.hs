@@ -34,8 +34,6 @@ module Language.Kmkm.Internal.Parse.Sexp
   , MonadAlternativeError
   ) where
 
-import           Barbies.Bare                          (Covered)
-import qualified Barbies.Bare                          as B
 import           Control.Applicative                   (Alternative (many, some), liftA2, (<|>))
 import           Control.Exception.Safe                (MonadCatch, MonadThrow, throw)
 import qualified Control.Exception.Safe                as E
@@ -70,52 +68,50 @@ import qualified Text.Parser.Char                      as P
 import qualified Text.Parser.Combinators               as P
 import qualified Text.Parser.Token                     as P
 
-type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type ValueConstructor et ev = S.ValueConstructor 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+type ValueConstructor et ev = S.ValueConstructor 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev
 
-type Field et ev = S.Field 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev B.Covered
+type Field et ev = S.Field 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev
 
-type ValueBind et ev = S.ValueBind 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type ValueBind et ev = S.ValueBind 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Type = S.Type 'S.NameUnresolved 'S.Curried B.Covered
+type Type = S.Type 'S.NameUnresolved 'S.Curried
 
-type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried B.Covered
+type FunctionType = S.FunctionType 'S.NameUnresolved 'S.Curried
 
-type Value et ev = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Value et ev = S.Value 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Function et ev = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Function et ev = S.Function 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev B.Covered
+type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
-type EmbeddedValue = S.EmbeddedValue B.Covered
+type EmbeddedValue = S.EmbeddedValue
 
-type EmbeddedType = S.EmbeddedType B.Covered
+type EmbeddedType = S.EmbeddedType
 
-type Sexp = SS.Sexp Covered
+type SexpParser f m a = f (SS.Sexp f) -> m a
 
-type SexpParser f m a = f (Sexp f) -> m a
-
-type Env :: (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
+type Env :: ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data Env et ev f =
   Env
     { filePath        :: FilePath
     , embeddedParsers :: [EmbeddedParser f]
-    , isEmbeddedType  :: f (EmbeddedType f) -> Maybe (f (et B.Covered f))
-    , isEmbeddedValue :: f (EmbeddedValue f) -> Maybe (f (ev B.Covered f))
+    , isEmbeddedType  :: f (EmbeddedType f) -> Maybe (f (et f))
+    , isEmbeddedValue :: f (EmbeddedValue f) -> Maybe (f (ev f))
     }
 
 parse
   :: MonadCatch m
   => [EmbeddedParser S.WithLocation] -- ^ Embedded parser.
-  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et B.Covered S.WithLocation))) -- ^ Embedded type filter.
-  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev B.Covered S.WithLocation))) -- ^ Embedded value filter.
+  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et S.WithLocation))) -- ^ Embedded type filter.
+  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev S.WithLocation))) -- ^ Embedded value filter.
   -> FilePath
   -> Text -- ^ Input.
   -> m (S.WithLocation (Module et ev S.WithLocation))
@@ -123,7 +119,7 @@ parse embeddedParsers isEmbeddedType isEmbeddedValue filePath input = do
   s <- parseText filePath input
   parseSexp embeddedParsers isEmbeddedType isEmbeddedValue filePath s
 
-parseText :: MonadThrow m => FilePath -> Text -> m (S.WithLocation (Sexp S.WithLocation))
+parseText :: MonadThrow m => FilePath -> Text -> m (S.WithLocation (SS.Sexp S.WithLocation))
 parseText filePath input =
   case M.runParser (unParsecT $ sexp filePath <* P.eof) filePath input of
     Right s -> return s
@@ -138,10 +134,10 @@ parseInParsec filePath parser input =
 parseSexp
   :: MonadCatch m
   => [EmbeddedParser S.WithLocation] -- ^ Embedded parser.
-  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et B.Covered S.WithLocation))) -- ^ Embedded type filter.
-  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev B.Covered S.WithLocation))) -- ^ Embedded value filter.
+  -> (S.WithLocation (EmbeddedType S.WithLocation) -> Maybe (S.WithLocation (et S.WithLocation))) -- ^ Embedded type filter.
+  -> (S.WithLocation (EmbeddedValue S.WithLocation) -> Maybe (S.WithLocation (ev S.WithLocation))) -- ^ Embedded value filter.
   -> FilePath
-  -> S.WithLocation (Sexp S.WithLocation)
+  -> S.WithLocation (SS.Sexp S.WithLocation)
   -> m (S.WithLocation (Module et ev S.WithLocation))
 parseSexp embeddedParsers isEmbeddedType isEmbeddedValue filePath s =
   case runExcept $ flip runReaderT Env { filePath, embeddedParsers, isEmbeddedType, isEmbeddedValue } $ module' s of
@@ -150,19 +146,19 @@ parseSexp embeddedParsers isEmbeddedType isEmbeddedValue filePath s =
 
 parseSexp'
   :: MonadCatch m
-  => (f (Sexp f) -> ReaderT (Env et ev f) (Except [Exception]) a)
+  => (f (SS.Sexp f) -> ReaderT (Env et ev f) (Except [Exception]) a)
   -> [EmbeddedParser f]
-  -> (f (EmbeddedType f) -> Maybe (f (et B.Covered f)))
-  -> (f (EmbeddedValue f) -> Maybe (f (ev B.Covered f)))
+  -> (f (EmbeddedType f) -> Maybe (f (et f)))
+  -> (f (EmbeddedValue f) -> Maybe (f (ev f)))
   -> FilePath
-  -> f (Sexp f)
+  -> f (SS.Sexp f)
   -> m a
 parseSexp' p embeddedParsers isEmbeddedType isEmbeddedValue filePath s =
   case runExcept $ flip runReaderT Env { filePath, embeddedParsers, isEmbeddedType, isEmbeddedValue } $ p s of
     Right a -> pure a
     Left e  -> throw e
 
-sexp :: FilePath -> ParsecT Void Text Identity (S.WithLocation (Sexp S.WithLocation))
+sexp :: FilePath -> ParsecT Void Text Identity (S.WithLocation (SS.Sexp S.WithLocation))
 sexp filePath = do
   P.token $
     withLocation filePath $
@@ -197,7 +193,7 @@ definition s =
   P.choice
     [ dataDefinition s
     , foreignValueBind s
-    , fmap S.ValueBind <$> valueBind s
+    , (<$ s) . S.ValueBind <$> valueBind s
     , foreignTypeBind s
     ]
 
@@ -553,14 +549,14 @@ symbol sym label s =
       | otherwise -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected, but got \"" ++ T.unpack sym' ++ "\"") label $ S.location s]
     s' -> throwError [SexpException ("an atom expected, but got " ++ abstractMessage s') label $ S.location s]
 
-abstractMessage :: SS.Sexp b f -> String
+abstractMessage :: SS.Sexp f -> String
 abstractMessage (SS.Atom m)  = T.unpack $ "an atom of \"" <> m <> "\""
 abstractMessage (SS.List ss) = "a list with " ++ show (length ss) ++ " element(s)"
 
 data EmbeddedParser f =
   EmbeddedParser
-    { embeddedValueParser :: f (Sexp f) -> Either [Exception] (f (EmbeddedValue f))
-    , embeddedTypeParser  :: f (Sexp f) -> Either [Exception] (f (EmbeddedType f))
+    { embeddedValueParser :: f (SS.Sexp f) -> Either [Exception] (f (EmbeddedValue f))
+    , embeddedTypeParser  :: f (SS.Sexp f) -> Either [Exception] (f (EmbeddedType f))
     }
   deriving Generic
 

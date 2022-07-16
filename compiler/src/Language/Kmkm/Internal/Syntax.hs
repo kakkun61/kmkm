@@ -65,20 +65,18 @@ module Language.Kmkm.Internal.Syntax
   , LambdaLifting (..)
   , NameResolving (..)
     -- * Higher kinded data
-  , strip
+  , toIdentity
     -- * Pretty printing
   , Pretty (..)
   ) where
 
 import qualified Language.Kmkm.Internal.Exception as X
 
-import           Barbies.Bare.Layered        (BareB (bcover, bstrip), bstripFrom)
-import qualified Barbies.Bare.Layered        as B
 import           Data.Bifunctor              (Bifunctor (bimap))
 import           Data.Copointed              (Copointed (copoint))
 import           Data.Foldable               (Foldable (fold))
 import           Data.Functor.Barbie.Layered (FunctorB (bmap))
-import           Data.Functor.Identity       (Identity (Identity, runIdentity))
+import           Data.Functor.Identity       (Identity (Identity))
 import qualified Data.Kind                   as K
 import           Data.List.NonEmpty          (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty          as N
@@ -91,279 +89,207 @@ import           GHC.Generics                (Generic)
 
 -- Module
 
-type Module :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
-data Module n c l t et ev b f =
-  Module (B.Wear b f ModuleName) (B.Wear b f [B.Wear b f ModuleName]) (B.Wear b f [B.Wear b f (Definition n c l t et ev b f)])
+type Module :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+data Module n c l t et ev f =
+  Module (f ModuleName) (f [f ModuleName]) (f [f (Definition n c l t et ev f)])
   deriving Generic
 
-type ModuleConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type ModuleConstraint cls n c l t et ev b f =
-  ( cls (B.Wear b f ModuleName)
-  , cls (B.Wear b f [B.Wear b f ModuleName])
-  , cls (B.Wear b f (Definition n c l t et ev b f))
-  , cls (B.Wear b f [B.Wear b f (Definition n c l t et ev b f)])
+type ModuleConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ModuleConstraint cls n c l t et ev f =
+  ( cls (f ModuleName)
+  , cls (f [f ModuleName])
+  , cls (f (Definition n c l t et ev f))
+  , cls (f [f (Definition n c l t et ev f)])
   )
 
-deriving instance ModuleConstraint Show n c l t et ev b f => Show (Module n c l t et ev b f)
-deriving instance ModuleConstraint Eq n c l t et ev b f => Eq (Module n c l t et ev b f)
-deriving instance ModuleConstraint Ord n c l t et ev b f => Ord (Module n c l t et ev b f)
+deriving instance ModuleConstraint Show n c l t et ev f => Show (Module n c l t et ev f)
+deriving instance ModuleConstraint Eq n c l t et ev f => Eq (Module n c l t et ev f)
+deriving instance ModuleConstraint Ord n c l t et ev f => Ord (Module n c l t et ev f)
 
 instance
-  ( FunctorB (FunctionType n c B.Covered)
-  , FunctorB (ValueBind n c l t et ev B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
+  ( FunctorB (FunctionType n c)
+  , FunctorB (ValueBind n c l t et ev)
+  , FunctorB et
+  , FunctorB ev
   ) =>
-  FunctorB (Module n c l t et ev B.Covered) where
+  FunctorB (Module n c l t et ev) where
   bmap f (Module n ms ds) = Module (f n) (fmap f <$> f ms) (fmap (fmap (bmap f) . f) <$> f ds)
-
-instance
-  ( BareB (ValueConstructor n c l et ev)
-  , BareB (ValueBind n c l t et ev)
-  , BareB (FunctionType n c)
-  , BareB et
-  , BareB ev
-  ) =>
-  BareB (Module n c l t et ev) where
-  bstrip (Module (Identity n) (Identity ms) (Identity ds)) = Module n (runIdentity <$> ms) (bstrip . runIdentity <$> ds)
-  bcover (Module n ms ds) = Module (Identity n) (Identity $ Identity <$> ms) (Identity $ Identity . bcover <$> ds)
 
 -- Definition
 
-type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
-data Definition n c l t et ev b f
-  = DataDefinition (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (ValueConstructor n c l et ev b f)])
-  | TypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
-  | ValueBind (ValueBind n c l t et ev b f)
-  | ForeignTypeBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (et b f))
-  | ForeignValueBind (B.Wear b f (BindIdentifier n)) (B.Wear b f (ev b f)) (B.Wear b f (Type n c b f))
+type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+data Definition n c l t et ev f
+  = DataDefinition (f (BindIdentifier n)) (f [f (ValueConstructor n c l et ev f)])
+  | TypeBind (f (BindIdentifier n)) (f (Type n c f))
+  | ValueBind (f (ValueBind n c l t et ev f))
+  | ForeignTypeBind (f (BindIdentifier n)) (f (et f))
+  | ForeignValueBind (f (BindIdentifier n)) (f (ev f)) (f (Type n c f))
   deriving Generic
 
-type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type DefinitionConstraint cls n c l t et ev b f =
-  ( cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f [B.Wear b f (ValueConstructor n c l et ev b f)])
-  , cls (B.Wear b f (Type n c b f))
-  , cls (ValueBind n c l t et ev b f)
-  , cls (B.Wear b f CHeader)
-  , cls (B.Wear b f [B.Wear b f CHeader])
-  , cls (B.Wear b f (et b f))
-  , cls (B.Wear b f (ev b f))
+type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type DefinitionConstraint cls n c l t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f [f (ValueConstructor n c l et ev f)])
+  , cls (f (Type n c f))
+  , cls (f (ValueBind n c l t et ev f))
+  , cls (f CHeader)
+  , cls (f [f CHeader])
+  , cls (f (et f))
+  , cls (f (ev f))
   )
 
-deriving instance DefinitionConstraint Show n c l t et ev b f => Show (Definition n c l t et ev b f)
-deriving instance DefinitionConstraint Eq n c l t et ev b f => Eq (Definition n c l t et ev b f)
-deriving instance DefinitionConstraint Ord n c l t et ev b f => Ord (Definition n c l t et ev b f)
+deriving instance DefinitionConstraint Show n c l t et ev f => Show (Definition n c l t et ev f)
+deriving instance DefinitionConstraint Eq n c l t et ev f => Eq (Definition n c l t et ev f)
+deriving instance DefinitionConstraint Ord n c l t et ev f => Ord (Definition n c l t et ev f)
 
-instance (FunctorB (Type n c B.Covered), FunctorB (FunctionType n c B.Covered), FunctorB (ValueBind n c l t et ev B.Covered), FunctorB (et B.Covered), FunctorB (ev B.Covered)) => FunctorB (Definition n c l t et ev B.Covered) where
-  bmap :: forall f g. (Functor f, Functor g) => (forall a. f a -> g a) -> Definition n c l t et ev B.Covered f -> Definition n c l t et ev B.Covered g
+instance (FunctorB (Type n c), FunctorB (FunctionType n c), FunctorB (ValueBind n c l t et ev), FunctorB et, FunctorB ev) => FunctorB (Definition n c l t et ev) where
+  bmap :: forall f g. (Functor f, Functor g) => (forall a. f a -> g a) -> Definition n c l t et ev f -> Definition n c l t et ev g
   bmap f (DataDefinition n cs) =
     DataDefinition (f n) $ fmap (fmap (bmap f) . f) <$> f cs
   bmap f (TypeBind i t) = TypeBind (f i) (bmap f <$> f t)
-  bmap f (ValueBind b) = ValueBind (bmap f b)
+  bmap f (ValueBind b) = ValueBind (bmap f <$> f b)
   bmap f (ForeignTypeBind i c) =  ForeignTypeBind (f i) (bmap f <$> f c)
   bmap f (ForeignValueBind i c t) = ForeignValueBind (f i) (bmap f <$> f c) (bmap f <$> f t)
 
-instance (BareB (ValueConstructor n c l et ev), BareB (ValueBind n c l t et ev), BareB (FunctionType n c), BareB et, BareB ev) => BareB (Definition n c l t et ev) where
-  bstrip (DataDefinition (Identity i) (Identity cs)) =
-    DataDefinition i $ bstrip . runIdentity <$> cs
-  bstrip (TypeBind (Identity i) (Identity t)) = TypeBind i (bstrip t)
-  bstrip (ValueBind b) = ValueBind (bstrip b)
-  bstrip (ForeignTypeBind (Identity i) (Identity c)) = ForeignTypeBind i (bstrip c)
-  bstrip (ForeignValueBind (Identity i) (Identity c) (Identity t)) = ForeignValueBind i (bstrip c) (bstrip t)
-
-  bcover (DataDefinition i cs) =
-    DataDefinition (Identity i) $ Identity $ Identity . bcover <$> cs
-  bcover (TypeBind i t) = TypeBind (Identity i) (Identity $ bcover t)
-  bcover (ValueBind b) = ValueBind (bcover b)
-  bcover (ForeignTypeBind i c) = ForeignTypeBind (Identity i) (Identity $ bcover c)
-  bcover (ForeignValueBind i c t) = ForeignValueBind (Identity i) (Identity $ bcover c) (Identity $ bcover t)
-
 -- ValueConstructor
 
-type ValueConstructor :: NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
-data ValueConstructor n c l et ev b f = ValueConstructor (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (Field n c l et ev b f)])
+type ValueConstructor :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+data ValueConstructor n c l et ev f = ValueConstructor (f (BindIdentifier n)) (f [f (Field n c l et ev f)])
 
-type ValueConstructorConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type ValueConstructorConstraint cls n c l et ev b f =
-  ( cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f [B.Wear b f (Field n c l et ev b f)])
+type ValueConstructorConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ValueConstructorConstraint cls n c l et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f [f (Field n c l et ev f)])
   )
 
-deriving instance ValueConstructorConstraint Show n c l et ev b f => Show (ValueConstructor n c l et ev b f)
-deriving instance ValueConstructorConstraint Eq n c l et ev b f => Eq (ValueConstructor n c l et ev b f)
-deriving instance ValueConstructorConstraint Ord n c l et ev b f => Ord (ValueConstructor n c l et ev b f)
+deriving instance ValueConstructorConstraint Show n c l et ev f => Show (ValueConstructor n c l et ev f)
+deriving instance ValueConstructorConstraint Eq n c l et ev f => Eq (ValueConstructor n c l et ev f)
+deriving instance ValueConstructorConstraint Ord n c l et ev f => Ord (ValueConstructor n c l et ev f)
 
-instance FunctorB (FunctionType n c B.Covered) => FunctorB (ValueConstructor n c l et ev B.Covered) where
+instance FunctorB (FunctionType n c) => FunctorB (ValueConstructor n c l et ev) where
   bmap f (ValueConstructor i fs) = ValueConstructor (f i) (fmap (fmap (bmap f) . f) <$> f fs)
-
-instance (FunctorB (FunctionType n c B.Covered), BareB (FunctionType n c)) => BareB (ValueConstructor n c l et ev) where
-  bstrip (ValueConstructor (Identity i) (Identity fs)) = ValueConstructor i $ bstrip . runIdentity <$> fs
-  bcover (ValueConstructor i fs) = ValueConstructor (Identity i) $ Identity $ Identity . bcover <$> fs
 
 -- Field
 
-type Field :: NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
-data Field n c l et ev b f = Field (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
+type Field :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+data Field n c l et ev f = Field (f (BindIdentifier n)) (f (Type n c f))
 
-type FieldConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type FieldConstraint cls n c l et ev b f =
-  ( cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f (Type n c b f))
+type FieldConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type FieldConstraint cls n c l et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (Type n c f))
   )
 
-deriving instance FieldConstraint Show n c l et ev b f => Show (Field n c l et ev b f)
-deriving instance FieldConstraint Eq n c l et ev b f => Eq (Field n c l et ev b f)
-deriving instance FieldConstraint Ord n c l et ev b f => Ord (Field n c l et ev b f)
+deriving instance FieldConstraint Show n c l et ev f => Show (Field n c l et ev f)
+deriving instance FieldConstraint Eq n c l et ev f => Eq (Field n c l et ev f)
+deriving instance FieldConstraint Ord n c l et ev f => Ord (Field n c l et ev f)
 
-instance FunctorB (FunctionType n c B.Covered) => FunctorB (Field n c l et ev B.Covered) where
+instance FunctorB (FunctionType n c) => FunctorB (Field n c l et ev) where
   bmap f (Field i t) = Field (f i) (bmap f <$> f t)
-
-instance (FunctorB (FunctionType n c B.Covered), BareB (FunctionType n c)) => BareB (Field n c l et ev) where
-  bstrip (Field (Identity i) (Identity t)) = Field i $ bstrip t
-  bcover (Field i t) = Field (Identity i) $ Identity $ bcover t
 
 -- ValueBind
 
-type ValueBind :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+type ValueBind :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data family ValueBind
 
-type ValueBindConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type family ValueBindConstraint cls n c l t et ev b f where
-  ValueBindConstraint cls n c 'LambdaUnlifted t et ev b f =
-    ( cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f (Value n c 'LambdaUnlifted t et ev b f))
+type ValueBindConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type family ValueBindConstraint cls n c l t et ev f where
+  ValueBindConstraint cls n c 'LambdaUnlifted t et ev f =
+    ( cls (f (BindIdentifier n))
+    , cls (f (Value n c 'LambdaUnlifted t et ev f))
     )
 
-  ValueBindConstraint cls n c 'LambdaLifted t et ev b f =
-    ( cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f (Value n c 'LambdaLifted t et ev b f))
-    , cls (B.Wear b f (Type n c b f))
-    , cls (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n c b f))])
+  ValueBindConstraint cls n c 'LambdaLifted t et ev f =
+    ( cls (f (BindIdentifier n))
+    , cls (f (Value n c 'LambdaLifted t et ev f))
+    , cls (f (Type n c f))
+    , cls (f [f (f (BindIdentifier n), f (Type n c f))])
     )
 
-data instance ValueBind n c 'LambdaUnlifted t et ev b f =
-  ValueBindU (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c 'LambdaUnlifted t et ev b f))
+data instance ValueBind n c 'LambdaUnlifted t et ev f =
+  ValueBindU (f (BindIdentifier n)) (f (Value n c 'LambdaUnlifted t et ev f))
   deriving Generic
 
-deriving instance ValueBindConstraint Show n c 'LambdaUnlifted t et ev b f => Show (ValueBind n c 'LambdaUnlifted t et ev b f)
-deriving instance ValueBindConstraint Eq n c 'LambdaUnlifted t et ev b f => Eq (ValueBind n c 'LambdaUnlifted t et ev b f)
-deriving instance ValueBindConstraint Ord n c 'LambdaUnlifted t et ev b f => Ord (ValueBind n c 'LambdaUnlifted t et ev b f)
+deriving instance ValueBindConstraint Show n c 'LambdaUnlifted t et ev f => Show (ValueBind n c 'LambdaUnlifted t et ev f)
+deriving instance ValueBindConstraint Eq n c 'LambdaUnlifted t et ev f => Eq (ValueBind n c 'LambdaUnlifted t et ev f)
+deriving instance ValueBindConstraint Ord n c 'LambdaUnlifted t et ev f => Ord (ValueBind n c 'LambdaUnlifted t et ev f)
 
-instance FunctorB (Value n c 'LambdaUnlifted t et ev B.Covered) => FunctorB (ValueBind n c 'LambdaUnlifted t et ev B.Covered) where
+instance FunctorB (Value n c 'LambdaUnlifted t et ev) => FunctorB (ValueBind n c 'LambdaUnlifted t et ev) where
   bmap f (ValueBindU i v) = ValueBindU (f i) (bmap f <$> f v)
 
-instance BareB (Value n c 'LambdaUnlifted t et ev) => BareB (ValueBind n c 'LambdaUnlifted t et ev) where
-  bstrip (ValueBindU (Identity i) (Identity v)) = ValueBindU i (bstrip v)
-
-  bcover (ValueBindU i v) = ValueBindU (Identity i) (Identity $ bcover v)
-
-data instance ValueBind n c 'LambdaLifted t et ev b f
-  = ValueBindV (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c 'LambdaLifted t et ev b f))
-  | ValueBindN (B.Wear b f (BindIdentifier n)) (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n c b f))]) (B.Wear b f (Value n c 'LambdaLifted t et ev b f))
+data instance ValueBind n c 'LambdaLifted t et ev f
+  = ValueBindV (f (BindIdentifier n)) (f (Value n c 'LambdaLifted t et ev f))
+  | ValueBindN (f (BindIdentifier n)) (f [f (f (BindIdentifier n), f (Type n c f))]) (f (Value n c 'LambdaLifted t et ev f))
   deriving Generic
 
-deriving instance ValueBindConstraint Show n c 'LambdaLifted t et ev b f => Show (ValueBind n c 'LambdaLifted t et ev b f)
-deriving instance ValueBindConstraint Eq n c 'LambdaLifted t et ev b f => Eq (ValueBind n c 'LambdaLifted t et ev b f)
-deriving instance ValueBindConstraint Ord n c 'LambdaLifted t et ev b f => Ord (ValueBind n c 'LambdaLifted t et ev b f)
+deriving instance ValueBindConstraint Show n c 'LambdaLifted t et ev f => Show (ValueBind n c 'LambdaLifted t et ev f)
+deriving instance ValueBindConstraint Eq n c 'LambdaLifted t et ev f => Eq (ValueBind n c 'LambdaLifted t et ev f)
+deriving instance ValueBindConstraint Ord n c 'LambdaLifted t et ev f => Ord (ValueBind n c 'LambdaLifted t et ev f)
 
-instance (FunctorB (Value n c 'LambdaLifted t et ev B.Covered), FunctorB (FunctionType n c B.Covered)) => FunctorB (ValueBind n c 'LambdaLifted t et ev B.Covered) where
+instance (FunctorB (Value n c 'LambdaLifted t et ev), FunctorB (FunctionType n c)) => FunctorB (ValueBind n c 'LambdaLifted t et ev) where
   bmap f (ValueBindV i v) = ValueBindV (f i) (bmap f <$> f v)
   bmap f (ValueBindN i ps v) = ValueBindN (f i) (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
 
-instance (BareB (Value n c 'LambdaLifted t et ev), BareB (FunctionType n c)) => BareB (ValueBind n c 'LambdaLifted t et ev) where
-  bstrip (ValueBindV (Identity i) (Identity v)) = ValueBindV i (bstrip v)
-  bstrip (ValueBindN (Identity i) (Identity ps) (Identity v)) =
-    ValueBindN i (parameter <$> ps) (bstrip v)
-    where
-      parameter (Identity (Identity i, Identity t)) = (i, bstrip t)
-
-  bcover (ValueBindV i v) = ValueBindV (Identity i) (Identity $ bcover v)
-  bcover (ValueBindN i ps v) =
-    ValueBindN (Identity i) (Identity $ parameter <$> ps) (Identity $ bcover v)
-    where
-      parameter (i, t) = Identity (Identity i, Identity $ bcover t)
-
 -- EmbeddedValue
 
-newtype EmbeddedValue b f
-  = EmbeddedValueC (EmbeddedCValue b f)
+newtype EmbeddedValue f
+  = EmbeddedValueC (EmbeddedCValue f)
   deriving Generic
 
-deriving instance Show (EmbeddedCValue b f) => Show (EmbeddedValue b f)
-deriving instance Read (EmbeddedCValue b f) => Read (EmbeddedValue b f)
-deriving instance Eq (EmbeddedCValue b f) => Eq (EmbeddedValue b f)
-deriving instance Ord (EmbeddedCValue b f) => Ord (EmbeddedValue b f)
+deriving instance Show (EmbeddedCValue f) => Show (EmbeddedValue f)
+deriving instance Read (EmbeddedCValue f) => Read (EmbeddedValue f)
+deriving instance Eq (EmbeddedCValue f) => Eq (EmbeddedValue f)
+deriving instance Ord (EmbeddedCValue f) => Ord (EmbeddedValue f)
 
-instance FunctorB (EmbeddedValue B.Covered) where
+instance FunctorB EmbeddedValue where
   bmap f (EmbeddedValueC v) = EmbeddedValueC (bmap f v)
-
-instance BareB EmbeddedValue where
-  bstrip (EmbeddedValueC v) = EmbeddedValueC (bstrip v)
-
-  bcover (EmbeddedValueC v) = EmbeddedValueC (bcover v)
 
 -- EmbeddedCValue
 
-data EmbeddedCValue b f =
-  EmbeddedCValue { include :: B.Wear b f Text, parameters :: B.Wear b f [B.Wear b f Text], body :: B.Wear b f Text }
+data EmbeddedCValue f =
+  EmbeddedCValue { include :: f Text, parameters :: f [f Text], body :: f Text }
   deriving Generic
 
-deriving instance (Show (B.Wear b f Text), Show (B.Wear b f [B.Wear b f Text])) => Show (EmbeddedCValue b f)
-deriving instance (Read (B.Wear b f Text), Read (B.Wear b f [B.Wear b f Text])) => Read (EmbeddedCValue b f)
-deriving instance (Eq (B.Wear b f Text), Eq (B.Wear b f [B.Wear b f Text])) => Eq (EmbeddedCValue b f)
-deriving instance (Ord (B.Wear b f Text), Ord (B.Wear b f [B.Wear b f Text])) => Ord (EmbeddedCValue b f)
+deriving instance (Show (f Text), Show (f [f Text])) => Show (EmbeddedCValue f)
+deriving instance (Read (f Text), Read (f [f Text])) => Read (EmbeddedCValue f)
+deriving instance (Eq (f Text), Eq (f [f Text])) => Eq (EmbeddedCValue f)
+deriving instance (Ord (f Text), Ord (f [f Text])) => Ord (EmbeddedCValue f)
 
-instance FunctorB (EmbeddedCValue B.Covered) where
+instance FunctorB EmbeddedCValue where
   bmap f (EmbeddedCValue i ps b) = EmbeddedCValue (f i) (fmap f <$> f ps) (f b)
 
-instance BareB EmbeddedCValue where
-  bstrip (EmbeddedCValue (Identity i) (Identity ps) (Identity b)) = EmbeddedCValue i (runIdentity <$> ps) b
-
-  bcover (EmbeddedCValue i ps b) = EmbeddedCValue (Identity i) (Identity $ Identity <$> ps) (Identity b)
-
-isEmbeddedCValue :: Traversable f => f (EmbeddedValue b f) -> Maybe (f (EmbeddedCValue b f))
+isEmbeddedCValue :: Traversable f => f (EmbeddedValue f) -> Maybe (f (EmbeddedCValue f))
 isEmbeddedCValue = traverse $ \(EmbeddedValueC v) -> Just v
 
 -- EmbeddedType
 
-newtype EmbeddedType b f
-  = EmbeddedTypeC (EmbeddedCType b f)
+newtype EmbeddedType f
+  = EmbeddedTypeC (EmbeddedCType f)
   deriving Generic
 
-deriving instance (Show (B.Wear b f Text), Show (B.Wear b f [B.Wear b f Text])) => Show (EmbeddedType b f)
-deriving instance (Read (B.Wear b f Text), Read (B.Wear b f [B.Wear b f Text])) => Read (EmbeddedType b f)
-deriving instance (Eq (B.Wear b f Text), Eq (B.Wear b f [B.Wear b f Text])) => Eq (EmbeddedType b f)
-deriving instance (Ord (B.Wear b f Text), Ord (B.Wear b f [B.Wear b f Text])) => Ord (EmbeddedType b f)
+deriving instance (Show (f Text), Show (f [f Text])) => Show (EmbeddedType f)
+deriving instance (Read (f Text), Read (f [f Text])) => Read (EmbeddedType f)
+deriving instance (Eq (f Text), Eq (f [f Text])) => Eq (EmbeddedType f)
+deriving instance (Ord (f Text), Ord (f [f Text])) => Ord (EmbeddedType f)
 
-instance FunctorB (EmbeddedType B.Covered) where
+instance FunctorB EmbeddedType where
   bmap f (EmbeddedTypeC t) = EmbeddedTypeC (bmap f t)
-
-instance BareB EmbeddedType where
-  bstrip (EmbeddedTypeC t) = EmbeddedTypeC (bstrip t)
-
-  bcover (EmbeddedTypeC t) = EmbeddedTypeC (bcover t)
 
 -- EmbeddedCType
 
-data EmbeddedCType b f =
-  EmbeddedCType { include :: B.Wear b f Text, body :: B.Wear b f Text }
+data EmbeddedCType f =
+  EmbeddedCType { include :: f Text, body :: f Text }
   deriving Generic
 
-deriving instance (Show (B.Wear b f Text), Show (B.Wear b f [B.Wear b f Text])) => Show (EmbeddedCType b f)
-deriving instance (Read (B.Wear b f Text), Read (B.Wear b f [B.Wear b f Text])) => Read (EmbeddedCType b f)
-deriving instance (Eq (B.Wear b f Text), Eq (B.Wear b f [B.Wear b f Text])) => Eq (EmbeddedCType b f)
-deriving instance (Ord (B.Wear b f Text), Ord (B.Wear b f [B.Wear b f Text])) => Ord (EmbeddedCType b f)
+deriving instance (Show (f Text), Show (f [f Text])) => Show (EmbeddedCType f)
+deriving instance (Read (f Text), Read (f [f Text])) => Read (EmbeddedCType f)
+deriving instance (Eq (f Text), Eq (f [f Text])) => Eq (EmbeddedCType f)
+deriving instance (Ord (f Text), Ord (f [f Text])) => Ord (EmbeddedCType f)
 
-instance FunctorB (EmbeddedCType B.Covered) where
+instance FunctorB EmbeddedCType where
   bmap f (EmbeddedCType i b) = EmbeddedCType (f i) (f b)
 
-instance BareB EmbeddedCType where
-  bstrip (EmbeddedCType (Identity i) (Identity b)) = EmbeddedCType i b
-
-  bcover (EmbeddedCType i b) = EmbeddedCType (Identity i) (Identity b)
-
-isEmbeddedCType :: Traversable f => f (EmbeddedType b f) -> Maybe (f (EmbeddedCType b f))
+isEmbeddedCType :: Traversable f => f (EmbeddedType f) -> Maybe (f (EmbeddedCType f))
 isEmbeddedCType = traverse $ \(EmbeddedTypeC v) -> Just v
 
 -- CHeader
@@ -375,56 +301,43 @@ data CHeader
 
 -- Type
 
-type Type :: NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Type
-data Type n c b f
-  = TypeVariable (B.Wear b f (ReferenceIdentifier n))
-  | TypeApplication (B.Wear b f (Type n c b f)) (B.Wear b f (Type n c b f))
-  | FunctionType (B.Wear b f (FunctionType n c b f))
-  | ProcedureType (B.Wear b f (Type n c b f))
-  | ForAllType (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n c b f))
+type Type :: NameResolving -> Currying-> (K.Type -> K.Type) -> K.Type
+data Type n c f
+  = TypeVariable (f (ReferenceIdentifier n))
+  | TypeApplication (f (Type n c f)) (f (Type n c f))
+  | FunctionType (f (FunctionType n c f))
+  | ProcedureType (f (Type n c f))
+  | ForAllType (f (BindIdentifier n)) (f (Type n c f))
   deriving Generic
 
-type TypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type TypeConstraint cls n c b f =
-  ( cls (B.Wear b f (ReferenceIdentifier n))
-  , cls (FunctionType n c b f)
-  , cls (B.Wear b f (Type n c b f))
-  , cls (B.Wear b f (FunctionType n c b f))
-  , cls (B.Wear b f (BindIdentifier n))
+type TypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying-> (K.Type -> K.Type) -> K.Constraint
+type TypeConstraint cls n c f =
+  ( cls (f (ReferenceIdentifier n))
+  , cls (FunctionType n c f)
+  , cls (f (Type n c f))
+  , cls (f (FunctionType n c f))
+  , cls (f (BindIdentifier n))
   )
 
-deriving instance TypeConstraint Show n c b f => Show (Type n c b f)
-deriving instance TypeConstraint Read n c b f => Read (Type n c b f)
-deriving instance TypeConstraint Eq n c b f => Eq (Type n c b f)
-deriving instance TypeConstraint Ord n c b f => Ord (Type n c b f)
+deriving instance TypeConstraint Show n c f => Show (Type n c f)
+deriving instance TypeConstraint Read n c f => Read (Type n c f)
+deriving instance TypeConstraint Eq n c f => Eq (Type n c f)
+deriving instance TypeConstraint Ord n c f => Ord (Type n c f)
 
-instance FunctorB (FunctionType n c B.Covered) => FunctorB (Type n c B.Covered) where
+instance FunctorB (FunctionType n c) => FunctorB (Type n c) where
   bmap f (TypeVariable i)        = TypeVariable (f i)
   bmap f (TypeApplication t1 t2) = TypeApplication (bmap f <$> f t1) (bmap f <$> f t2)
   bmap f (FunctionType g)        = FunctionType (bmap f <$> f g)
   bmap f (ProcedureType t)       = ProcedureType (bmap f <$> f t)
   bmap f (ForAllType i t)        = ForAllType (f i) (bmap f <$> f t)
 
-instance BareB (FunctionType n c) => BareB (Type n c) where
-  bstrip (TypeVariable (Identity i))                   = TypeVariable i
-  bstrip (TypeApplication (Identity t1) (Identity t2)) = TypeApplication (bstrip t1) (bstrip t2)
-  bstrip (FunctionType (Identity f))                   = FunctionType (bstrip f)
-  bstrip (ProcedureType (Identity t))                  = ProcedureType (bstrip t)
-  bstrip (ForAllType (Identity i) (Identity t))        = ForAllType i (bstrip t)
-
-  bcover (TypeVariable i)        = TypeVariable $ Identity i
-  bcover (TypeApplication t1 t2) = TypeApplication (Identity $ bcover t1) (Identity $ bcover t2)
-  bcover (FunctionType f)        = FunctionType $ Identity $ bcover f
-  bcover (ProcedureType t)       = ProcedureType $ Identity $ bcover t
-  bcover (ForAllType i t)        = ForAllType (Identity i) (Identity $ bcover t)
-
 instance
-  ( Pretty (B.Wear b f (Type n c b f))
-  , Pretty (B.Wear b f (ReferenceIdentifier n))
-  , Pretty (B.Wear b f (FunctionType n c b f))
-  , Pretty (B.Wear b f (BindIdentifier n))
+  ( Pretty (f (Type n c f))
+  , Pretty (f (ReferenceIdentifier n))
+  , Pretty (f (FunctionType n c f))
+  , Pretty (f (BindIdentifier n))
   ) =>
-  Pretty (Type n c b f) where
+  Pretty (Type n c f) where
 
   pretty (TypeVariable i)        = pretty i
   pretty (TypeApplication t1 t2) = "(apply " <> pretty t1 <> " " <> pretty t2 <> ")"
@@ -434,206 +347,166 @@ instance
 
 -- FunctionType
 
-type FunctionType :: NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Type
+type FunctionType :: NameResolving -> Currying-> (K.Type -> K.Type) -> K.Type
 data family FunctionType
 
-type FunctionTypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type family FunctionTypeConstraint cls n c b f where
-  FunctionTypeConstraint cls n 'Curried b f =
-    ( cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (Type n 'Curried b f))
+type FunctionTypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying-> (K.Type -> K.Type) -> K.Constraint
+type family FunctionTypeConstraint cls n c f where
+  FunctionTypeConstraint cls n 'Curried f =
+    ( cls (f (ReferenceIdentifier n))
+    , cls (f (Type n 'Curried f))
     )
 
-  FunctionTypeConstraint cls n 'Uncurried b f =
-    ( cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (Type n 'Uncurried b f))
-    , cls (B.Wear b f [B.Wear b f (Type n 'Uncurried b f)])
+  FunctionTypeConstraint cls n 'Uncurried f =
+    ( cls (f (ReferenceIdentifier n))
+    , cls (f (Type n 'Uncurried f))
+    , cls (f [f (Type n 'Uncurried f)])
     )
 
-data instance FunctionType n 'Curried b f =
-  FunctionTypeC (B.Wear b f (Type n 'Curried b f)) (B.Wear b f (Type n 'Curried b f))
+data instance FunctionType n 'Curried f =
+  FunctionTypeC (f (Type n 'Curried f)) (f (Type n 'Curried f))
   deriving Generic
 
-deriving instance FunctionTypeConstraint Show n 'Curried b f => Show (FunctionType n 'Curried b f)
-deriving instance FunctionTypeConstraint Read n 'Curried b f => Read (FunctionType n 'Curried b f)
-deriving instance FunctionTypeConstraint Eq n 'Curried b f => Eq (FunctionType n 'Curried b f)
-deriving instance FunctionTypeConstraint Ord n 'Curried b f => Ord (FunctionType n 'Curried b f)
+deriving instance FunctionTypeConstraint Show n 'Curried f => Show (FunctionType n 'Curried f)
+deriving instance FunctionTypeConstraint Read n 'Curried f => Read (FunctionType n 'Curried f)
+deriving instance FunctionTypeConstraint Eq n 'Curried f => Eq (FunctionType n 'Curried f)
+deriving instance FunctionTypeConstraint Ord n 'Curried f => Ord (FunctionType n 'Curried f)
 
-instance FunctorB (FunctionType n 'Curried B.Covered) where
+instance FunctorB (FunctionType n 'Curried) where
   bmap f (FunctionTypeC t1 t2) = FunctionTypeC (bmap f <$> f t1) (bmap f <$> f t2)
 
-instance BareB (FunctionType n 'Curried) where
-  bstrip (FunctionTypeC (Identity t1) (Identity t2)) = FunctionTypeC (bstrip t1) (bstrip t2)
-  bcover (FunctionTypeC t1 t2) = FunctionTypeC (Identity $ bcover t1) (Identity $ bcover t2)
-
-instance Pretty (B.Wear b f (Type n 'Curried b f)) => Pretty (FunctionType n 'Curried b f) where
+instance Pretty (f (Type n 'Curried f)) => Pretty (FunctionType n 'Curried f) where
   pretty (FunctionTypeC t1 t2) = "(function " <> pretty t1 <> " " <> pretty t2 <> ")"
 
-data instance FunctionType n 'Uncurried b f =
-  FunctionTypeN (B.Wear b f [B.Wear b f (Type n 'Uncurried b f)]) (B.Wear b f (Type n 'Uncurried b f))
+data instance FunctionType n 'Uncurried f =
+  FunctionTypeN (f [f (Type n 'Uncurried f)]) (f (Type n 'Uncurried f))
   deriving Generic
 
-deriving instance FunctionTypeConstraint Show n 'Uncurried b f => Show (FunctionType n 'Uncurried b f)
-deriving instance FunctionTypeConstraint Read n 'Uncurried b f => Read (FunctionType n 'Uncurried b f)
-deriving instance FunctionTypeConstraint Eq n 'Uncurried b f => Eq (FunctionType n 'Uncurried b f)
-deriving instance FunctionTypeConstraint Ord n 'Uncurried b f => Ord (FunctionType n 'Uncurried b f)
+deriving instance FunctionTypeConstraint Show n 'Uncurried f => Show (FunctionType n 'Uncurried f)
+deriving instance FunctionTypeConstraint Read n 'Uncurried f => Read (FunctionType n 'Uncurried f)
+deriving instance FunctionTypeConstraint Eq n 'Uncurried f => Eq (FunctionType n 'Uncurried f)
+deriving instance FunctionTypeConstraint Ord n 'Uncurried f => Ord (FunctionType n 'Uncurried f)
 
-instance FunctorB (FunctionType n 'Uncurried B.Covered) where
+instance FunctorB (FunctionType n 'Uncurried) where
   bmap f (FunctionTypeN ts t) = FunctionTypeN (fmap (fmap (bmap f) . f) <$> f ts) (bmap f <$> f t)
 
-instance BareB (FunctionType n 'Uncurried) where
-  bstrip (FunctionTypeN (Identity ts) (Identity t)) = FunctionTypeN (bstrip . runIdentity <$> ts) (bstrip t)
-  bcover (FunctionTypeN ts t) = FunctionTypeN (Identity $ Identity . bcover <$> ts) (Identity $ bcover t)
-
 instance
-  ( Pretty (B.Wear b f [B.Wear b f (Type n 'Uncurried b f)])
-  , Pretty (B.Wear b f (Type n 'Uncurried b f))
+  ( Pretty (f [f (Type n 'Uncurried f)])
+  , Pretty (f (Type n 'Uncurried f))
   ) =>
-  Pretty (FunctionType n 'Uncurried b f) where
+  Pretty (FunctionType n 'Uncurried f) where
 
   pretty (FunctionTypeN ts t) = "(function " <> pretty ts <> " " <> pretty t <> ")"
 
 -- Value
 
-type Value :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+type Value :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data family Value
 
-type ValueConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type family ValueConstraint cls n c l t et ev b f where
-  ValueConstraint cls n c l 'Untyped et ev b f =
-    ( cls (B.Wear b f (Value' n c l 'Untyped et ev b f))
-    , cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f Literal)
+type ValueConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type family ValueConstraint cls n c l t et ev f where
+  ValueConstraint cls n c l 'Untyped et ev f =
+    ( cls (f (Value' n c l 'Untyped et ev f))
+    , cls (f (ReferenceIdentifier n))
+    , cls (f (BindIdentifier n))
+    , cls (f Literal)
     )
 
-  ValueConstraint cls n c l 'Typed et ev b f =
-    ( cls (B.Wear b f (Value' n c l 'Typed et ev b f))
-    , cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f Literal)
-    , cls (B.Wear b f (Type n c b f))
+  ValueConstraint cls n c l 'Typed et ev f =
+    ( cls (f (Value' n c l 'Typed et ev f))
+    , cls (f (ReferenceIdentifier n))
+    , cls (f (BindIdentifier n))
+    , cls (f Literal)
+    , cls (f (Type n c f))
     )
 
-newtype instance Value n c l 'Untyped et ev b f =
-  UntypedValue (B.Wear b f (Value' n c l 'Untyped et ev b f))
+newtype instance Value n c l 'Untyped et ev f =
+  UntypedValue (f (Value' n c l 'Untyped et ev f))
   deriving Generic
 
-deriving instance ValueConstraint Show n c l 'Untyped et ev b f => Show (Value n c l 'Untyped et ev b f)
-deriving instance ValueConstraint Eq n c l 'Untyped et ev b f => Eq (Value n c l 'Untyped et ev b f)
-deriving instance ValueConstraint Ord n c l 'Untyped et ev b f => Ord (Value n c l 'Untyped et ev b f)
+deriving instance ValueConstraint Show n c l 'Untyped et ev f => Show (Value n c l 'Untyped et ev f)
+deriving instance ValueConstraint Eq n c l 'Untyped et ev f => Eq (Value n c l 'Untyped et ev f)
+deriving instance ValueConstraint Ord n c l 'Untyped et ev f => Ord (Value n c l 'Untyped et ev f)
 
 instance
-  ( FunctorB (Function n c l 'Untyped et ev B.Covered)
-  , FunctorB (Application n c l 'Untyped et ev B.Covered)
-  , FunctorB (FunctionType n c B.Covered)
-  , FunctorB (ValueBind n c l 'Untyped et ev B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
+  ( FunctorB (Function n c l 'Untyped et ev)
+  , FunctorB (Application n c l 'Untyped et ev)
+  , FunctorB (FunctionType n c)
+  , FunctorB (ValueBind n c l 'Untyped et ev)
+  , FunctorB et
+  , FunctorB ev
   ) =>
-  FunctorB (Value n c l 'Untyped et ev B.Covered) where
+  FunctorB (Value n c l 'Untyped et ev) where
 
   bmap f (UntypedValue v) = UntypedValue (bmap f <$> f v)
 
-instance
-  ( BareB (Application n c l 'Untyped et ev)
-  , BareB (ProcedureStep n c l 'Untyped et ev)
-  , BareB (TypeAnnotation n c l 'Untyped et ev)
-  , BareB (Definition n c l 'Untyped et ev)
-  , BareB (Function n c l 'Untyped et ev)
-  , BareB (ValueBind n c l 'Untyped et ev)
-  , BareB (FunctionType n c)
-  , BareB et
-  , BareB ev
-  ) =>
-  BareB (Value n c l 'Untyped et ev) where
-
-  bstrip (UntypedValue (Identity v)) = UntypedValue $ bstrip v
-  bcover (UntypedValue v) = UntypedValue $ Identity $ bcover v
-
-data instance Value n c l 'Typed et ev b f =
-  TypedValue (B.Wear b f (Value' n c l 'Typed et ev b f)) (B.Wear b f (Type n c b f))
+data instance Value n c l 'Typed et ev f =
+  TypedValue (f (Value' n c l 'Typed et ev f)) (f (Type n c f))
   deriving Generic
 
-deriving instance ValueConstraint Show n c l 'Typed et ev b f => Show (Value n c l 'Typed et ev b f)
-deriving instance ValueConstraint Eq n c l 'Typed et ev b f => Eq (Value n c l 'Typed et ev b f)
-deriving instance ValueConstraint Ord n c l 'Typed et ev b f => Ord (Value n c l 'Typed et ev b f)
+deriving instance ValueConstraint Show n c l 'Typed et ev f => Show (Value n c l 'Typed et ev f)
+deriving instance ValueConstraint Eq n c l 'Typed et ev f => Eq (Value n c l 'Typed et ev f)
+deriving instance ValueConstraint Ord n c l 'Typed et ev f => Ord (Value n c l 'Typed et ev f)
 
 instance
-  ( FunctorB (Function n c l 'Typed et ev B.Covered)
-  , FunctorB (Application n c l 'Typed et ev B.Covered)
-  , FunctorB (FunctionType n c B.Covered)
-  , FunctorB (ValueBind n c l 'Typed et ev B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
+  ( FunctorB (Function n c l 'Typed et ev)
+  , FunctorB (Application n c l 'Typed et ev)
+  , FunctorB (FunctionType n c)
+  , FunctorB (ValueBind n c l 'Typed et ev)
+  , FunctorB et
+  , FunctorB ev
   ) =>
-  FunctorB (Value n c l 'Typed et ev B.Covered) where
+  FunctorB (Value n c l 'Typed et ev) where
 
   bmap f (TypedValue v t) = TypedValue (bmap f <$> f v) (bmap f <$> f t)
 
-instance
-  ( BareB (FunctionType n c)
-  , BareB (Application n c l 'Typed et ev)
-  , BareB (ProcedureStep n c l 'Typed et ev)
-  , BareB (TypeAnnotation n c l 'Typed et ev)
-  , BareB (Definition n c l 'Typed et ev)
-  , BareB (Function n c l 'Typed et ev)
-  , BareB (ValueBind n c l 'Typed et ev)
-  , BareB et
-  , BareB ev
-  ) =>
-  BareB (Value n c l 'Typed et ev) where
-
-  bstrip (TypedValue (Identity v) (Identity t)) = TypedValue (bstrip v) (bstrip t)
-  bcover (TypedValue v t) = TypedValue (Identity $ bcover v) (Identity $ bcover t)
-
 -- Value'
 
-data Value' n c l t et ev b f
-  = Variable (B.Wear b f (ReferenceIdentifier n))
-  | Literal (B.Wear b f Literal)
-  | Function (B.Wear b f (Function n c l t et ev b f))
-  | Application (B.Wear b f (Application n c l t et ev b f))
-  | Procedure (B.Wear b f (NonEmpty (B.Wear b f (ProcedureStep n c l t et ev b f))))
-  | TypeAnnotation (B.Wear b f (TypeAnnotation n c l t et ev b f))
-  | Let (B.Wear b f [B.Wear b f (Definition n c l t et ev b f)]) (B.Wear b f (Value n c l t et ev b f))
-  | ForAll (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c l t et ev b f))
+data Value' n c l t et ev f
+  = Variable (f (ReferenceIdentifier n))
+  | Literal (f Literal)
+  | Function (f (Function n c l t et ev f))
+  | Application (f (Application n c l t et ev f))
+  | Procedure (f (NonEmpty (f (ProcedureStep n c l t et ev f))))
+  | TypeAnnotation (f (TypeAnnotation n c l t et ev f))
+  | Let (f [f (Definition n c l t et ev f)]) (f (Value n c l t et ev f))
+  | ForAll (f (BindIdentifier n)) (f (Value n c l t et ev f))
   deriving Generic
 
-type Value'Constraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type Value'Constraint cls n c l t et ev b f =
-  ( cls (B.Wear b f (ReferenceIdentifier n))
-  , cls (B.Wear b f (Function n c l t et ev b f))
-  , cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f (Application n c l t et ev b f))
-  , cls (B.Wear b f (ProcedureStep n c l t et ev b f))
-  , cls (B.Wear b f (NonEmpty (B.Wear b f (ProcedureStep n c l t et ev b f))))
-  , cls (B.Wear b f (TypeAnnotation n c l t et ev b f))
-  , cls (B.Wear b f (ValueBind n c l t et ev b f))
-  , cls (B.Wear b f (Value n c l t et ev b f))
-  , cls (B.Wear b f (Type n c b f))
-  , cls (B.Wear b f (Definition n c l t et ev b f))
-  , cls (B.Wear b f [B.Wear b f (Definition n c l t et ev b f)])
-  , cls (B.Wear b f (ProcedureStep n c l t et ev b f))
-  , cls (B.Wear b f Literal)
-  , cls (Function n c l t et ev b f)
+type Value'Constraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type Value'Constraint cls n c l t et ev f =
+  ( cls (f (ReferenceIdentifier n))
+  , cls (f (Function n c l t et ev f))
+  , cls (f (BindIdentifier n))
+  , cls (f (Application n c l t et ev f))
+  , cls (f (ProcedureStep n c l t et ev f))
+  , cls (f (NonEmpty (f (ProcedureStep n c l t et ev f))))
+  , cls (f (TypeAnnotation n c l t et ev f))
+  , cls (f (ValueBind n c l t et ev f))
+  , cls (f (Value n c l t et ev f))
+  , cls (f (Type n c f))
+  , cls (f (Definition n c l t et ev f))
+  , cls (f [f (Definition n c l t et ev f)])
+  , cls (f (ProcedureStep n c l t et ev f))
+  , cls (f Literal)
+  , cls (Function n c l t et ev f)
   )
 
-deriving instance Value'Constraint Show n c l t et ev b f => Show (Value' n c l t et ev b f)
-deriving instance Value'Constraint Eq n c l t et ev b f => Eq (Value' n c l t et ev b f)
-deriving instance Value'Constraint Ord n c l t et ev b f => Ord (Value' n c l t et ev b f)
+deriving instance Value'Constraint Show n c l t et ev f => Show (Value' n c l t et ev f)
+deriving instance Value'Constraint Eq n c l t et ev f => Eq (Value' n c l t et ev f)
+deriving instance Value'Constraint Ord n c l t et ev f => Ord (Value' n c l t et ev f)
 
 instance
-  ( FunctorB (Function n c l t et ev B.Covered)
-  , FunctorB (Application n c l t et ev B.Covered)
-  , FunctorB (TypeAnnotation n c l t et ev B.Covered)
-  , FunctorB (Value n c l t et ev B.Covered)
-  , FunctorB (FunctionType n c B.Covered)
-  , FunctorB (ValueBind n c l t et ev B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
+  ( FunctorB (Function n c l t et ev)
+  , FunctorB (Application n c l t et ev)
+  , FunctorB (TypeAnnotation n c l t et ev)
+  , FunctorB (Value n c l t et ev)
+  , FunctorB (FunctionType n c)
+  , FunctorB (ValueBind n c l t et ev)
+  , FunctorB et
+  , FunctorB ev
   ) =>
-  FunctorB (Value' n c l t et ev B.Covered) where
+  FunctorB (Value' n c l t et ev) where
 
   bmap f (Variable i)       = Variable $ f i
   bmap f (Literal l)        = Literal $ f l
@@ -644,130 +517,73 @@ instance
   bmap f (Let ds v)         = Let (fmap (fmap (bmap f) . f) <$> f ds) $ bmap f <$> f v
   bmap f (ForAll i v)       = ForAll (f i) $ bmap f <$> f v
 
-instance
-  ( BareB (Application n c l t et ev)
-  , BareB (ProcedureStep n c l t et ev)
-  , BareB (TypeAnnotation n c l t et ev)
-  , BareB (Value n c l t et ev)
-  , BareB (Definition n c l t et ev)
-  , BareB (Function n c l t et ev)
-  , FunctorB (ValueBind n c l t et ev B.Covered)
-  , FunctorB (FunctionType n c B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
-  ) =>
-  BareB (Value' n c l t et ev) where
-
-  bstrip (Variable (Identity i))            = Variable i
-  bstrip (Literal (Identity l))             = Literal l
-  bstrip (Function (Identity f))            = Function $ bstrip f
-  bstrip (Application (Identity a))         = Application $ bstrip a
-  bstrip (Procedure (Identity ss))          = Procedure $ bstrip . runIdentity <$> ss
-  bstrip (TypeAnnotation (Identity a))      = TypeAnnotation $ bstrip a
-  bstrip (Let (Identity ds) (Identity v))   = Let (bstrip . runIdentity <$> ds) (bstrip v)
-  bstrip (ForAll (Identity i) (Identity v)) = ForAll i (bstrip v)
-
-  bcover (Variable i)       = Variable $ Identity i
-  bcover (Literal l)        = Literal $ Identity l
-  bcover (Function f)       = Function $ Identity $ bcover f
-  bcover (Application a)    = Application $ Identity $ bcover a
-  bcover (Procedure ss)     = Procedure $ Identity $ Identity . bcover <$> ss
-  bcover (TypeAnnotation a) = TypeAnnotation $ Identity $ bcover a
-  bcover (Let ds v)         = Let (Identity $ Identity . bcover <$> ds) (Identity $ bcover v)
-  bcover (ForAll i v)       = ForAll (Identity i) (Identity $ bcover v)
-
 -- TypeAnnotation
 
-type TypeAnnotation :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+type TypeAnnotation :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data family TypeAnnotation
 
-data instance TypeAnnotation n c l 'Untyped et ev b f =
-  TypeAnnotation' (B.Wear b f (Value n c l 'Untyped et ev b f)) (B.Wear b f (Type n c b f))
+data instance TypeAnnotation n c l 'Untyped et ev f =
+  TypeAnnotation' (f (Value n c l 'Untyped et ev f)) (f (Type n c f))
   deriving Generic
 
-type TypeAnnotationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type TypeAnnotationConstraint cls n c l t et ev b f =
-  ( cls (B.Wear b f (ReferenceIdentifier n))
-  , cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f (Function n c l t et ev b f))
-  , cls (B.Wear b f (Application n c l t et ev b f))
-  , cls (B.Wear b f (ProcedureStep n c l t et ev b f))
-  , cls (B.Wear b f (ValueBind n c l t et ev b f))
-  , cls (B.Wear b f (FunctionType n c b f))
-  , cls (B.Wear b f (Value n c l t et ev b f))
-  , cls (B.Wear b f (Type n c b f))
+type TypeAnnotationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type TypeAnnotationConstraint cls n c l t et ev f =
+  ( cls (f (ReferenceIdentifier n))
+  , cls (f (BindIdentifier n))
+  , cls (f (Function n c l t et ev f))
+  , cls (f (Application n c l t et ev f))
+  , cls (f (ProcedureStep n c l t et ev f))
+  , cls (f (ValueBind n c l t et ev f))
+  , cls (f (FunctionType n c f))
+  , cls (f (Value n c l t et ev f))
+  , cls (f (Type n c f))
   )
 
-deriving instance TypeAnnotationConstraint Show n c l 'Untyped et ev b f => Show (TypeAnnotation n c l 'Untyped et ev b f)
-deriving instance TypeAnnotationConstraint Eq n c l 'Untyped et ev b f => Eq (TypeAnnotation n c l 'Untyped et ev b f)
-deriving instance TypeAnnotationConstraint Ord n c l 'Untyped et ev b f => Ord (TypeAnnotation n c l 'Untyped et ev b f)
+deriving instance TypeAnnotationConstraint Show n c l 'Untyped et ev f => Show (TypeAnnotation n c l 'Untyped et ev f)
+deriving instance TypeAnnotationConstraint Eq n c l 'Untyped et ev f => Eq (TypeAnnotation n c l 'Untyped et ev f)
+deriving instance TypeAnnotationConstraint Ord n c l 'Untyped et ev f => Ord (TypeAnnotation n c l 'Untyped et ev f)
 
 instance
-  ( FunctorB (Function n c l 'Untyped et ev B.Covered)
-  , FunctorB (Application n c l 'Untyped et ev B.Covered)
-  , FunctorB (FunctionType n c B.Covered)
-  , FunctorB (ValueBind n c l 'Untyped et ev B.Covered)
-  , FunctorB (et B.Covered)
-  , FunctorB (ev B.Covered)
+  ( FunctorB (Function n c l 'Untyped et ev)
+  , FunctorB (Application n c l 'Untyped et ev)
+  , FunctorB (FunctionType n c)
+  , FunctorB (ValueBind n c l 'Untyped et ev)
+  , FunctorB et
+  , FunctorB ev
   ) =>
-  FunctorB (TypeAnnotation n c l 'Untyped et ev B.Covered) where
+  FunctorB (TypeAnnotation n c l 'Untyped et ev) where
 
   bmap f (TypeAnnotation' v t) = TypeAnnotation' (bmap f <$> f v) (bmap f <$> f t)
 
-instance
-  ( BareB (Application n c l 'Untyped et ev)
-  , BareB (ValueBind n c l 'Untyped et ev)
-  , BareB (Function n c l 'Untyped et ev)
-  , BareB (FunctionType n c)
-  , BareB et
-  , BareB ev
-  ) =>
-  BareB (TypeAnnotation n c l 'Untyped et ev) where
-
-  bstrip (TypeAnnotation' (Identity v) (Identity t)) = TypeAnnotation' (bstrip v) (bstrip t)
-
-  bcover (TypeAnnotation' v t) = TypeAnnotation' (Identity $ bcover v) (Identity $ bcover t)
-
-data instance TypeAnnotation n c l 'Typed et ev b f
+data instance TypeAnnotation n c l 'Typed et ev f
   deriving Generic
 
-deriving instance Show (TypeAnnotation n c l 'Typed et ev b f)
-deriving instance TypeAnnotationConstraint Eq n c l 'Typed et ev b f => Eq (TypeAnnotation n c l 'Typed et ev b f)
-deriving instance TypeAnnotationConstraint Ord n c l 'Typed et ev b f => Ord (TypeAnnotation n c l 'Typed et ev b f)
+deriving instance Show (TypeAnnotation n c l 'Typed et ev f)
+deriving instance TypeAnnotationConstraint Eq n c l 'Typed et ev f => Eq (TypeAnnotation n c l 'Typed et ev f)
+deriving instance TypeAnnotationConstraint Ord n c l 'Typed et ev f => Ord (TypeAnnotation n c l 'Typed et ev f)
 
-instance FunctorB (TypeAnnotation n c l 'Typed et ev B.Covered) where
+instance FunctorB (TypeAnnotation n c l 'Typed et ev) where
   bmap _ = X.unreachable
-
-instance BareB (TypeAnnotation n c l 'Typed et ev) where
-  bstrip = X.unreachable
-  bcover = X.unreachable
 
 -- ProcedureStep
 
-data ProcedureStep n c l t et ev b f
-  = BindProcedureStep (B.Wear b f (BindIdentifier n)) (B.Wear b f (Value n c l t et ev b f))
-  | CallProcedureStep (B.Wear b f (Value n c l t et ev b f))
+data ProcedureStep n c l t et ev f
+  = BindProcedureStep (f (BindIdentifier n)) (f (Value n c l t et ev f))
+  | CallProcedureStep (f (Value n c l t et ev f))
 
-type ProcedureStepConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type ProcedureStepConstraint cls n c l t et ev b f =
-  ( cls (B.Wear b f (BindIdentifier n))
-  , cls (B.Wear b f (Value n c l t et ev b f))
+type ProcedureStepConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ProcedureStepConstraint cls n c l t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (Value n c l t et ev f))
   )
 
-deriving instance ProcedureStepConstraint Show n c l t et ev b f => Show (ProcedureStep n c l t et ev b f)
-deriving instance ProcedureStepConstraint Eq n c l t et ev b f => Eq (ProcedureStep n c l t et ev b f)
-deriving instance ProcedureStepConstraint Ord n c l t et ev b f => Ord (ProcedureStep n c l t et ev b f)
+deriving instance ProcedureStepConstraint Show n c l t et ev f => Show (ProcedureStep n c l t et ev f)
+deriving instance ProcedureStepConstraint Eq n c l t et ev f => Eq (ProcedureStep n c l t et ev f)
+deriving instance ProcedureStepConstraint Ord n c l t et ev f => Ord (ProcedureStep n c l t et ev f)
 
-instance FunctorB (Value n c l t et ev B.Covered) => FunctorB (ProcedureStep n c l t et ev B.Covered) where
+instance FunctorB (Value n c l t et ev) => FunctorB (ProcedureStep n c l t et ev) where
   bmap f (BindProcedureStep i v) = BindProcedureStep (f i) (bmap f <$> f v)
   bmap f (CallProcedureStep v)   = CallProcedureStep (bmap f <$> f v)
-
-instance (BareB (Value n c l t et ev )) => BareB (ProcedureStep n c l t et ev) where
-  bstrip (BindProcedureStep (Identity i) (Identity v)) = BindProcedureStep i (bstrip v)
-  bstrip (CallProcedureStep (Identity v))              = CallProcedureStep (bstrip v)
-
-  bcover (BindProcedureStep i v) = BindProcedureStep (Identity i) (Identity $ bcover v)
-  bcover (CallProcedureStep v)   = CallProcedureStep (Identity $ bcover v)
 
 -- Literal
 
@@ -779,109 +595,89 @@ data Literal
 
 -- Application
 
-type Application :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+type Application :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data family Application
 
-type ApplicationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type family ApplicationConstraint cls n c l t et ev b f where
-  ApplicationConstraint cls n 'Curried l t et ev b f =
-    (cls (B.Wear b f (Value n 'Curried l t et ev b f)))
+type ApplicationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type family ApplicationConstraint cls n c l t et ev f where
+  ApplicationConstraint cls n 'Curried l t et ev f =
+    (cls (f (Value n 'Curried l t et ev f)))
 
-  ApplicationConstraint cls n 'Uncurried l t et ev b f =
-    ( cls (B.Wear b f (Value n 'Uncurried l t et ev b f))
-    , cls (B.Wear b f [B.Wear b f (Value n 'Uncurried l t et ev b f)])
+  ApplicationConstraint cls n 'Uncurried l t et ev f =
+    ( cls (f (Value n 'Uncurried l t et ev f))
+    , cls (f [f (Value n 'Uncurried l t et ev f)])
     )
 
-data instance Application n 'Curried l t et ev b f =
-  ApplicationC (B.Wear b f (Value n 'Curried l t et ev b f)) (B.Wear b f (Value n 'Curried l t et ev b f))
+data instance Application n 'Curried l t et ev f =
+  ApplicationC (f (Value n 'Curried l t et ev f)) (f (Value n 'Curried l t et ev f))
   deriving Generic
 
-deriving instance ApplicationConstraint Show n 'Curried l t et ev b f => Show (Application n 'Curried l t et ev b f)
-deriving instance ApplicationConstraint Eq n 'Curried l t et ev b f => Eq (Application n 'Curried l t et ev b f)
-deriving instance ApplicationConstraint Ord n 'Curried l t et ev b f => Ord (Application n 'Curried l t et ev b f)
+deriving instance ApplicationConstraint Show n 'Curried l t et ev f => Show (Application n 'Curried l t et ev f)
+deriving instance ApplicationConstraint Eq n 'Curried l t et ev f => Eq (Application n 'Curried l t et ev f)
+deriving instance ApplicationConstraint Ord n 'Curried l t et ev f => Ord (Application n 'Curried l t et ev f)
 
-instance FunctorB (Value n 'Curried l t et ev B.Covered) => FunctorB (Application n 'Curried l t et ev B.Covered) where
+instance FunctorB (Value n 'Curried l t et ev) => FunctorB (Application n 'Curried l t et ev) where
   bmap f (ApplicationC v1 v2) = ApplicationC (bmap f <$> f v1) (bmap f <$> f v2)
 
-instance BareB (Value n 'Curried l t et ev) => BareB (Application n 'Curried l t et ev) where
-  bstrip (ApplicationC (Identity v1) (Identity v2)) = ApplicationC (bstrip v1) (bstrip v2)
-  bcover (ApplicationC v1 v2) = ApplicationC (Identity $ bcover v1) (Identity $ bcover v2)
-
-data instance Application n 'Uncurried l t et ev b f =
-  ApplicationN (B.Wear b f (Value n 'Uncurried l t et ev b f)) (B.Wear b f [B.Wear b f (Value n 'Uncurried l t et ev b f)])
+data instance Application n 'Uncurried l t et ev f =
+  ApplicationN (f (Value n 'Uncurried l t et ev f)) (f [f (Value n 'Uncurried l t et ev f)])
   deriving Generic
 
-deriving instance ApplicationConstraint Show n 'Uncurried l t et ev b f => Show (Application n 'Uncurried l t et ev b f)
-deriving instance ApplicationConstraint Eq n 'Uncurried l t et ev b f => Eq (Application n 'Uncurried l t et ev b f)
-deriving instance ApplicationConstraint Ord n 'Uncurried l t et ev b f => Ord (Application n 'Uncurried l t et ev b f)
+deriving instance ApplicationConstraint Show n 'Uncurried l t et ev f => Show (Application n 'Uncurried l t et ev f)
+deriving instance ApplicationConstraint Eq n 'Uncurried l t et ev f => Eq (Application n 'Uncurried l t et ev f)
+deriving instance ApplicationConstraint Ord n 'Uncurried l t et ev f => Ord (Application n 'Uncurried l t et ev f)
 
-instance FunctorB (Value n 'Uncurried l t et ev B.Covered) => FunctorB (Application n 'Uncurried l t et ev B.Covered) where
+instance FunctorB (Value n 'Uncurried l t et ev) => FunctorB (Application n 'Uncurried l t et ev) where
   bmap f (ApplicationN v1 vs) = ApplicationN (bmap f <$> f v1) $ fmap (fmap (bmap f) . f) <$> f vs
-
-instance BareB (Value n 'Uncurried l t et ev) => BareB (Application n 'Uncurried l t et ev) where
-  bstrip (ApplicationN (Identity v) (Identity vs)) = ApplicationN (bstrip v) (bstrip . runIdentity <$> vs)
-  bcover (ApplicationN v vs) = ApplicationN (Identity $ bcover v) (Identity $ Identity . bcover <$> vs)
 
 -- Function
 
-type Function :: NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Type
+type Function :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data family Function
 
-type FunctionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> (K.Type -> (K.Type -> K.Type) -> K.Type) -> K.Type -> (K.Type -> K.Type) -> K.Constraint
-type family FunctionConstraint cls n c l t et ev b f where
-  FunctionConstraint cls n 'Curried l t et ev b f =
-    ( cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (Value n 'Curried l t et ev b f))
-    , cls (B.Wear b f (Type n 'Curried b f))
+type FunctionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type family FunctionConstraint cls n c l t et ev f where
+  FunctionConstraint cls n 'Curried l t et ev f =
+    ( cls (f (BindIdentifier n))
+    , cls (f (ReferenceIdentifier n))
+    , cls (f (Value n 'Curried l t et ev f))
+    , cls (f (Type n 'Curried f))
     )
 
-  FunctionConstraint cls n 'Uncurried l t et ev b f =
-    ( cls (B.Wear b f (BindIdentifier n))
-    , cls (B.Wear b f (ReferenceIdentifier n))
-    , cls (B.Wear b f (Value n 'Uncurried l t et ev b f))
-    , cls (B.Wear b f (Type n 'Uncurried b f))
-    , cls (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n 'Uncurried b f))])
+  FunctionConstraint cls n 'Uncurried l t et ev f =
+    ( cls (f (BindIdentifier n))
+    , cls (f (ReferenceIdentifier n))
+    , cls (f (Value n 'Uncurried l t et ev f))
+    , cls (f (Type n 'Uncurried f))
+    , cls (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))])
     )
 
-data instance Function n 'Curried 'LambdaUnlifted t et ev b f =
-  FunctionC (B.Wear b f (BindIdentifier n)) (B.Wear b f (Type n 'Curried b f)) (B.Wear b f (Value n 'Curried 'LambdaUnlifted t et ev b f))
+data instance Function n 'Curried 'LambdaUnlifted t et ev f =
+  FunctionC (f (BindIdentifier n)) (f (Type n 'Curried f)) (f (Value n 'Curried 'LambdaUnlifted t et ev f))
   deriving Generic
 
-deriving instance FunctionConstraint Show n 'Curried 'LambdaUnlifted t et ev b f => Show (Function n 'Curried 'LambdaUnlifted t et ev b f)
-deriving instance FunctionConstraint Eq n 'Curried 'LambdaUnlifted t et ev b f => Eq (Function n 'Curried 'LambdaUnlifted t et ev b f)
-deriving instance FunctionConstraint Ord n 'Curried 'LambdaUnlifted t et ev b f => Ord (Function n 'Curried 'LambdaUnlifted t et ev b f)
+deriving instance FunctionConstraint Show n 'Curried 'LambdaUnlifted t et ev f => Show (Function n 'Curried 'LambdaUnlifted t et ev f)
+deriving instance FunctionConstraint Eq n 'Curried 'LambdaUnlifted t et ev f => Eq (Function n 'Curried 'LambdaUnlifted t et ev f)
+deriving instance FunctionConstraint Ord n 'Curried 'LambdaUnlifted t et ev f => Ord (Function n 'Curried 'LambdaUnlifted t et ev f)
 
-instance FunctorB (Value n 'Curried 'LambdaUnlifted t et ev B.Covered) => FunctorB (Function n 'Curried 'LambdaUnlifted t et ev B.Covered) where
+instance FunctorB (Value n 'Curried 'LambdaUnlifted t et ev) => FunctorB (Function n 'Curried 'LambdaUnlifted t et ev) where
   bmap f (FunctionC i t v) = FunctionC (f i) (bmap f <$> f t) (bmap f <$> f v)
 
-instance BareB (Value n 'Curried 'LambdaUnlifted t et ev ) => BareB (Function n 'Curried 'LambdaUnlifted t et ev) where
-  bstrip (FunctionC (Identity i) (Identity t) (Identity v)) = FunctionC i (bstrip t) (bstrip v)
-  bcover (FunctionC i t v) = FunctionC (Identity i) (Identity $ bcover t) (Identity $ bcover v)
-
-data instance Function n 'Uncurried 'LambdaUnlifted t et ev b f =
-  FunctionN (B.Wear b f [B.Wear b f (B.Wear b f (BindIdentifier n), B.Wear b f (Type n 'Uncurried b f))]) (B.Wear b f (Value n 'Uncurried 'LambdaUnlifted t et ev b f))
+data instance Function n 'Uncurried 'LambdaUnlifted t et ev f =
+  FunctionN (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))]) (f (Value n 'Uncurried 'LambdaUnlifted t et ev f))
   deriving Generic
 
-deriving instance FunctionConstraint Show n 'Uncurried 'LambdaUnlifted t et ev b f => Show (Function n 'Uncurried 'LambdaUnlifted t et ev b f)
-deriving instance FunctionConstraint Eq n 'Uncurried 'LambdaUnlifted t et ev b f => Eq (Function n 'Uncurried 'LambdaUnlifted t et ev b f)
-deriving instance FunctionConstraint Ord n 'Uncurried 'LambdaUnlifted t et ev b f => Ord (Function n 'Uncurried 'LambdaUnlifted t et ev b f)
+deriving instance FunctionConstraint Show n 'Uncurried 'LambdaUnlifted t et ev f => Show (Function n 'Uncurried 'LambdaUnlifted t et ev f)
+deriving instance FunctionConstraint Eq n 'Uncurried 'LambdaUnlifted t et ev f => Eq (Function n 'Uncurried 'LambdaUnlifted t et ev f)
+deriving instance FunctionConstraint Ord n 'Uncurried 'LambdaUnlifted t et ev f => Ord (Function n 'Uncurried 'LambdaUnlifted t et ev f)
 
-instance FunctorB (Value n 'Uncurried 'LambdaUnlifted t et ev B.Covered) => FunctorB (Function n 'Uncurried 'LambdaUnlifted t et ev B.Covered) where
+instance FunctorB (Value n 'Uncurried 'LambdaUnlifted t et ev) => FunctorB (Function n 'Uncurried 'LambdaUnlifted t et ev) where
   bmap f (FunctionN ps v) = FunctionN (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
 
-instance BareB (Value n 'Uncurried 'LambdaUnlifted t et ev) => BareB (Function n 'Uncurried 'LambdaUnlifted t et ev) where
-  bstrip (FunctionN (Identity ps) (Identity v)) = FunctionN (bimap runIdentity (bstrip . runIdentity) . runIdentity <$> ps) (bstrip v)
-  bcover (FunctionN ps v) = FunctionN (Identity $ Identity . bimap Identity (Identity . bcover) <$> ps) (Identity $ bcover v)
+data instance Function n c 'LambdaLifted t f et ev deriving (Show, Read, Eq, Ord, Generic)
 
-data instance Function n c 'LambdaLifted t b f et ev deriving (Show, Read, Eq, Ord, Generic)
-
-instance FunctorB (Function n c 'LambdaLifted t et ev B.Covered) where
+instance FunctorB (Function n c 'LambdaLifted t et ev) where
   bmap _ = X.unreachable
-
-instance BareB (Function n c 'LambdaLifted t et ev) where
-  bstrip = X.unreachable
-  bcover = X.unreachable
 
 -- Identifiers
 
@@ -1052,8 +848,8 @@ data NameResolving
 
 -- Higher kinded data
 
-strip :: (Functor f, Copointed f, BareB b) => f (b B.Covered f) -> b B.Bare Identity
-strip = bstripFrom copoint . copoint
+toIdentity :: (Functor f, Copointed f, FunctorB b) => f (b f) -> Identity (b Identity)
+toIdentity = Identity . bmap (Identity . copoint) . copoint
 
 -- Pretty
 
@@ -1063,3 +859,6 @@ class Pretty a where
 
 instance Pretty a => Pretty [a] where
   pretty as = "(list " <> T.intercalate " " (pretty <$> as) <> ")"
+
+instance Pretty a => Pretty (Identity a) where
+  pretty (Identity a) = pretty a
