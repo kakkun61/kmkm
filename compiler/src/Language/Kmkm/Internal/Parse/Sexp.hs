@@ -36,7 +36,6 @@ module Language.Kmkm.Internal.Parse.Sexp
 
 import           Barbies.Bare                          (Covered)
 import qualified Barbies.Bare                          as B
-import qualified Barbies.Bare.Layered                  as BL
 import           Control.Applicative                   (Alternative (many, some), liftA2, (<|>))
 import           Control.Exception.Safe                (MonadCatch, MonadThrow, throw)
 import qualified Control.Exception.Safe                as E
@@ -188,7 +187,7 @@ module' s =
     SS.List [sm, sn, sis, sds] -> do
       symbol "module" "module'" sm
       S.Module <$> moduleName sn <*> list moduleName sis <*> list definition sds
-    _ -> throwError [SexpException "tree expected" "module'" $ S.location s]
+    s' -> throwError [SexpException ("a list with 4 elements expected, but got " ++ abstractMessage s') "module'" $ S.location s]
 
 moduleName :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.ModuleName)
 moduleName s = fmap S.ModuleName <$> atom "moduleName" dotSeparatedIdentifier s
@@ -215,7 +214,7 @@ foreignValueBind s =
       case mapMaybe isEmbeddedValue $ copoint evs of -- 選択は別ステップにする
         [ev] -> pure $ S.ForeignValueBind i ev t
         _ -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ S.location s]
-    _ -> throwError [SexpException "unexpected format" "foreignValueBind" $ S.location s]
+    s' -> throwError [SexpException ("a list with 4 elements expected, but got " ++ abstractMessage s') "foreignValueBind" $ S.location s]
 
 foreignTypeBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
 foreignTypeBind s =
@@ -229,7 +228,7 @@ foreignTypeBind s =
       case mapMaybe isEmbeddedType $ copoint ets of
         [et] -> pure $ S.ForeignTypeBind i et
         _    -> throwError [SexpException "no or more than one embedded type parsers" "foreignTypeBind" $ S.location s]
-    _ -> throwError [SexpException "unexpected format" "foreignTypeBind" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "foreignTypeBind" $ S.location s]
 
 runEmbeddedParsers :: (MonadAlternativeError [Exception] m, S.HasLocation f) => [f a -> Either [Exception] c] -> f a -> m c
 runEmbeddedParsers [] s   = throwError [SexpException "no embedded-parser" "runEmbeddedParsers" $ S.location s]
@@ -241,20 +240,20 @@ dataDefinition s =
     SS.List [sd, si, sc] -> do
       symbol "define" "dataDefinition" sd
       S.DataDefinition <$> identifier si <*> list valueConstructor sc
-    _ -> throwError [SexpException "atom not expected" "dataDefinition" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "dataDefinition" $ S.location s]
 
 valueConstructor :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ValueConstructor et ev f))
 valueConstructor s =
   for s $ \case
     SS.Atom _         -> S.ValueConstructor <$> identifier s <*> pure ([] <$ s)
     SS.List [si, sfs] -> S.ValueConstructor <$> identifier si <*> list field sfs
-    _                 -> throwError [SexpException "unexpected format" "valueConstructor" $ S.location s]
+    s'                -> throwError [SexpException ("an atom or a list with 2 elements expected, but got " ++ abstractMessage s') "valueConstructor" $ S.location s]
 
 field :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Field et ev f))
 field s =
   for s $ \case
     SS.List [si, st] -> S.Field <$> identifier si <*> typ st
-    _                -> throwError [SexpException "unexpected format" "field" $ S.location s]
+    s'               -> throwError [SexpException ("a list with 2 elements expected, but got " ++ abstractMessage s') "field" $ S.location s]
 
 typ :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Type f))
 typ s =
@@ -267,7 +266,7 @@ typ s =
             SS.List [sk, st1, st2] -> do
               symbol "apply" "typeApplication" sk
               S.TypeApplication <$> typ st1 <*> typ st2
-            _ -> throwError [SexpException "unexpected format" "typeApplication" $ S.location s]
+            l' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage l') "typeApplication" $ S.location s]
         , S.ProcedureType <$> procedureType s
         ]
 
@@ -277,7 +276,7 @@ functionType s =
     SS.List [si, st1, st2] -> do
       symbol "function" "functionType" si
       S.FunctionTypeC <$> typ st1 <*> typ st2
-    _ -> throwError [SexpException "unexpected format" "functionType" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "functionType" $ S.location s]
 
 procedureType :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Type f))
 procedureType s =
@@ -285,7 +284,7 @@ procedureType s =
     SS.List [sk, st] -> do
       symbol "procedure" "procedureType" sk
       typ st
-    _ -> throwError [SexpException "unexpected format" "procedureType" $ S.location s]
+    s' -> throwError [SexpException ("a list with 2 elements expected, but got " ++ abstractMessage s') "procedureType" $ S.location s]
 
 valueBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ValueBind et ev f))
 valueBind s =
@@ -293,9 +292,9 @@ valueBind s =
     SS.List [s1, s2, s3] ->
       case copoint s1 of
         SS.Atom "bind-value" -> S.ValueBindU <$> identifier s2 <*> value s3
-        SS.Atom n -> throwError [SexpException ("'valueBind' expected, but got " <> T.unpack n) "valueBind" $ S.location s1]
-        _ -> throwError [SexpException "atom expected" "valueBind" $ S.location s1]
-    s' -> throwError [SexpException ("3-element list expected, but got '" ++ show (BL.bstripFrom copoint s') ++ "'") "valueBind" $ S.location s]
+        SS.Atom n -> throwError [SexpException ("\"bind-value\" expected, but got \"" <> T.unpack n <> "\"") "valueBind" $ S.location s1]
+        s1' -> throwError [SexpException ("an atom of \"bind-value\" expected, but got " ++ abstractMessage s1') "valueBind" $ S.location s1]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got '" ++ show (abstractMessage s') ++ "'") "valueBind" $ S.location s]
 
 literal :: (MonadAlternativeError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f S.Literal)
 literal s =
@@ -468,7 +467,7 @@ procedure s =
     SS.List [sk, sss] -> do
       symbol "procedure" "procedure" sk
       list1 step sss
-    _ -> throwError [SexpException "unexpected format" "procedure" $ S.location s]
+    s' -> throwError [SexpException ("a list with 2 elements expected, but got " ++ abstractMessage s') "procedure" $ S.location s]
   where
     step :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ProcedureStep et ev f))
     step s =
@@ -479,7 +478,7 @@ procedure s =
         SS.List [sk, sv] -> do
           symbol "call" "procedure.step" sk
           S.CallProcedureStep <$> value sv
-        _ -> throwError [SexpException "unexpected format" "procedure.step" $ S.location s]
+        s' -> throwError [SexpException ("a list with 2 or 3 elements expected, but got " ++ abstractMessage s') "procedure.step" $ S.location s]
 
 let' :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f [f (Definition et ev f)], f (Value et ev f)))
 let' s =
@@ -487,7 +486,7 @@ let' s =
     SS.List [sk, sds, sv] -> do
       symbol "let" "let'" sk
       (,) <$> list definition sds <*> value sv
-    _ -> throwError [SexpException "unexpected format" "let'" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "let'" $ S.location s]
 
 forAll :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (f S.Identifier, f (Value et ev f)))
 forAll s =
@@ -495,7 +494,7 @@ forAll s =
     SS.List [sk, si, sv] -> do
       symbol "for-all" "forAll" sk
       (,) <$> identifier si <*> value sv
-    _ -> throwError [SexpException "unexpected format" "forAll" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "forAll" $ S.location s]
 
 typeAnnotation :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (TypeAnnotation et ev f))
 typeAnnotation s =
@@ -503,7 +502,7 @@ typeAnnotation s =
     SS.List [sk, sv, st] -> do
       symbol "type" "typeAnnotation" sk
       S.TypeAnnotation' <$> value sv <*> typ st
-    _ -> throwError [SexpException "unexpected format" "typeAnnotation" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "typeAnnotation" $ S.location s]
 
 application :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Application et ev f))
 application s =
@@ -511,7 +510,7 @@ application s =
     SS.List [sk, sv1, sv2] -> do
       symbol "apply" "application" sk
       S.ApplicationC <$> value sv1 <*> value sv2
-    _ -> throwError [SexpException "unexpected format" "application" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "application" $ S.location s]
 
 function :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Function et ev f))
 function s =
@@ -519,7 +518,7 @@ function s =
     SS.List [sk, si, st, sv] -> do
       symbol "function" "function" sk
       S.FunctionC <$> identifier si <*> typ st <*> value sv
-    _ -> throwError [SexpException "unexpected format" "function" $ S.location s]
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "function" $ S.location s]
 
 list :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f a) -> SexpParser f m (f [f a])
 list p s =
@@ -527,7 +526,7 @@ list p s =
     SS.List (l : ss) -> do
       symbol "list" "list" l
       traverse p ss
-    _ -> throwError [SexpException "\"list\" is expected" "list" $ S.location s]
+    s' -> throwError [SexpException ("a list with some elements and the first element \"list\" expected, but got " ++ abstractMessage s') "list" $ S.location s]
 
 list1 :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => SexpParser f m (f a) -> SexpParser f m (f (NonEmpty (f a)))
 list1 p s =
@@ -535,7 +534,7 @@ list1 p s =
     SS.List (l : ss) -> do
       symbol "list" "list1" l
       fromMaybe X.unreachable . N.nonEmpty <$> traverse p ss
-    _ -> throwError [SexpException "\"list\" is expected" "list" $ S.location s]
+    s' -> throwError [SexpException ("a list with some elements and the first element \"list\" expected, but got " ++ abstractMessage s') "list1" $ S.location s]
 
 atom :: (MonadError [Exception] m, Traversable f, S.HasLocation f) => String -> ParsecT Void Text Identity a -> SexpParser f m (f a)
 atom label parser s =
@@ -544,15 +543,19 @@ atom label parser s =
       case M.runParser (unParsecT $ parser <* P.eof) label t of
         Right i -> pure i
         Left e  -> throwError [SexpException (M.errorBundlePretty e) label $ S.location s]
-    _ -> throwError [SexpException (label ++ " must be an atom") label $ S.location s]
+    s' -> throwError [SexpException ("an atom expected, but got " ++ abstractMessage s') label $ S.location s]
 
 symbol :: (MonadError [Exception] m, Foldable f, S.HasLocation f) => Text -> String -> SexpParser f m ()
-symbol sym tag s =
+symbol sym label s =
   for_ s $ \case
     SS.Atom sym'
       | sym == sym' -> pure ()
-      | otherwise -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected, but got \"" ++ T.unpack sym' ++ "\"") tag $ S.location s]
-    _ -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected") tag $ S.location s]
+      | otherwise -> throwError [SexpException ("\"" ++ T.unpack sym ++ "\" expected, but got \"" ++ T.unpack sym' ++ "\"") label $ S.location s]
+    s' -> throwError [SexpException ("an atom expected, but got " ++ abstractMessage s') label $ S.location s]
+
+abstractMessage :: SS.Sexp b f -> String
+abstractMessage (SS.Atom m)  = T.unpack $ "an atom of \"" <> m <> "\""
+abstractMessage (SS.List ss) = "a list with " ++ show (length ss) ++ " element(s)"
 
 data EmbeddedParser f =
   EmbeddedParser
