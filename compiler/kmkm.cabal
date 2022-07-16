@@ -68,7 +68,6 @@ library
                    Language.Kmkm.Internal.Parse.Sexp.C
                    Language.Kmkm.Internal.Syntax
                    Language.Kmkm.Internal.Syntax.Sexp
-                   Language.Kmkm.Internal.Syntax.Sexp.Token
   build-depends: algebraic-graphs,
                  barbies,
                  barbies-layered,
