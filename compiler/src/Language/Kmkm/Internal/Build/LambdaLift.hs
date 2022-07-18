@@ -21,6 +21,8 @@ type Module l et ev = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
 
 type Definition l et ev = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
 
+type DataRepresentation l et ev = S.DataRepresentation 'S.NameResolved 'S.Uncurried l et ev
+
 type ValueConstructor l et ev = S.ValueConstructor 'S.NameResolved 'S.Uncurried l et ev
 
 type Field l et ev = S.Field 'S.NameResolved 'S.Uncurried l et ev
@@ -44,7 +46,7 @@ definition :: (Traversable f, Copointed f, MayHave S.Location f) => f (Definitio
 definition =
   traverse definition'
   where
-    definition' (S.DataDefinition i cs)    = S.DataDefinition i <$> traverse (traverse valueConstructor) cs
+    definition' (S.DataDefinition i r)    = S.DataDefinition i <$> dataRepresentation r
     definition' (S.TypeBind i t)           = pure $ S.TypeBind i t
     definition' (S.ForeignTypeBind i c)    = pure $ S.ForeignTypeBind i c
     definition' (S.ForeignValueBind i c t) = pure $ S.ForeignValueBind i c t
@@ -64,6 +66,9 @@ definition =
               (v', ds) <- term v
               let S.TypedValue _ t = copoint v'
               pure $ S.ValueBind $ S.ValueBindV i (S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v) <$ b
+
+dataRepresentation :: Traversable f => f (DataRepresentation 'S.LambdaUnlifted et ev f) -> Pass (f (DataRepresentation 'S.LambdaLifted et ev f))
+dataRepresentation = traverse $ \(S.ForAllDataU is cs) -> S.ForAllDataU is <$> traverse (traverse valueConstructor) cs
 
 valueConstructor :: Traversable f => f (ValueConstructor 'S.LambdaUnlifted et ev f) -> Pass (f (ValueConstructor 'S.LambdaLifted et ev f))
 valueConstructor = traverse $ \(S.ValueConstructor i fs) -> S.ValueConstructor i <$> traverse (traverse field) fs

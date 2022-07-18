@@ -16,12 +16,14 @@ import           Data.Copointed                   (Copointed (copoint))
 import           Data.List.NonEmpty               (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
-import           Prelude                          (Functor (fmap, (<$)), otherwise, ($), (<$>))
+import           Prelude                          (Functor (fmap, (<$)), flip, otherwise, ($), (<$>))
 import Data.Functor.With (MayHave)
 
 type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
 type Definition c et ev = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
+
+type DataRepresentation c et ev = S.DataRepresentation 'S.NameResolved c 'S.LambdaUnlifted et ev
 
 type ValueConstructor c et ev = S.ValueConstructor 'S.NameResolved c 'S.LambdaUnlifted et ev
 
@@ -56,11 +58,22 @@ module' = fmap $ \(S.Module i ds ms) -> S.Module i ds $ fmap definition <$> ms
 definition :: (Functor f, Copointed f, MayHave S.Location f) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
 definition =
   fmap $ \case
-    S.DataDefinition i cs    -> S.DataDefinition i $ fmap valueConstructor <$> cs
+    S.DataDefinition i r     -> S.DataDefinition i $ dataRepresentation r
     S.TypeBind i t           -> S.TypeBind i $ typ t
     S.ForeignTypeBind i c    -> S.ForeignTypeBind i c
     S.ValueBind b            -> S.ValueBind $ (\(S.ValueBindU i v) -> S.ValueBindU i $ typedValue v) <$> b
     S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
+
+dataRepresentation :: (Functor f, Copointed f, MayHave S.Location f) => f (DataRepresentation 'S.Curried et ev f) -> f (DataRepresentation 'S.Uncurried et ev f)
+dataRepresentation r =
+  flip fmap r $ \r' ->
+    let (is, cs) = go r'
+    in S.ForAllDataU (is <$ r) cs
+  where
+    go (S.ForAllDataC i r) =
+      let (is, cs) = go $ copoint r
+      in (i : is, cs)
+    go (S.ValueConstructorsData cs) = ([], fmap valueConstructor <$> cs)
 
 valueConstructor :: (Functor f, Copointed f, MayHave S.Location f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
 valueConstructor = fmap $ \(S.ValueConstructor i fs) -> S.ValueConstructor i (fmap field <$> fs)

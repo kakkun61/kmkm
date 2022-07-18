@@ -32,6 +32,8 @@ type Module n et ev = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
 type Definition n et ev = S.Definition n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
+type DataRepresentation n et ev = S.DataRepresentation n 'S.Curried 'S.LambdaUnlifted et ev
+
 type ValueConstructor n et ev = S.ValueConstructor n 'S.Curried 'S.LambdaUnlifted et ev
 
 type Field n et ev = S.Field n 'S.Curried 'S.LambdaUnlifted et ev
@@ -110,8 +112,14 @@ definition valueAffiliations typeAffiliations moduleName affiliation =
     S.ValueBind b -> S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName affiliation b
     S.TypeBind i t -> S.TypeBind (S.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
     S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) c
-    S.DataDefinition i cs -> S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> mapM (traverse $ valueConstructor typeAffiliations moduleName) cs
+    S.DataDefinition i r -> S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> dataRepresentation typeAffiliations moduleName r
     S.ForeignValueBind i c t -> S.ForeignValueBind (S.GlobalIdentifier moduleName <$> i) c <$> typ typeAffiliations moduleName t
+
+dataRepresentation :: (MonadThrow m, Traversable f, Copointed f, MayHave S.Location f) => Map S.Identifier Affiliation -> S.ModuleName -> f (DataRepresentation 'S.NameUnresolved et ev f) -> m (f (DataRepresentation 'S.NameResolved et ev f))
+dataRepresentation typeAffiliations moduleName =
+  traverse $ \case
+    S.ForAllDataC i r -> S.ForAllDataC (S.LocalIdentifier <$> i) <$> dataRepresentation (M.insert (copoint i) Local typeAffiliations) moduleName r
+    S.ValueConstructorsData cs -> S.ValueConstructorsData <$> mapM (traverse $ valueConstructor typeAffiliations moduleName) cs
 
 valueConstructor :: (MonadThrow m, Traversable f, Copointed f, MayHave S.Location f) => Map S.Identifier Affiliation -> S.ModuleName -> f (ValueConstructor 'S.NameUnresolved et ev f) -> m (f (ValueConstructor 'S.NameResolved et ev f))
 valueConstructor typeAffiliations moduleName =
@@ -189,7 +197,7 @@ value' valueAffiliations typeAffiliations moduleName v =
       let
         localIdentifiers = S.unions $ boundValueIdentifier <$> copoint ds
         localAffiliations = M.fromSet (const Local) localIdentifiers
-        valueAffiliations' = localAffiliations `M.union` valueAffiliations
+        valueAffiliations' = M.union localAffiliations valueAffiliations
       in
         S.Let
           <$> mapM (traverse $ definition valueAffiliations' typeAffiliations moduleName Local) ds
@@ -339,10 +347,12 @@ boundValueIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) =
 boundValueIdentifier =
   boundValueIdentifier' . runIdentity . S.toIdentity
   where
-    boundValueIdentifier' (S.DataDefinition _ (Identity cs))          = S.fromList $ (\(Identity (S.ValueConstructor (Identity i) _)) -> i) <$> cs
+    boundValueIdentifier' (S.DataDefinition _ (Identity r))                      = identifiers r
     boundValueIdentifier' (S.ValueBind (Identity (S.ValueBindU (Identity i) _))) = S.singleton i
-    boundValueIdentifier' (S.ForeignValueBind (Identity i) _ _)       = S.singleton i
-    boundValueIdentifier' _                                = S.empty
+    boundValueIdentifier' (S.ForeignValueBind (Identity i) _ _)                  = S.singleton i
+    boundValueIdentifier' _                                                      = S.empty
+    identifiers (S.ForAllDataC (Identity i) (Identity r)) = S.insert i $ identifiers r
+    identifiers (S.ValueConstructorsData _)               = S.empty
 
 boundTypeIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
 boundTypeIdentifier =

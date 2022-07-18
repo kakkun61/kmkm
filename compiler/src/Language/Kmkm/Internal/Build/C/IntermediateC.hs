@@ -77,7 +77,7 @@ module' definedVariables m =
 definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
 definition definedVariables n d =
   case copoint d of
-    S.DataDefinition i cs ->
+    S.DataDefinition i r ->
       pure $
         foldMap
           (fmap Right)
@@ -86,6 +86,7 @@ definition definedVariables n d =
             , I.Definition . constructor (length cs_) <$> cs_
             ]
       where
+        S.ForAllDataU _is cs = copoint r
         cs_ = copoint cs
         tagEnumIdent i = I.Identifier $ qualifiedIdentifierText i <> "_tag"
         tagEnumType = ([], I.Enumerable $ tagEnumIdent i)

@@ -26,6 +26,7 @@ module Language.Kmkm.Internal.Syntax
   ( -- * Modules and definitions
     Module (..)
   , Definition (..)
+  , DataRepresentation (..)
   , ValueConstructor (..)
   , Field (..)
   , ValueBind (..)
@@ -109,6 +110,7 @@ deriving instance ModuleConstraint Ord n c l t et ev f => Ord (Module n c l t et
 
 instance
   ( FunctorB (FunctionType n c)
+  , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l t et ev)
   , FunctorB et
   , FunctorB ev
@@ -120,7 +122,7 @@ instance
 
 type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
 data Definition n c l t et ev f
-  = DataDefinition (f (BindIdentifier n)) (f [f (ValueConstructor n c l et ev f)])
+  = DataDefinition (f (BindIdentifier n)) (f (DataRepresentation n c l et ev f))
   | TypeBind (f (BindIdentifier n)) (f (Type n c f))
   | ValueBind (f (ValueBind n c l t et ev f))
   | ForeignTypeBind (f (BindIdentifier n)) (f (et f))
@@ -130,7 +132,7 @@ data Definition n c l t et ev f
 type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
 type DefinitionConstraint cls n c l t et ev f =
   ( cls (f (BindIdentifier n))
-  , cls (f [f (ValueConstructor n c l et ev f)])
+  , cls (f (DataRepresentation n c l et ev f))
   , cls (f (Type n c f))
   , cls (f (ValueBind n c l t et ev f))
   , cls (f CHeader)
@@ -143,14 +145,54 @@ deriving instance DefinitionConstraint Show n c l t et ev f => Show (Definition 
 deriving instance DefinitionConstraint Eq n c l t et ev f => Eq (Definition n c l t et ev f)
 deriving instance DefinitionConstraint Ord n c l t et ev f => Ord (Definition n c l t et ev f)
 
-instance (FunctorB (Type n c), FunctorB (FunctionType n c), FunctorB (ValueBind n c l t et ev), FunctorB et, FunctorB ev) => FunctorB (Definition n c l t et ev) where
+instance (FunctorB (Type n c), FunctorB (DataRepresentation n c l et ev), FunctorB (ValueBind n c l t et ev), FunctorB et, FunctorB ev) => FunctorB (Definition n c l t et ev) where
   bmap :: forall f g. (Functor f, Functor g) => (forall a. f a -> g a) -> Definition n c l t et ev f -> Definition n c l t et ev g
-  bmap f (DataDefinition n cs) =
-    DataDefinition (f n) $ fmap (fmap (bmap f) . f) <$> f cs
-  bmap f (TypeBind i t) = TypeBind (f i) (bmap f <$> f t)
-  bmap f (ValueBind b) = ValueBind (bmap f <$> f b)
-  bmap f (ForeignTypeBind i c) =  ForeignTypeBind (f i) (bmap f <$> f c)
+  bmap f (DataDefinition n cs)    = DataDefinition (f n) $ bmap f <$> f cs
+  bmap f (TypeBind i t)           = TypeBind (f i) (bmap f <$> f t)
+  bmap f (ValueBind b)            = ValueBind (bmap f <$> f b)
+  bmap f (ForeignTypeBind i c)    =  ForeignTypeBind (f i) (bmap f <$> f c)
   bmap f (ForeignValueBind i c t) = ForeignValueBind (f i) (bmap f <$> f c) (bmap f <$> f t)
+
+-- DataRepresentation
+
+type DataRepresentation :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+data family DataRepresentation n c l et ev f
+
+type DataRepresentationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type family DataRepresentationConstraint cls n c l et ev f
+
+data instance DataRepresentation n 'Curried l et ev f
+  = ForAllDataC (f (BindIdentifier n)) (f (DataRepresentation n 'Curried l et ev f))
+  | ValueConstructorsData (f [f (ValueConstructor n 'Curried l et ev f)])
+  deriving Generic
+
+type instance DataRepresentationConstraint cls n 'Curried l et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (DataRepresentation n 'Curried l et ev f))
+  , cls (f [f (ValueConstructor n 'Curried l et ev f)])
+  )
+
+deriving instance DataRepresentationConstraint Show n 'Curried l et ev f => Show (DataRepresentation n 'Curried l et ev f)
+deriving instance DataRepresentationConstraint Eq n 'Curried l et ev f => Eq (DataRepresentation n 'Curried l et ev f)
+deriving instance DataRepresentationConstraint Ord n 'Curried l et ev f => Ord (DataRepresentation n 'Curried l et ev f)
+
+instance (FunctorB (Type n 'Curried), FunctorB (FunctionType n 'Curried), FunctorB et, FunctorB ev) => FunctorB (DataRepresentation n 'Curried l et ev) where
+  bmap f (ForAllDataC i r)          = ForAllDataC (f i) $ bmap f <$> f r
+  bmap f (ValueConstructorsData cs) = ValueConstructorsData $ fmap (fmap (bmap f) . f) <$> f cs
+
+data instance DataRepresentation n 'Uncurried l et ev f = ForAllDataU (f [f (BindIdentifier n)]) (f [f (ValueConstructor n 'Uncurried l et ev f)])
+
+type instance DataRepresentationConstraint cls n 'Uncurried l et ev f =
+  ( cls (f [f (BindIdentifier n)])
+  , cls (f [f (ValueConstructor n 'Uncurried l et ev f)])
+  )
+
+deriving instance DataRepresentationConstraint Show n 'Uncurried l et ev f => Show (DataRepresentation n 'Uncurried l et ev f)
+deriving instance DataRepresentationConstraint Eq n 'Uncurried l et ev f => Eq (DataRepresentation n 'Uncurried l et ev f)
+deriving instance DataRepresentationConstraint Ord n 'Uncurried l et ev f => Ord (DataRepresentation n 'Uncurried l et ev f)
+
+instance FunctorB (FunctionType n 'Uncurried) => FunctorB (DataRepresentation n 'Uncurried l et ev) where
+  bmap f (ForAllDataU is cs) = ForAllDataU (fmap f <$> f is) $ fmap (fmap (bmap f) . f) <$> f cs
 
 -- ValueConstructor
 
@@ -442,6 +484,7 @@ instance
   ( FunctorB (Function n c l 'Untyped et ev)
   , FunctorB (Application n c l 'Untyped et ev)
   , FunctorB (FunctionType n c)
+  , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Untyped et ev)
   , FunctorB et
   , FunctorB ev
@@ -462,6 +505,7 @@ instance
   ( FunctorB (Function n c l 'Typed et ev)
   , FunctorB (Application n c l 'Typed et ev)
   , FunctorB (FunctionType n c)
+  , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Typed et ev)
   , FunctorB et
   , FunctorB ev
@@ -522,6 +566,7 @@ instance
   , FunctorB (TypeAnnotation n c l t et ev)
   , FunctorB (Value n c l t et ev)
   , FunctorB (FunctionType n c)
+  , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l t et ev)
   , FunctorB et
   , FunctorB ev
@@ -576,6 +621,7 @@ instance
   ( FunctorB (Function n c l 'Untyped et ev)
   , FunctorB (Application n c l 'Untyped et ev)
   , FunctorB (FunctionType n c)
+  , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Untyped et ev)
   , FunctorB et
   , FunctorB ev

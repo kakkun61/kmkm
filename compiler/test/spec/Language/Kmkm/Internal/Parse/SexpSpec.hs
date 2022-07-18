@@ -135,17 +135,24 @@ spec = do
             ForeignTypeBind (I "foo") (I $ EmbeddedCType "" "")
 
     describe "dataDefinition" $ do
-      it "define bool (false true)" $ do
+      it "(define bool (list false true))" $ do
         ps dataDefinition "spec" ["define", "bool", ["list", "false", "true"]]
           `shouldReturn`
-            ( DataDefinition "bool" (I [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])
+            ( DataDefinition "bool" (I $ ValueConstructorsData [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])
                 :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
             )
 
       it "define book (list (book (list (title string) (author string))))" $ do
         ps dataDefinition "spec" ["define", "book", ["list", ["book", ["list", ["title", "string"], ["author", "string"]]]]]
           `shouldReturn`
-            ( DataDefinition "book" (I [I (ValueConstructor "book" $ I [I (Field "title" "string"), I (Field "author" "string")])])
+            ( DataDefinition "book" (I $ ValueConstructorsData [I (ValueConstructor "book" $ I [I (Field "title" "string"), I (Field "author" "string")])])
+                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            )
+
+      it "(define solo (for-all a (list (solo (list (item a)))))))" $ do
+        ps dataDefinition "spec" ["define", "solo", ["for-all", "a", ["list", ["solo", ["list", ["item", "a"]]]]]]
+          `shouldReturn`
+            ( DataDefinition "solo" (I $ ForAllDataC "a" (I $ ValueConstructorsData [I (ValueConstructor "solo" $ I [I (Field "item" "a")])]))
                 :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
             )
 
@@ -170,7 +177,7 @@ spec = do
 
       it "(module math (list) (list (define bool (false true)))" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["define", "bool", ["list", "false", "true"]]]]
-          `shouldReturn` Module (I "math") (I []) (I [I $ DataDefinition (I "bool") (I [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])])
+          `shouldReturn` Module (I "math") (I []) (I [I $ DataDefinition (I "bool") (I $ ValueConstructorsData [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])])
 
 pt :: MonadThrow m => String -> Text -> m (I (Sexp I))
 pt label text = toIdentity <$> parseText label text

@@ -79,7 +79,7 @@ compile' output libraries dryRun verbosity src =
     do
       let
         findFile path =
-            go $ "." : libraries
+          go $ "." : libraries
           where
             go (dir : dirs) = do
               let p = dir </> path

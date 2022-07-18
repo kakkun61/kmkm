@@ -124,7 +124,8 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test/spec
-  other-modules: Language.Kmkm.Internal.Build.C.IntermediateCSpec
+  other-modules: Language.Kmkm.Internal.Build.C.CSpec
+                 Language.Kmkm.Internal.Build.C.IntermediateCSpec
                  Language.Kmkm.Internal.Build.TypeCheckSpec
                  Language.Kmkm.Internal.Parse.SexpSpec
                  Language.Kmkm.Internal.SyntaxSpec
