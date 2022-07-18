@@ -206,7 +206,8 @@ gcc cc output directory verbosity = do
   callProcess cc (sourceFiles ++ verbosity' ++ ["-o", output])
 
 convertPath :: FilePath -> IO FilePath
-
-
-
+#ifdef CYGPATH
+convertPath path = init <$> readProcess "cygpath" [path] "" -- empty string is something wrong.
+#else
 convertPath = pure
+#endif
