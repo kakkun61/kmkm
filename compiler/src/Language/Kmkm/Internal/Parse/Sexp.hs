@@ -72,6 +72,8 @@ type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.U
 
 type Definition et ev = S.Definition 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
+type DataRepresentation et ev = S.DataRepresentation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev
+
 type ValueConstructor et ev = S.ValueConstructor 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev
 
 type Field et ev = S.Field 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted et ev
@@ -233,10 +235,22 @@ runEmbeddedParsers evps s = P.choice $ liftEither . ($ s) <$> evps
 dataDefinition :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (Definition et ev f))
 dataDefinition s =
   for s $ \case
-    SS.List [sd, si, sc] -> do
+    SS.List [sd, si, r] -> do
       symbol "define" "dataDefinition" sd
-      S.DataDefinition <$> identifier si <*> list valueConstructor sc
+      S.DataDefinition <$> identifier si <*> dataRepresentation r
     s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "dataDefinition" $ S.location s]
+
+dataRepresentation :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (DataRepresentation et ev f))
+dataRepresentation s =
+  for s $ \s' ->
+    P.choice
+      [ case s' of
+          SS.List [sk, si, sr] -> do
+            symbol "for-all" "dataRepresentation" sk
+            S.ForAllDataC <$> identifier si <*> dataRepresentation sr
+          _ -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "dataRepresentation" $ S.location s]
+      , S.ValueConstructorsData <$> list valueConstructor s
+      ]
 
 valueConstructor :: (MonadAlternativeError [Exception] m, Traversable f, Copointed f, S.HasLocation f) => SexpParser f m (f (ValueConstructor et ev f))
 valueConstructor s =

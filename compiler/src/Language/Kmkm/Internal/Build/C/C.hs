@@ -3,6 +3,8 @@
 
 module Language.Kmkm.Internal.Build.C.C
   ( render
+  , element
+  , field
   ) where
 
 import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
@@ -91,7 +93,7 @@ typ (EnumerableLiteral i is) =
     ]
 
 field :: Field -> Text
-field (Field t i ds) = derivers (qualifiedType t <> " " <> identifier i) ds
+field (Field t i ds) = qualifiedType t <> " " <> derivers (identifier i) ds
 
 typeQualifier :: TypeQualifier -> Text
 typeQualifier Unsigned = "unsigned"
