@@ -122,8 +122,9 @@ definitions variableTypes prim =
         foreignValueBinds = M.fromList $ mapMaybe foreignValueBind definitions'
         dependencyGraph = G.overlays $ dependency (M.keysSet valueBinds) <$> definitions'
         sortedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencyGraph
-        variableTypes' = M.unions $ M.mapMaybe annotatedType valueBinds : foreignValueBinds : variableTypes : []
-      typedValueBinds <- foldr (flip $ typeBind variableTypes' valueBinds prim) (pure M.empty) sortedIdentifiers
+        variableTypes' = M.unions $ M.mapMaybe annotatedType valueBinds : foreignValueBinds : variableTypes : [] -- why not a list literal? because of non-injective type families.
+        typedValueBinds = M.unions $ mapMaybe valueConstructors definitions'
+      typedValueBinds <- foldr (flip $ typeBind variableTypes' valueBinds prim) (pure typedValueBinds) sortedIdentifiers
       pure $ replaceValue typedValueBinds <$> definitions'
 
 dependency :: (Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
@@ -131,7 +132,7 @@ dependency valueBinds d
   | S.ValueBind b <- copoint d =
       let S.ValueBindU i v = copoint b
       in G.vertex (copoint i) `G.connect` G.overlays (G.vertex <$> dep valueBinds v)
-dependency _ _                                                        = G.empty
+dependency _ _ = G.empty
 
 typeBind
   :: ( MonadThrow m
@@ -182,11 +183,29 @@ valueBind d
   | S.ValueBind b <- copoint d =
       let S.ValueBindU i v = copoint b
       in Just (copoint i, v)
-valueBind _                                               = Nothing
+valueBind _ = Nothing
 
 foreignValueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Type f))
 foreignValueBind d | S.ForeignValueBind i _ t <- copoint d       = Just (copoint i, t)
 foreignValueBind _                                               = Nothing
+
+valueConstructors :: (Functor f, Copointed f) => f (Definition 'S.Untyped et ev f) -> Maybe (Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)))
+valueConstructors d
+  | S.DataDefinition i r <- copoint d =
+      let
+        dataRepresentation r =
+          case copoint r of
+            S.ValueConstructorsData cs ->
+              M.fromList $ flip fmap (copoint cs) $ \c ->
+                let
+                  S.ValueConstructor j fs = copoint c
+                  go f r =
+                    let S.Field _ t = copoint f
+                    in S.FunctionType (S.FunctionTypeC t r <$ f) <$ f
+                in (copoint j, S.TypedValue (S.Variable j <$ j) (foldr go (S.TypeVariable i <$ i) $ copoint fs) <$ r)
+            S.ForAllDataC a r' -> fmap (\(S.TypedValue v t) -> S.TypedValue v $ S.ForAllType a t <$ r) <$> dataRepresentation r'
+      in Just $ dataRepresentation r
+valueConstructors _ = Nothing
 
 dep :: (Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped et ev f) -> [S.QualifiedIdentifier]
 dep identifiers v =

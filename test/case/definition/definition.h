@@ -51,4 +51,6 @@ struct definition_unit {
 };
 
 struct definition_unit extern const definition_unit;
+
+struct definition_myBool definition_falseValue(void);
 #endif

@@ -147,7 +147,7 @@ deriving instance DefinitionConstraint Ord n c l t et ev f => Ord (Definition n 
 
 instance (FunctorB (Type n c), FunctorB (DataRepresentation n c l et ev), FunctorB (ValueBind n c l t et ev), FunctorB et, FunctorB ev) => FunctorB (Definition n c l t et ev) where
   bmap :: forall f g. (Functor f, Functor g) => (forall a. f a -> g a) -> Definition n c l t et ev f -> Definition n c l t et ev g
-  bmap f (DataDefinition n cs)    = DataDefinition (f n) $ bmap f <$> f cs
+  bmap f (DataDefinition n r)     = DataDefinition (f n) $ bmap f <$> f r
   bmap f (TypeBind i t)           = TypeBind (f i) (bmap f <$> f t)
   bmap f (ValueBind b)            = ValueBind (bmap f <$> f b)
   bmap f (ForeignTypeBind i c)    =  ForeignTypeBind (f i) (bmap f <$> f c)

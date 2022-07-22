@@ -21,7 +21,6 @@ import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as M
 import           Data.Set                         (Set)
 import qualified Data.Set                         as S
-import           Data.Traversable                 (for)
 import qualified Data.Typeable                    as Y
 import           GHC.Generics                     (Generic)
 import qualified Language.Kmkm.Internal.Exception as X
@@ -167,10 +166,8 @@ value
   -> S.ModuleName
   -> f (Value 'S.NameUnresolved et ev f)
   -> m (f (Value 'S.NameResolved et ev f))
-value valueAffiliations typeAffiliations moduleName v =
-  traverse go v
-  where
-    go (S.UntypedValue v) = S.UntypedValue <$> value' valueAffiliations typeAffiliations moduleName v
+value valueAffiliations typeAffiliations moduleName =
+  traverse $ \(S.UntypedValue v) -> S.UntypedValue <$> value' valueAffiliations typeAffiliations moduleName v
 
 value'
   :: ( MonadThrow m
@@ -185,8 +182,8 @@ value'
   -> S.ModuleName
   -> f (Value' 'S.NameUnresolved et ev f)
   -> m (f (Value' 'S.NameResolved et ev f))
-value' valueAffiliations typeAffiliations moduleName v =
-  for v $ \case
+value' valueAffiliations typeAffiliations moduleName =
+  traverse $ \case
     S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations i
     S.Procedure ss -> S.Procedure <$> mapM (traverse $ procedureStep valueAffiliations typeAffiliations moduleName) ss
     S.Literal l -> pure $ S.Literal $ literal <$> l
@@ -351,8 +348,8 @@ boundValueIdentifier =
     boundValueIdentifier' (S.ValueBind (Identity (S.ValueBindU (Identity i) _))) = S.singleton i
     boundValueIdentifier' (S.ForeignValueBind (Identity i) _ _)                  = S.singleton i
     boundValueIdentifier' _                                                      = S.empty
-    identifiers (S.ForAllDataC (Identity i) (Identity r)) = S.insert i $ identifiers r
-    identifiers (S.ValueConstructorsData _)               = S.empty
+    identifiers (S.ForAllDataC _ (Identity r)) = identifiers r
+    identifiers (S.ValueConstructorsData (Identity cs))               = S.fromList $ (\(Identity (S.ValueConstructor (Identity i) _)) -> i) <$> cs
 
 boundTypeIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
 boundTypeIdentifier =
