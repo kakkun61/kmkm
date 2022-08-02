@@ -47,7 +47,8 @@ library
   import: common,
           warnings
   hs-source-dirs: src
-  exposed-modules: Language.Kmkm
+  exposed-modules: Data.Functor.With
+                   Language.Kmkm
                    Language.Kmkm.Internal.Build.C.C
                    Language.Kmkm.Internal.Build.C.Header
                    Language.Kmkm.Internal.Build.C.IntermediateC
@@ -83,8 +84,6 @@ library
                  pointed,
                  safe-exceptions,
                  text
-
-                 ,recover-rtti
   default-extensions: Strict
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
