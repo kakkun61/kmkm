@@ -45,6 +45,8 @@ import qualified Data.Set                             as S
 import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
+import Data.Functor.With (MayHave)
+import qualified Data.Functor.With as W
 
 type Module t et ev = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
@@ -62,7 +64,7 @@ typeCheck
   :: ( MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , B.FunctorB et
      , B.FunctorB ev
      , Eq (f (S.Type 'S.NameResolved 'S.Curried f))
@@ -79,7 +81,7 @@ typeCheck'
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , B.FunctorB et
      , B.FunctorB ev
      , Eq (f (Type f))
@@ -102,7 +104,7 @@ definitions
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
@@ -124,7 +126,7 @@ definitions variableTypes prim =
       typedValueBinds <- foldr (flip $ typeBind variableTypes' valueBinds prim) (pure M.empty) sortedIdentifiers
       pure $ replaceValue typedValueBinds <$> definitions'
 
-dependency :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
+dependency :: (Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition 'S.Untyped et ev f) -> G.AdjacencyMap S.QualifiedIdentifier
 dependency valueBinds d
   | S.ValueBind b <- copoint d =
       let S.ValueBindU i v = copoint b
@@ -136,7 +138,7 @@ typeBind
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
@@ -186,7 +188,7 @@ foreignValueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.Qualifie
 foreignValueBind d | S.ForeignValueBind i _ t <- copoint d       = Just (copoint i, t)
 foreignValueBind _                                               = Nothing
 
-dep :: (Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped et ev f) -> [S.QualifiedIdentifier]
+dep :: (Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Value 'S.Untyped et ev f) -> [S.QualifiedIdentifier]
 dep identifiers v =
   case copoint v of
     S.UntypedValue v' ->
@@ -221,7 +223,7 @@ typeOfTerm
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
@@ -238,7 +240,7 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
           let i' = copoint i
           in
             case M.lookup i' variableTypes of
-              Nothing -> throw $ NotFoundException i' $ S.location i
+              Nothing -> throw $ NotFoundException i' $ W.mayGet i
               Just t  -> pure $ S.TypedValue (S.Variable i <$ v') t <$ v
         S.Literal l ->
           case copoint l of
@@ -247,19 +249,19 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
               in
                 if primInt
                   then pure $ S.TypedValue (S.Literal (S.Integer v_ b <$ l) <$ v') (S.TypeVariable (int <$ v) <$ v) <$ v
-                  else throw $ PrimitiveTypeException int $ S.location v
+                  else throw $ PrimitiveTypeException int $ W.mayGet v
             S.Fraction s d e b ->
               let frac2 = S.GlobalIdentifier ["kmkm", "prim"] "frac2"
               in
                 if primFrac2
                   then pure $ S.TypedValue (S.Literal (S.Fraction s d e b <$ l) <$ v') (S.TypeVariable (frac2 <$ v) <$ v) <$ v
-                  else throw $ PrimitiveTypeException frac2 $ S.location v
+                  else throw $ PrimitiveTypeException frac2 $ W.mayGet v
             S.String t ->
               let string = S.GlobalIdentifier ["kmkm", "prim"] "string"
               in
                 if primString
                   then pure $ S.TypedValue (S.Literal (S.String t <$ l) <$ v') (S.TypeVariable (string <$ v) <$ v) <$ v
-                  else throw $ PrimitiveTypeException string $ S.location v
+                  else throw $ PrimitiveTypeException string $ W.mayGet v
         S.Function f
           | S.FunctionC i t v'' <- copoint f -> do
               v''' <- typeOfTerm (M.insert (copoint i) t variableTypes) prim v''
@@ -280,8 +282,8 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
                         let t01' = substitute i t1 t01
                         pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01' <$ v
                       | S.toIdentity t1 == S.toIdentity t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01 <$ v
-                      | otherwise -> throw $ MismatchException (Right $ S.toIdentity t00) (S.toIdentity t1) $ S.location t1
-                _ -> throw $ MismatchException (Left "function") (S.toIdentity t0) $ S.location t0
+                      | otherwise                           -> throw $ MismatchException (Right $ S.toIdentity t00) (S.toIdentity t1) $ W.mayGet v1'
+                _ -> throw $ MismatchException (Left "function") (S.toIdentity t0) $ W.mayGet v0'
         S.Procedure ps -> do
           let p :| ps' = copoint ps
           (variableTypes', p') <- typeOfProcedureStep variableTypes prim p
@@ -292,7 +294,7 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
               | S.CallProcedureStep v <- copoint s ->
                   let S.TypedValue _ t = copoint v
                   in pure $ S.TypedValue (S.Procedure (ps''' <$ ps) <$ v') t <$ v
-              | otherwise -> throw $ BindProcedureEndException $ S.location s
+              | otherwise -> throw $ BindProcedureEndException $ W.mayGet s
           where
             go p acc = do
               (variableTypes, ps) <- acc
@@ -304,7 +306,7 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
               let S.TypedValue _ t' = copoint v''
               if S.toIdentity t == S.toIdentity t'
                 then pure v''
-                else throw $ MismatchException (Right $ S.toIdentity t) (S.toIdentity t') $ S.location t'
+                else throw $ MismatchException (Right $ S.toIdentity t) (S.toIdentity t') $ W.mayGet v''
         S.Let ds v' -> do
           ds' <- definitions variableTypes prim ds
           let variableTypes' = ((\(S.TypedValue _ t) -> t) . copoint <$> M.fromList (mapMaybe valueBind $ copoint ds')) `M.union` variableTypes
@@ -334,7 +336,7 @@ typeOfProcedureStep
      , MonadCatch m
      , Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
@@ -356,7 +358,7 @@ typeOfProcedureStep variableTypes prim s =
       let S.TypedValue _ t = copoint v'
       case copoint t of
         S.ProcedureType _ -> pure (variableTypes, S.CallProcedureStep v' <$ s)
-        _                 -> throw $ MismatchException (Left "procedure") (S.toIdentity t) $ S.location t
+        _                 -> throw $ MismatchException (Left "procedure") (S.toIdentity t) $ W.mayGet t
 
 primitivesImported :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Module 'S.Untyped et ev f) -> PrimitivesImported
 primitivesImported m =

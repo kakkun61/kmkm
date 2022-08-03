@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- | “Lambda lifting” pass.
 module Language.Kmkm.Internal.Build.LambdaLift
@@ -14,6 +15,7 @@ import qualified Control.Monad.State.Strict       as S
 import           Data.Copointed                   (Copointed (copoint))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
+import Data.Functor.With (MayHave)
 
 type Module l et ev = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
 
@@ -29,16 +31,16 @@ type ProcedureStep l et ev = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.T
 
 type Pass = State Word
 
-lambdaLift :: (Traversable f, Copointed f, S.HasLocation f) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev f)
+lambdaLift :: (Traversable f, Copointed f, MayHave S.Location f) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev f)
 lambdaLift = flip evalState 0 . module'
 
-module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
+module' :: (Traversable f, Copointed f, MayHave S.Location f) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
     ds' <- mapM (traverse definition) ds
     pure $ S.Module mn ms ds'
 
-definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
+definition :: (Traversable f, Copointed f, MayHave S.Location f) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
 definition =
   traverse definition'
   where
@@ -69,7 +71,7 @@ valueConstructor = traverse $ \(S.ValueConstructor i fs) -> S.ValueConstructor i
 field :: Traversable f => f (Field 'S.LambdaUnlifted et ev f) -> Pass (f (Field 'S.LambdaLifted et ev f))
 field = traverse $ \(S.Field i t) -> pure $ S.Field i t
 
-term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
+term :: (Traversable f, Copointed f, MayHave S.Location f) => f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 term v =
   case copoint v of
     S.TypedValue v' t ->
@@ -100,7 +102,7 @@ term v =
           pure (S.TypedValue (S.ForAll i v1' <$ v') t <$ v, ds)
         S.TypeAnnotation _ -> X.unreachable
 
-procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
+procedureStep :: (Traversable f, Copointed f, MayHave S.Location f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 procedureStep s =
   case copoint s of
     S.BindProcedureStep i v ->do

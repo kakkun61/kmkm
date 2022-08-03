@@ -16,6 +16,7 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE UndecidableInstances     #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 #if __GLASGOW_HASKELL__ < 902
 {-# OPTIONS_GHC -Wno-partial-fields #-}
@@ -57,8 +58,6 @@ module Language.Kmkm.Internal.Syntax
     -- * Locations
   , Location (..)
   , Position (..)
-  , HasLocation (..)
-  , WithLocation (..)
     -- * Kinds and types
   , Currying (..)
   , Typing (..)
@@ -87,6 +86,7 @@ import qualified Data.Text                   as T
 import           GHC.Exts                    (IsList)
 import qualified GHC.Exts                    as E
 import           GHC.Generics                (Generic)
+import Data.Functor.With ( With, pattern With )
 
 -- Module
 
@@ -820,38 +820,13 @@ data Location =
     }
   deriving (Show, Read, Eq, Ord, Generic)
 
-class HasLocation f where
-  location :: f a -> Maybe Location
-
 -- | A position in a source file.
 data Position =
   Position { line :: Word, column :: Word }
   deriving (Show, Read, Eq, Ord, Generic)
 
-data WithLocation a =
-  WithLocation Location a
-  deriving (Show, Read, Eq, Ord, Generic)
-
-instance Functor WithLocation where
-  fmap f (WithLocation loc a) = WithLocation loc $ f a
-
-instance Foldable WithLocation where
-  foldMap f (WithLocation _ a) = f a
-
-instance Traversable WithLocation where
-  traverse f (WithLocation loc a) = WithLocation loc <$> f a
-
-instance Copointed WithLocation where
-  copoint (WithLocation _ a) = a
-
-instance HasLocation WithLocation where
-  location (WithLocation loc _) = Just loc
-
-instance HasLocation Identity where
-  location (Identity _) = Nothing
-
-instance Pretty a => Pretty (WithLocation a) where
-  pretty (WithLocation _ a) = pretty a
+instance Pretty a => Pretty (With Location a) where
+  pretty (With _ a) = pretty a
 
 -- Kinds
 

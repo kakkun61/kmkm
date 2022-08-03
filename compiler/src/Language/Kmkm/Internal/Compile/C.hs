@@ -37,6 +37,7 @@ import qualified Data.Text              as T
 import qualified Data.Typeable          as Y
 import           GHC.Generics           (Generic)
 import qualified System.FilePath        as F
+import Data.Functor.With (MayHave)
 
 compile
   :: (Alternative m, MonadCatch m)
@@ -72,7 +73,7 @@ build2
      , Functor f
      , Foldable f
      , Copointed f
-     , KS.HasLocation f
+     , MayHave KS.Location f
      )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
@@ -118,7 +119,7 @@ build2'
      , Functor f
      , Foldable f
      , Copointed f
-     , KS.HasLocation f
+     , MayHave KS.Location f
      )
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])

@@ -32,6 +32,8 @@ import           Data.Text              (Text)
 import qualified Data.Text              as T
 import qualified Data.Typeable          as Y
 import           GHC.Generics           (Generic)
+import Data.Functor.With (MayHave)
+import qualified Data.Functor.With as W
 
 type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
 
@@ -48,14 +50,14 @@ translate
      , Functor f
      , Foldable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      )
   => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
   -> m I.File
 translate = module'
 
-module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Module f) -> m I.File
+module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Module f) -> m I.File
 module' definedVariables m =
   let S.Module n _ ds = copoint m
   in I.File (moduleName $ copoint n) . join <$> traverse (definition definedVariables n) (copoint ds)
@@ -72,7 +74,7 @@ module' definedVariables m =
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
+definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
 definition definedVariables n d =
   case copoint d of
     S.DataDefinition i cs ->
@@ -167,7 +169,7 @@ definition definedVariables n d =
                 , let (t', ds) = typ definedVariables t
                   in Right $ I.Definition $ I.ExpressionDefinition t' [I.Constant] (qualifiedIdentifier i) (constantDeriver <$> ds) $ I.ExpressionInitializer $ Left b
                 ]
-            Identity (S.EmbeddedCValue _ ps _) -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length ps) (S.location e)
+            Identity (S.EmbeddedCValue _ ps _) -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length ps) (W.mayGet e)
         S.FunctionType t' | (S.FunctionTypeN ts r) <- copoint t' ->
           case copoint e of
             S.EmbeddedCValue n ps b
@@ -193,7 +195,7 @@ definition definedVariables n d =
                         I.Definition $
                           I.StatementDefinition r'' [] (qualifiedIdentifier i) (ds ++ [I.Function (parameters definedVariables ps')]) $ Left $ copoint b
                     ]
-              | otherwise -> throw $ EmbeddedParameterMismatchException (fromIntegral $ length $ copoint ts) (fromIntegral $ length $ copoint ps) $ S.location e
+              | otherwise -> throw $ EmbeddedParameterMismatchException (fromIntegral $ length $ copoint ts) (fromIntegral $ length $ copoint ps) $ W.mayGet e
         S.ProcedureType {} ->
           let (t', ds) = typ definedVariables t
           in
@@ -205,7 +207,7 @@ definition definedVariables n d =
                       I.Definition $
                         I.StatementDefinition t' [] (qualifiedIdentifier i) (I.Function [(([], I.Void), [], Nothing, [])] : ds) $ Left $ copoint b
                   ]
-              S.EmbeddedCValue _ ps _ -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length $ copoint ps) $ S.location e
+              S.EmbeddedCValue _ ps _ -> throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length $ copoint ps) $ W.mayGet e
         _ -> X.unreachable
     S.TypeBind i t ->
       pure [Right $ I.TypeDefinition (Right $ typ definedVariables t) $ qualifiedIdentifier i]
@@ -217,7 +219,7 @@ definition definedVariables n d =
             , Right $ I.TypeDefinition (Left $ copoint b) (qualifiedIdentifier i)
             ]
 
-bindTermN :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f S.QualifiedIdentifier -> f [f (f S.QualifiedIdentifier, f (Type f))] -> f (Value f) -> m I.Element
+bindTermN :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f S.QualifiedIdentifier -> f [f (f S.QualifiedIdentifier, f (Type f))] -> f (Value f) -> m I.Element
 bindTermN definedVariables n i ps v = do
   let
     ps_ = copoint ps
@@ -281,7 +283,7 @@ qualifiedIdentifierText i =
 moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = T.intercalate "_" $ N.toList n
 
-value :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Value f) -> m I.Expression
+value :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Value f) -> m I.Expression
 value definedVariables n v =
   let S.TypedValue v' _ = copoint v
   in
@@ -320,7 +322,7 @@ literal l =
           _  -> error $ "literal: base " ++ show b
     S.String s -> I.String s -- XXX バックスラッシュでバイナリー表記にした方がいいかも
 
-procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, S.HasLocation f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
+procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
 procedureStep definedVariables n s =
   case copoint s of
     S.BindProcedureStep i v -> do
@@ -338,7 +340,7 @@ procedureStep definedVariables n s =
 typ :: Copointed f => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Type f) -> (I.QualifiedType, [I.Deriver])
 typ definedVariables t =
   case copoint t of
-    S.TypeVariable n ->  fromMaybe (([], I.Void), [I.Pointer []]) $ M.lookup (copoint n) definedVariables
+    S.TypeVariable n -> fromMaybe (([], I.Void), [I.Pointer []]) $ M.lookup (copoint n) definedVariables
     S.FunctionType t' | (S.FunctionTypeN _ t) <- copoint t' -> typ definedVariables t
     S.ProcedureType t -> typ definedVariables t
     _ -> undefined

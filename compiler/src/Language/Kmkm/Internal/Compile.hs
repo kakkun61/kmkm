@@ -45,6 +45,8 @@ import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 import           System.FilePath                      (isPathSeparator, pathSeparator)
 import qualified System.FilePath                      as F
+import Data.Functor.With (With)
+import qualified Data.Functor.With as W
 
 compile
   :: ( Alternative m
@@ -53,13 +55,13 @@ compile
      , B.FunctorB ev
      , Show (et Identity)
      , Show (ev Identity)
-     , Ord (et KS.WithLocation)
-     , Ord (ev KS.WithLocation)
+     , Ord (et (With KS.Location))
+     , Ord (ev (With KS.Location))
      )
-  => [KP.EmbeddedParser KS.WithLocation]
-  -> (KS.WithLocation (KS.EmbeddedType KS.WithLocation) -> Maybe (KS.WithLocation (et KS.WithLocation))) -- ^ Embedded type filter.
-  -> (KS.WithLocation (KS.EmbeddedValue KS.WithLocation) -> Maybe (KS.WithLocation (ev KS.WithLocation))) -- ^ Embedded value filter.
-  -> (Set (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev KS.WithLocation)) -> Map KS.ModuleName FilePath -> m ()) -- ^ Last step.
+  => [KP.EmbeddedParser (With KS.Location)]
+  -> (With KS.Location (KS.EmbeddedType (With KS.Location)) -> Maybe (With KS.Location (et (With KS.Location)))) -- ^ Embedded type filter.
+  -> (With KS.Location (KS.EmbeddedValue (With KS.Location)) -> Maybe (With KS.Location (ev (With KS.Location)))) -- ^ Embedded value filter.
+  -> (Set (With KS.Location (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev (With KS.Location))) -> Map KS.ModuleName FilePath -> m ()) -- ^ Last step.
   -> (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (Text -> m ()) -- ^ Logger.
@@ -86,15 +88,15 @@ compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFil
 
 readRecursively
   :: (Alternative m, MonadCatch m)
-  => [KP.EmbeddedParser KS.WithLocation]
-  -> (KS.WithLocation (KS.EmbeddedType KS.WithLocation) -> Maybe (KS.WithLocation (et KS.WithLocation)))
-  -> (KS.WithLocation (KS.EmbeddedValue KS.WithLocation) -> Maybe (KS.WithLocation (ev KS.WithLocation)))
+  => [KP.EmbeddedParser (With KS.Location)]
+  -> (With KS.Location (KS.EmbeddedType (With KS.Location)) -> Maybe (With KS.Location (et (With KS.Location))))
+  -> (With KS.Location (KS.EmbeddedValue (With KS.Location)) -> Maybe (With KS.Location (ev (With KS.Location))))
   -> (FilePath -> m FilePath)
   -> (FilePath -> m Text)
   -> FilePath
   -> m
        ( G.AdjacencyMap KS.ModuleName
-       , Map KS.ModuleName (KS.WithLocation (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev KS.WithLocation))
+       , Map KS.ModuleName (With KS.Location (KS.Module 'KS.NameUnresolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location)))
        , Map KS.ModuleName FilePath
        )
 readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile =
@@ -111,7 +113,7 @@ readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile
         moduleName' = copoint moduleName
         moduleName'' = filePathToModuleName path
         deps' = copoint <$> copoint deps
-      when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ KS.location moduleName
+      when (moduleName' /= "main" && moduleName' /= moduleName'') $ throw $ ModuleNameMismatchException path moduleName' $ W.mayGet moduleName
       (g, m, f) <- acc
       let
         m' = M.insert moduleName' module' m -- TODO 今 main モジュールで、すでに main モジュールがあったらエラー
@@ -123,11 +125,11 @@ readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile
 
 sortModules
   :: ( MonadThrow m
-     , Ord (et KS.WithLocation)
-     , Ord (ev KS.WithLocation)
+     , Ord (et (With KS.Location))
+     , Ord (ev (With KS.Location))
      )
-  => G.AdjacencyMap (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev KS.WithLocation))
-  -> m [KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev KS.WithLocation)]
+  => G.AdjacencyMap (With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location)))
+  -> m [With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location))]
 sortModules deps =
   mapM (go . GN.vertexList1) $ fromRight KE.unreachable (G.topSort $ G.scc deps)
   where
@@ -138,9 +140,9 @@ typeCheck
      , B.FunctorB et
      , B.FunctorB ev
      )
-  => Map KS.QualifiedIdentifier (KS.WithLocation (KS.Type 'KS.NameResolved 'KS.Curried KS.WithLocation))
-  -> KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev KS.WithLocation)
-  -> m (Map KS.QualifiedIdentifier (KS.WithLocation (KS.Type 'KS.NameResolved 'KS.Curried KS.WithLocation)), KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed et ev KS.WithLocation))
+  => Map KS.QualifiedIdentifier (With KS.Location (KS.Type 'KS.NameResolved 'KS.Curried (With KS.Location)))
+  -> With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location))
+  -> m (Map KS.QualifiedIdentifier (With KS.Location (KS.Type 'KS.NameResolved 'KS.Curried (With KS.Location))), With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed et ev (With KS.Location)))
 typeCheck types module' = do
   module'' <- KBT.typeCheck types module'
   let
@@ -165,8 +167,8 @@ build1
      , Show (ev Identity)
      )
   => (Text -> m ())
-  -> KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed et ev KS.WithLocation)
-  -> m (KS.WithLocation (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev KS.WithLocation))
+  -> With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed et ev (With KS.Location))
+  -> m (With KS.Location (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev (With KS.Location)))
 build1 writeLog m2 = do
   let m3 = KBU.uncurry m2
   writeLog $ "uncurried module: " <> T.pack (show $ KS.toIdentity m3)

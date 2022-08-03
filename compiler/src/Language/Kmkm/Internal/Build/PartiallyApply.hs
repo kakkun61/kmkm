@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- | “Partial application remove” pass.
 module Language.Kmkm.Internal.Build.PartiallyApply
@@ -15,6 +16,7 @@ import           Control.Monad.State.Strict (State, evalState)
 import qualified Control.Monad.State.Strict as S
 import           Data.Copointed             (Copointed (copoint))
 import           Data.Traversable           (for)
+import Data.Functor.With (MayHave)
 
 type Module et ev f = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f
 
@@ -29,25 +31,25 @@ type Pass = State Word
 partiallyApply
   :: ( Traversable f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      )
   => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
 partiallyApply = flip evalState 0 . module'
 
-module' :: (Traversable f, Copointed f, S.HasLocation f) => f (Module et ev f) -> Pass (f (Module et ev f))
+module' :: (Traversable f, Copointed f, MayHave S.Location f) => f (Module et ev f) -> Pass (f (Module et ev f))
 module' =
   traverse $ \(S.Module mn ms ds) -> do
       ds' <- mapM (traverse definition) ds
       pure $ S.Module mn ms ds'
 
-definition :: (Traversable f, Copointed f, S.HasLocation f) => f (Definition et ev f) -> Pass (f (Definition et ev f))
+definition :: (Traversable f, Copointed f, MayHave S.Location f) => f (Definition et ev f) -> Pass (f (Definition et ev f))
 definition =
   traverse $ \case
     S.ValueBind b -> scope $ S.ValueBind <$> for b (\(S.ValueBindU i v) -> S.ValueBindU i <$> term v)
     d             -> pure d
 
-term :: (Traversable f, Copointed f, S.HasLocation f) => f (Value et ev f) -> Pass (f (Value et ev f))
+term :: (Traversable f, Copointed f, MayHave S.Location f) => f (Value et ev f) -> Pass (f (Value et ev f))
 term v =
   for v $ \v'@(S.TypedValue v1 t) ->
     case copoint v1 of
@@ -82,7 +84,7 @@ term v =
       S.Procedure ps -> flip S.TypedValue t . (<$ v1) . S.Procedure <$> mapM (traverse procedureStep) ps
       _ -> pure v'
 
-procedureStep :: (Traversable f, Copointed f, S.HasLocation f) => f (ProcedureStep et ev f) -> Pass (f (ProcedureStep et ev f))
+procedureStep :: (Traversable f, Copointed f, MayHave S.Location f) => f (ProcedureStep et ev f) -> Pass (f (ProcedureStep et ev f))
 procedureStep =
   traverse $ \case
     S.BindProcedureStep i v -> S.BindProcedureStep i <$> term v

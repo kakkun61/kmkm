@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 -- | “top-level thunk / compile-time expression” pass.
 module Language.Kmkm.Internal.Build.C.Thunk
@@ -14,6 +15,7 @@ import           Data.List.NonEmpty (NonEmpty ((:|)))
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as S
+import Data.Functor.With (MayHave)
 
 -- XXX: smarter method wanted
 -- It is not necessary to convert all top-level value definitions,
@@ -34,19 +36,19 @@ type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifte
 thunk
   :: ( Functor f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      )
   => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
 thunk = fmap $ \(S.Module n ms ds) -> S.Module n ms $ fmap (definition (thunkIdentifiers ds)) <$> ds
 
-definition :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition tids d =
   case copoint d of
     S.ValueBind b | S.ValueBindV i v <- copoint b -> definition' tids (S.ValueBind (S.ValueBindN i ([] <$ d) v <$ b) <$ d)
     _                              -> definition' tids d
 
-definition' :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition' :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition' tids =
   fmap $ \case
     S.ValueBind b ->
@@ -56,12 +58,12 @@ definition' tids =
           S.ValueBindN i ps v -> valueBind tids i (Just ps) v
     m                                 -> m
 
-valueBind :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> ValueBind f
+valueBind :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> ValueBind f
 valueBind tids i mps v =
   let v' = term tids v
   in maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps
 
-term :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
+term :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
 term tids v =
   let S.TypedValue v1 t = copoint v
   in
@@ -92,7 +94,7 @@ term tids v =
         in S.TypedValue (S.Let ds'' v' <$ v1) t <$ v
       _ -> v
 
-procedureStep :: (Functor f, Copointed f, S.HasLocation f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
+procedureStep :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
 procedureStep tids p =
   case copoint p of
     S.BindProcedureStep i v -> (tids S.\\ S.singleton (copoint i), S.BindProcedureStep i (term tids v) <$ p)

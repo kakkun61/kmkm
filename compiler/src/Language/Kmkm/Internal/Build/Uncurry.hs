@@ -17,6 +17,7 @@ import           Data.List.NonEmpty               (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty               as N
 import qualified Language.Kmkm.Internal.Exception as X
 import           Prelude                          (Functor (fmap, (<$)), otherwise, ($), (<$>))
+import Data.Functor.With (MayHave)
 
 type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
@@ -43,16 +44,16 @@ type FunctionType c = S.FunctionType 'S.NameResolved c
 uncurry
   :: ( Functor f
      , Copointed f
-     , S.HasLocation f
+     , MayHave S.Location f
      )
   => f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev f)
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
 uncurry = module'
 
-module' :: (Functor f, Copointed f, S.HasLocation f) => f (Module 'S.Curried et ev f) -> f (Module 'S.Uncurried et ev f)
+module' :: (Functor f, Copointed f, MayHave S.Location f) => f (Module 'S.Curried et ev f) -> f (Module 'S.Uncurried et ev f)
 module' = fmap $ \(S.Module i ds ms) -> S.Module i ds $ fmap definition <$> ms
 
-definition :: (Functor f, Copointed f, S.HasLocation f) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
+definition :: (Functor f, Copointed f, MayHave S.Location f) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
 definition =
   fmap $ \case
     S.DataDefinition i cs    -> S.DataDefinition i $ fmap valueConstructor <$> cs
@@ -61,13 +62,13 @@ definition =
     S.ValueBind b            -> S.ValueBind $ (\(S.ValueBindU i v) -> S.ValueBindU i $ typedValue v) <$> b
     S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
 
-valueConstructor :: (Functor f, Copointed f, S.HasLocation f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
+valueConstructor :: (Functor f, Copointed f, MayHave S.Location f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
 valueConstructor = fmap $ \(S.ValueConstructor i fs) -> S.ValueConstructor i (fmap field <$> fs)
 
-field :: (Functor f, Copointed f, S.HasLocation f) => f (Field 'S.Curried et ev f) -> f (Field 'S.Uncurried et ev f)
+field :: (Functor f, Copointed f, MayHave S.Location f) => f (Field 'S.Curried et ev f) -> f (Field 'S.Uncurried et ev f)
 field = fmap $ \(S.Field i t) -> S.Field i (typ t)
 
-typ :: (Functor f, Copointed f, S.HasLocation f) => f (Type 'S.Curried f) -> f (Type 'S.Uncurried f)
+typ :: (Functor f, Copointed f, MayHave S.Location f) => f (Type 'S.Curried f) -> f (Type 'S.Uncurried f)
 typ =
   fmap $ \case
     S.TypeVariable i      -> S.TypeVariable i
@@ -76,10 +77,10 @@ typ =
     S.ProcedureType t     -> S.ProcedureType $ typ t
     S.ForAllType i t      -> S.ForAllType i $ typ t
 
-typedValue :: (Functor f, Copointed f, S.HasLocation f) => f (Value 'S.Curried et ev f) -> f (Value 'S.Uncurried et ev f)
+typedValue :: (Functor f, Copointed f, MayHave S.Location f) => f (Value 'S.Curried et ev f) -> f (Value 'S.Uncurried et ev f)
 typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t
 
-value' :: (Functor f, Copointed f, S.HasLocation f) => f (Value' 'S.Curried et ev f) -> f (Value' 'S.Uncurried et ev f)
+value' :: (Functor f, Copointed f, MayHave S.Location f) => f (Value' 'S.Curried et ev f) -> f (Value' 'S.Uncurried et ev f)
 value' =
   fmap $ \case
     S.Variable i       -> S.Variable i
@@ -96,7 +97,7 @@ literal (S.Integer v b)      = S.Integer v b
 literal (S.Fraction s f e b) = S.Fraction s f e b
 literal (S.String t)         = S.String t
 
-functionType :: (Functor f, Copointed f, S.HasLocation f) => f (FunctionType 'S.Curried f) -> f (FunctionType 'S.Uncurried f)
+functionType :: (Functor f, Copointed f, MayHave S.Location f) => f (FunctionType 'S.Curried f) -> f (FunctionType 'S.Uncurried f)
 functionType =
   fmap $ \case
     (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t ->
@@ -106,7 +107,7 @@ functionType =
       in S.FunctionTypeN ((t0' :) <$> ts) t
     (S.FunctionTypeC t0 t) -> S.FunctionTypeN ([typ t0] <$ t0) $ typ t
 
-application :: (Functor f, Copointed f, S.HasLocation f) => f (Application 'S.Curried et ev f) -> f (Application 'S.Uncurried et ev f)
+application :: (Functor f, Copointed f, MayHave S.Location f) => f (Application 'S.Curried et ev f) -> f (Application 'S.Uncurried et ev f)
 application a =
   S.ApplicationN v' (vs <$ a) <$ a
   where
@@ -118,11 +119,11 @@ application a =
           , S.Application a <- copoint v0' -> typedValue v1 :| N.toList (go a)
           | otherwise -> typedValue v1 :| [typedValue v0]
 
-procedureStep :: (Functor f, Copointed f, S.HasLocation f) => ProcedureStep 'S.Curried et ev f -> ProcedureStep 'S.Uncurried et ev f
+procedureStep :: (Functor f, Copointed f, MayHave S.Location f) => ProcedureStep 'S.Curried et ev f -> ProcedureStep 'S.Uncurried et ev f
 procedureStep (S.BindProcedureStep i v) = S.BindProcedureStep i $ typedValue v
 procedureStep (S.CallProcedureStep v)   = S.CallProcedureStep $ typedValue v
 
-function :: (Functor f, Copointed f, S.HasLocation f) => f (Function 'S.Curried et ev f) -> f (Function 'S.Uncurried et ev f)
+function :: (Functor f, Copointed f, MayHave S.Location f) => f (Function 'S.Curried et ev f) -> f (Function 'S.Uncurried et ev f)
 function f =
   let
     S.FunctionC i t v' = copoint f

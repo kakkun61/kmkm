@@ -185,7 +185,7 @@ escapeText s
           '\'' -> "\\'" <> escapeText s'
           '\"' -> "\\\"" <> escapeText s'
           '\\' -> "\\\\" <> escapeText s'
-          _    -> T.cons c $escapeText s'
+          _    -> T.cons c $ escapeText s'
       else "\\U" <> pad 8 '0' (T.pack (showHex (C.ord c) "")) <> escapeText s'
 
 pad :: Word -> Char -> Text -> Text
