@@ -5,6 +5,7 @@ module Language.Kmkm.Internal.Build.C.C
   ( render
   , element
   , field
+  , derivers
   ) where
 
 import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
@@ -12,7 +13,7 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Definition (ExpressionDefinition, StatementDefinition),
                                               Deriver (Function, Pointer),
                                               Element (Declaration, Definition, TypeDefinition),
-                                              Expression (ArithmeticExpression, Assign, Call, CompoundLiteral, Literal, StatementExpression, Variable),
+                                              Expression (ArithmeticExpression, Assign, Call, CompoundLiteral, Literal, StatementExpression, Variable, Cast),
                                               Field (Field), File (File),
                                               FractionBase (FractionDecimal, FractionHexadecimal),
                                               Identifier (Identifier),
@@ -118,7 +119,7 @@ derivers = foldl deriver
 deriver :: Text -> Deriver -> Text
 deriver t (Pointer qs) =
   fold
-    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [t]
+    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [t | not $ T.null t]
     , ")"
     ]
 deriver t (Function ps) =
@@ -151,6 +152,7 @@ expression (StatementExpression es) =
     , "})"
     ]
 expression (Assign i e)             = identifier i <> " = " <> expression e
+expression (Cast (t, ds) e)         = "((" <> derivers (qualifiedType t) ds <> ") " <> expression e <> ")"
 
 literal :: Literal -> Text
 literal (Integer v IntBinary) = "0x" <> T.pack (showHex v "")

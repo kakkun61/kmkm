@@ -94,6 +94,7 @@ data Expression
   | Call Expression [Expression]
   | StatementExpression [Either Text BlockElement] -- ^ GCC extension.
   | Assign Identifier Expression
+  | Cast (QualifiedType, [Deriver]) Expression
   deriving (Show, Eq, Ord, Generic)
 
 data Literal

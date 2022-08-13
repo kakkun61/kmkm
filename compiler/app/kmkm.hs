@@ -3,7 +3,11 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE OverloadedStrings #-}
+import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException, IntermediateCTypeVariableNotFoundException),
                       Location (Location), ParseExceptionMessage (ParseSexpMessage, ParseTextMessage),
                       Position (Position), compile)
 
@@ -135,6 +139,9 @@ compile' output libraries dryRun verbosity src =
               T.hPutStrLn stderr $ "intermediate C error: C embedded parameter mismatch error: expected: " <> T.pack (show e) <> ", actual: " <> T.pack (show a)
               maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "A number of parameters of embedded C is different from one of its type."
+            IntermediateCTypeVariableNotFoundException i l -> do
+              T.hPutStrLn stderr $ "intermediate C error: type variable not found error: " <> i
+              maybe (pure ()) (printLocation stderr) l
             CompileRecursionException ms -> do
               T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
               T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."

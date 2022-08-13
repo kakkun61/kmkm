@@ -5,6 +5,9 @@
 -- | “Lambda lifting” pass.
 module Language.Kmkm.Internal.Build.LambdaLift
   ( lambdaLift
+  , definition
+  , dataRepresentation
+  , Pass
   ) where
 
 import qualified Language.Kmkm.Internal.Syntax as S
@@ -61,7 +64,7 @@ definition =
                   (v', ds) <- term v2
                   let S.TypedValue _ t = copoint v'
                   pure $ S.ValueBind $ S.ValueBindN i is (S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v) <$ b
-              | S.ForAll _ v1' <- copoint v1 -> definition' $ S.ValueBind $ S.ValueBindU i v1' <$ b
+              | S.ForAllValue _ v1' <- copoint v1 -> definition' $ S.ValueBind $ S.ValueBindU i v1' <$ b
             _ -> do
               (v', ds) <- term v
               let S.TypedValue _ t = copoint v'
@@ -102,10 +105,14 @@ term v =
           ds' <- mapM (traverse definition) ds
           (v1', vds) <- term v1
           pure (S.TypedValue (S.Let ds' v1' <$ v') t <$ v, vds)
-        S.ForAll i v1 -> do
+        S.ForAllValue i v1 -> do
           (v1', ds) <- term v1
-          pure (S.TypedValue (S.ForAll i v1' <$ v') t <$ v, ds)
+          pure (S.TypedValue (S.ForAllValue i v1' <$ v') t <$ v, ds)
         S.TypeAnnotation _ -> X.unreachable
+        S.Instantiation i -> do
+          let S.InstantiationN v ts = copoint i
+          (v', ds) <- term v
+          pure (S.TypedValue (S.Instantiation (S.InstantiationN v' ts <$ i) <$ v) t <$ v, ds)
 
 procedureStep :: (Traversable f, Copointed f, MayHave S.Location f) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
 procedureStep s =

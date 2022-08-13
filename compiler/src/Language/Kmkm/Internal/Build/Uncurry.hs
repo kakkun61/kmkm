@@ -39,6 +39,8 @@ type Application c et ev = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.
 
 type Function c et ev = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
 
+type Instantiation c et ev = S.Instantiation 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
+
 type Type c = S.Type 'S.NameResolved c
 
 type FunctionType c = S.FunctionType 'S.NameResolved c
@@ -102,8 +104,9 @@ value' =
     S.Application a    -> S.Application $ application a
     S.Procedure ps     -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
     S.Let ds v         -> S.Let (fmap definition <$> ds) $ typedValue v
-    S.ForAll i v       -> S.ForAll i $ typedValue v
+    S.ForAllValue i v       -> S.ForAllValue i $ typedValue v
     S.TypeAnnotation _ -> X.unreachable
+    S.Instantiation i  -> S.Instantiation $ instantiation i
 
 literal :: S.Literal -> S.Literal
 literal (S.Integer v b)      = S.Integer v b
@@ -122,9 +125,9 @@ functionType =
 
 application :: (Functor f, Copointed f, MayHave S.Location f) => f (Application 'S.Curried et ev f) -> f (Application 'S.Uncurried et ev f)
 application a =
-  S.ApplicationN v' (vs <$ a) <$ a
+  S.ApplicationN v (vs <$ a) <$ a
   where
-    v' :| vs = N.reverse $ go a
+    v :| vs = N.reverse $ go a
     go a =
       case copoint a of
         S.ApplicationC v0 v1
@@ -139,17 +142,29 @@ procedureStep (S.CallProcedureStep v)   = S.CallProcedureStep $ typedValue v
 function :: (Functor f, Copointed f, MayHave S.Location f) => f (Function 'S.Curried et ev f) -> f (Function 'S.Uncurried et ev f)
 function f =
   let
-    S.FunctionC i t v' = copoint f
-    S.TypedValue v'' _ = copoint v'
+    S.FunctionC i t v = copoint f
+    S.TypedValue v' _ = copoint v
+    t' = typ t
   in
-    case copoint v'' of
+    case copoint v' of
       S.Function f' ->
-        let
-          t' = typ t
-          S.FunctionN ps v''' = copoint $ function f'
-        in S.FunctionN ((((i, t') <$ f) : copoint ps) <$ f) v''' <$ f
+        let S.FunctionN ps v'' = copoint $ function f'
+        in S.FunctionN ((((i, t') <$ f) : copoint ps) <$ f) v'' <$ f
       _ ->
-        let
-          t' = typ t
-          v'' = typedValue v'
-        in S.FunctionN ([(i, t') <$ f] <$ f) v'' <$ f
+        let v' = typedValue v
+        in S.FunctionN ([(i, t') <$ f] <$ f) v' <$ f
+
+instantiation :: (Functor f, Copointed f, MayHave S.Location f) => f (Instantiation 'S.Curried et ev f) -> f (Instantiation 'S.Uncurried et ev f)
+instantiation i =
+  let
+    S.InstantiationC v t = copoint i
+    S.TypedValue v' _ = copoint v
+    t' = typ t
+  in
+    case copoint v' of
+      S.Instantiation i' ->
+        let S.InstantiationN v'' ts = copoint $ instantiation i'
+        in S.InstantiationN v'' (t' : copoint ts <$ i) <$ i
+      _ ->
+        let v' = typedValue v
+        in S.InstantiationN v' ([t'] <$ i) <$ i

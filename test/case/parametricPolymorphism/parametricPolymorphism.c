@@ -8,7 +8,8 @@ void const (* parametricPolymorphism_id(void const (* const a)))
 
 kmkm_prim_string parametricPolymorphism_hello(void)
 {
-  return parametricPolymorphism_id(u8"Hello world!");
+  kmkm_prim_string _v0 = u8"Hello world!";
+  return *(((kmkm_prim_string (* (*)(kmkm_prim_string *)))parametricPolymorphism_id)(&_v0));
 }
 
 struct parametricPolymorphism_solo parametricPolymorphism_solo(void const (* const parametricPolymorphism_item))

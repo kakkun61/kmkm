@@ -41,6 +41,7 @@ module Language.Kmkm.Internal.Syntax
   , Application (..)
   , Function (..)
   , TypeAnnotation (..)
+  , Instantiation (..)
     -- * Identifiers
   , Identifier (..)
   , QualifiedIdentifier (..)
@@ -91,12 +92,12 @@ import Data.Functor.With ( With, pattern With )
 
 -- Module
 
-type Module :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Module :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data Module n c l t et ev f =
   Module (f ModuleName) (f [f ModuleName]) (f [f (Definition n c l t et ev f)])
   deriving Generic
 
-type ModuleConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ModuleConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type ModuleConstraint cls n c l t et ev f =
   ( cls (f ModuleName)
   , cls (f [f ModuleName])
@@ -120,7 +121,7 @@ instance
 
 -- Definition
 
-type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Definition :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data Definition n c l t et ev f
   = DataDefinition (f (BindIdentifier n)) (f (DataRepresentation n c l et ev f))
   | TypeBind (f (BindIdentifier n)) (f (Type n c f))
@@ -129,7 +130,7 @@ data Definition n c l t et ev f
   | ForeignValueBind (f (BindIdentifier n)) (f (ev f)) (f (Type n c f))
   deriving Generic
 
-type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type DefinitionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type DefinitionConstraint cls n c l t et ev f =
   ( cls (f (BindIdentifier n))
   , cls (f (DataRepresentation n c l et ev f))
@@ -155,10 +156,10 @@ instance (FunctorB (Type n c), FunctorB (DataRepresentation n c l et ev), Functo
 
 -- DataRepresentation
 
-type DataRepresentation :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type DataRepresentation :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family DataRepresentation n c l et ev f
 
-type DataRepresentationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type DataRepresentationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type family DataRepresentationConstraint cls n c l et ev f
 
 data instance DataRepresentation n 'Curried l et ev f
@@ -196,10 +197,10 @@ instance FunctorB (FunctionType n 'Uncurried) => FunctorB (DataRepresentation n 
 
 -- ValueConstructor
 
-type ValueConstructor :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type ValueConstructor :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data ValueConstructor n c l et ev f = ValueConstructor (f (BindIdentifier n)) (f [f (Field n c l et ev f)])
 
-type ValueConstructorConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ValueConstructorConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type ValueConstructorConstraint cls n c l et ev f =
   ( cls (f (BindIdentifier n))
   , cls (f [f (Field n c l et ev f)])
@@ -214,10 +215,10 @@ instance FunctorB (FunctionType n c) => FunctorB (ValueConstructor n c l et ev) 
 
 -- Field
 
-type Field :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Field :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data Field n c l et ev f = Field (f (BindIdentifier n)) (f (Type n c f))
 
-type FieldConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type FieldConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type FieldConstraint cls n c l et ev f =
   ( cls (f (BindIdentifier n))
   , cls (f (Type n c f))
@@ -232,26 +233,21 @@ instance FunctorB (FunctionType n c) => FunctorB (Field n c l et ev) where
 
 -- ValueBind
 
-type ValueBind :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type ValueBind :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family ValueBind
 
-type ValueBindConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
-type family ValueBindConstraint cls n c l t et ev f where
-  ValueBindConstraint cls n c 'LambdaUnlifted t et ev f =
-    ( cls (f (BindIdentifier n))
-    , cls (f (Value n c 'LambdaUnlifted t et ev f))
-    )
-
-  ValueBindConstraint cls n c 'LambdaLifted t et ev f =
-    ( cls (f (BindIdentifier n))
-    , cls (f (Value n c 'LambdaLifted t et ev f))
-    , cls (f (Type n c f))
-    , cls (f [f (f (BindIdentifier n), f (Type n c f))])
-    )
+type ValueBindConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
+type family ValueBindConstraint cls n c l t et ev f
 
 data instance ValueBind n c 'LambdaUnlifted t et ev f =
   ValueBindU (f (BindIdentifier n)) (f (Value n c 'LambdaUnlifted t et ev f))
   deriving Generic
+
+type instance ValueBindConstraint cls n c 'LambdaUnlifted t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (Value n c 'LambdaUnlifted t et ev f))
+  )
+
 
 deriving instance ValueBindConstraint Show n c 'LambdaUnlifted t et ev f => Show (ValueBind n c 'LambdaUnlifted t et ev f)
 deriving instance ValueBindConstraint Eq n c 'LambdaUnlifted t et ev f => Eq (ValueBind n c 'LambdaUnlifted t et ev f)
@@ -264,6 +260,13 @@ data instance ValueBind n c 'LambdaLifted t et ev f
   = ValueBindV (f (BindIdentifier n)) (f (Value n c 'LambdaLifted t et ev f))
   | ValueBindN (f (BindIdentifier n)) (f [f (f (BindIdentifier n), f (Type n c f))]) (f (Value n c 'LambdaLifted t et ev f))
   deriving Generic
+
+type instance ValueBindConstraint cls n c 'LambdaLifted t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (Value n c 'LambdaLifted t et ev f))
+  , cls (f (Type n c f))
+  , cls (f [f (f (BindIdentifier n), f (Type n c f))])
+  )
 
 deriving instance ValueBindConstraint Show n c 'LambdaLifted t et ev f => Show (ValueBind n c 'LambdaLifted t et ev f)
 deriving instance ValueBindConstraint Eq n c 'LambdaLifted t et ev f => Eq (ValueBind n c 'LambdaLifted t et ev f)
@@ -403,21 +406,16 @@ type FunctionType :: NameResolving -> Currying-> (K.Type -> K.Type) -> K.Type
 data family FunctionType
 
 type FunctionTypeConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying-> (K.Type -> K.Type) -> K.Constraint
-type family FunctionTypeConstraint cls n c f where
-  FunctionTypeConstraint cls n 'Curried f =
-    ( cls (f (ReferenceIdentifier n))
-    , cls (f (Type n 'Curried f))
-    )
-
-  FunctionTypeConstraint cls n 'Uncurried f =
-    ( cls (f (ReferenceIdentifier n))
-    , cls (f (Type n 'Uncurried f))
-    , cls (f [f (Type n 'Uncurried f)])
-    )
+type family FunctionTypeConstraint cls n c f
 
 data instance FunctionType n 'Curried f =
   FunctionTypeC (f (Type n 'Curried f)) (f (Type n 'Curried f))
   deriving Generic
+
+type instance FunctionTypeConstraint cls n 'Curried f =
+  ( cls (f (ReferenceIdentifier n))
+  , cls (f (Type n 'Curried f))
+  )
 
 deriving instance FunctionTypeConstraint Show n 'Curried f => Show (FunctionType n 'Curried f)
 deriving instance FunctionTypeConstraint Read n 'Curried f => Read (FunctionType n 'Curried f)
@@ -433,6 +431,12 @@ instance Pretty (f (Type n 'Curried f)) => Pretty (FunctionType n 'Curried f) wh
 data instance FunctionType n 'Uncurried f =
   FunctionTypeN (f [f (Type n 'Uncurried f)]) (f (Type n 'Uncurried f))
   deriving Generic
+
+type instance FunctionTypeConstraint cls n 'Uncurried f =
+  ( cls (f (ReferenceIdentifier n))
+  , cls (f (Type n 'Uncurried f))
+  , cls (f [f (Type n 'Uncurried f)])
+  )
 
 deriving instance FunctionTypeConstraint Show n 'Uncurried f => Show (FunctionType n 'Uncurried f)
 deriving instance FunctionTypeConstraint Read n 'Uncurried f => Read (FunctionType n 'Uncurried f)
@@ -452,29 +456,22 @@ instance
 
 -- Value
 
-type Value :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Value :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family Value
 
-type ValueConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
-type family ValueConstraint cls n c l t et ev f where
-  ValueConstraint cls n c l 'Untyped et ev f =
-    ( cls (f (Value' n c l 'Untyped et ev f))
-    , cls (f (ReferenceIdentifier n))
-    , cls (f (BindIdentifier n))
-    , cls (f Literal)
-    )
-
-  ValueConstraint cls n c l 'Typed et ev f =
-    ( cls (f (Value' n c l 'Typed et ev f))
-    , cls (f (ReferenceIdentifier n))
-    , cls (f (BindIdentifier n))
-    , cls (f Literal)
-    , cls (f (Type n c f))
-    )
+type ValueConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
+type family ValueConstraint cls n c l t et ev f
 
 newtype instance Value n c l 'Untyped et ev f =
   UntypedValue (f (Value' n c l 'Untyped et ev f))
   deriving Generic
+
+type instance ValueConstraint cls n c l 'Untyped et ev f =
+  ( cls (f (Value' n c l 'Untyped et ev f))
+  , cls (f (ReferenceIdentifier n))
+  , cls (f (BindIdentifier n))
+  , cls (f Literal)
+  )
 
 deriving instance ValueConstraint Show n c l 'Untyped et ev f => Show (Value n c l 'Untyped et ev f)
 deriving instance ValueConstraint Eq n c l 'Untyped et ev f => Eq (Value n c l 'Untyped et ev f)
@@ -486,6 +483,7 @@ instance
   , FunctorB (FunctionType n c)
   , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Untyped et ev)
+  , FunctorB (Instantiation n c l 'Untyped et ev)
   , FunctorB et
   , FunctorB ev
   ) =>
@@ -497,6 +495,14 @@ data instance Value n c l 'Typed et ev f =
   TypedValue (f (Value' n c l 'Typed et ev f)) (f (Type n c f))
   deriving Generic
 
+type instance ValueConstraint cls n c l 'Typed et ev f =
+  ( cls (f (Value' n c l 'Typed et ev f))
+  , cls (f (ReferenceIdentifier n))
+  , cls (f (BindIdentifier n))
+  , cls (f Literal)
+  , cls (f (Type n c f))
+  )
+
 deriving instance ValueConstraint Show n c l 'Typed et ev f => Show (Value n c l 'Typed et ev f)
 deriving instance ValueConstraint Eq n c l 'Typed et ev f => Eq (Value n c l 'Typed et ev f)
 deriving instance ValueConstraint Ord n c l 'Typed et ev f => Ord (Value n c l 'Typed et ev f)
@@ -507,6 +513,7 @@ instance
   , FunctorB (FunctionType n c)
   , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Typed et ev)
+  , FunctorB (Instantiation n c l 'Typed et ev)
   , FunctorB et
   , FunctorB ev
   ) =>
@@ -534,10 +541,11 @@ data Value' n c l t et ev f
   | Procedure (f (NonEmpty (f (ProcedureStep n c l t et ev f))))
   | TypeAnnotation (f (TypeAnnotation n c l t et ev f))
   | Let (f [f (Definition n c l t et ev f)]) (f (Value n c l t et ev f))
-  | ForAll (f (BindIdentifier n)) (f (Value n c l t et ev f))
+  | ForAllValue (f (BindIdentifier n)) (f (Value n c l t et ev f))
+  | Instantiation (f (Instantiation n c l t et ev f))
   deriving Generic
 
-type Value'Constraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type Value'Constraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type Value'Constraint cls n c l t et ev f =
   ( cls (f (ReferenceIdentifier n))
   , cls (f (Function n c l t et ev f))
@@ -553,7 +561,8 @@ type Value'Constraint cls n c l t et ev f =
   , cls (f [f (Definition n c l t et ev f)])
   , cls (f (ProcedureStep n c l t et ev f))
   , cls (f Literal)
-  , cls (Function n c l t et ev f)
+  , cls (f (Function n c l t et ev f))
+  , cls (f (Instantiation n c l t et ev f))
   )
 
 deriving instance Value'Constraint Show n c l t et ev f => Show (Value' n c l t et ev f)
@@ -568,6 +577,7 @@ instance
   , FunctorB (FunctionType n c)
   , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l t et ev)
+  , FunctorB (Instantiation n c l t et ev)
   , FunctorB et
   , FunctorB ev
   ) =>
@@ -580,7 +590,8 @@ instance
   bmap f (Procedure ps)     = Procedure $ fmap (fmap (bmap f) . f) <$> f ps
   bmap f (TypeAnnotation a) = TypeAnnotation $ bmap f <$> f a
   bmap f (Let ds v)         = Let (fmap (fmap (bmap f) . f) <$> f ds) $ bmap f <$> f v
-  bmap f (ForAll i v)       = ForAll (f i) $ bmap f <$> f v
+  bmap f (ForAllValue i v)       = ForAllValue (f i) $ bmap f <$> f v
+  bmap f (Instantiation i)  = Instantiation $ bmap f <$> f i
 
 instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Value' n c l t et ev f) where
   fromString = Variable . point . fromString
@@ -591,16 +602,56 @@ instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text,
   toList (Variable i) = E.toList $ copoint i
   toList _            = error "only variable acceptable"
 
+-- Instantiation
+
+type Instantiation :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
+data family Instantiation
+
+type InstantiationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
+type family InstantiationConstraint cls n c l t et ev f
+
+data instance Instantiation n 'Curried l t et ev f =
+  InstantiationC (f (Value n 'Curried l t et ev f)) (f (Type n 'Curried f))
+  deriving Generic
+
+type instance InstantiationConstraint cls n 'Curried l t et ev f =
+  ( cls (f (Value n 'Curried l t et ev f))
+  , cls (f (Type n 'Curried f))
+  )
+
+deriving instance InstantiationConstraint Show n 'Curried l t et ev f => Show (Instantiation n 'Curried l t et ev f)
+deriving instance InstantiationConstraint Eq n 'Curried l t et ev f => Eq (Instantiation n 'Curried l t et ev f)
+deriving instance InstantiationConstraint Ord n 'Curried l t et ev f => Ord (Instantiation n 'Curried l t et ev f)
+
+data instance Instantiation n 'Uncurried l t et ev f =
+  InstantiationN (f (Value n 'Uncurried l t et ev f)) (f [f (Type n 'Uncurried f)])
+  deriving Generic
+
+type instance InstantiationConstraint cls n 'Uncurried l t et ev f =
+  ( cls (f (Value n 'Uncurried l t et ev f))
+  , cls (f [f (Type n 'Uncurried f)])
+  )
+
+deriving instance InstantiationConstraint Show n 'Uncurried l t et ev f => Show (Instantiation n 'Uncurried l t et ev f)
+deriving instance InstantiationConstraint Eq n 'Uncurried l t et ev f => Eq (Instantiation n 'Uncurried l t et ev f)
+deriving instance InstantiationConstraint Ord n 'Uncurried l t et ev f => Ord (Instantiation n 'Uncurried l t et ev f)
+
+instance (FunctorB (Value n 'Curried l t et ev)) => FunctorB (Instantiation n 'Curried l t et ev) where
+  bmap f (InstantiationC v t) = InstantiationC (bmap f <$> f v) $ bmap f <$> f t
+
+instance (FunctorB (Value n 'Uncurried l t et ev)) => FunctorB (Instantiation n 'Uncurried l t et ev) where
+  bmap f (InstantiationN v ts) = InstantiationN (bmap f <$> f v) $ fmap (fmap (bmap f) . f) <$> f ts
+
 -- TypeAnnotation
 
-type TypeAnnotation :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type TypeAnnotation :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family TypeAnnotation
 
 data instance TypeAnnotation n c l 'Untyped et ev f =
   TypeAnnotation' (f (Value n c l 'Untyped et ev f)) (f (Type n c f))
   deriving Generic
 
-type TypeAnnotationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type TypeAnnotationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type TypeAnnotationConstraint cls n c l t et ev f =
   ( cls (f (ReferenceIdentifier n))
   , cls (f (BindIdentifier n))
@@ -623,6 +674,7 @@ instance
   , FunctorB (FunctionType n c)
   , FunctorB (DataRepresentation n c l et ev)
   , FunctorB (ValueBind n c l 'Untyped et ev)
+  , FunctorB (Instantiation n c l 'Untyped et ev)
   , FunctorB et
   , FunctorB ev
   ) =>
@@ -646,7 +698,7 @@ data ProcedureStep n c l t et ev f
   = BindProcedureStep (f (BindIdentifier n)) (f (Value n c l t et ev f))
   | CallProcedureStep (f (Value n c l t et ev f))
 
-type ProcedureStepConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
+type ProcedureStepConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
 type ProcedureStepConstraint cls n c l t et ev f =
   ( cls (f (BindIdentifier n))
   , cls (f (Value n c l t et ev f))
@@ -670,22 +722,18 @@ data Literal
 
 -- Application
 
-type Application :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Application :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family Application
 
-type ApplicationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
-type family ApplicationConstraint cls n c l t et ev f where
-  ApplicationConstraint cls n 'Curried l t et ev f =
-    (cls (f (Value n 'Curried l t et ev f)))
-
-  ApplicationConstraint cls n 'Uncurried l t et ev f =
-    ( cls (f (Value n 'Uncurried l t et ev f))
-    , cls (f [f (Value n 'Uncurried l t et ev f)])
-    )
+type ApplicationConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
+type family ApplicationConstraint cls n c l t et ev f
 
 data instance Application n 'Curried l t et ev f =
   ApplicationC (f (Value n 'Curried l t et ev f)) (f (Value n 'Curried l t et ev f))
   deriving Generic
+
+type instance ApplicationConstraint cls n 'Curried l t et ev f =
+  (cls (f (Value n 'Curried l t et ev f)))
 
 deriving instance ApplicationConstraint Show n 'Curried l t et ev f => Show (Application n 'Curried l t et ev f)
 deriving instance ApplicationConstraint Eq n 'Curried l t et ev f => Eq (Application n 'Curried l t et ev f)
@@ -698,6 +746,11 @@ data instance Application n 'Uncurried l t et ev f =
   ApplicationN (f (Value n 'Uncurried l t et ev f)) (f [f (Value n 'Uncurried l t et ev f)])
   deriving Generic
 
+type instance ApplicationConstraint cls n 'Uncurried l t et ev f =
+  ( cls (f (Value n 'Uncurried l t et ev f))
+  , cls (f [f (Value n 'Uncurried l t et ev f)])
+  )
+
 deriving instance ApplicationConstraint Show n 'Uncurried l t et ev f => Show (Application n 'Uncurried l t et ev f)
 deriving instance ApplicationConstraint Eq n 'Uncurried l t et ev f => Eq (Application n 'Uncurried l t et ev f)
 deriving instance ApplicationConstraint Ord n 'Uncurried l t et ev f => Ord (Application n 'Uncurried l t et ev f)
@@ -707,29 +760,22 @@ instance FunctorB (Value n 'Uncurried l t et ev) => FunctorB (Application n 'Unc
 
 -- Function
 
-type Function :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Type
+type Function :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
 data family Function
 
-type FunctionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type)-> (K.Type -> K.Type) -> K.Constraint
-type family FunctionConstraint cls n c l t et ev f where
-  FunctionConstraint cls n 'Curried l t et ev f =
-    ( cls (f (BindIdentifier n))
-    , cls (f (ReferenceIdentifier n))
-    , cls (f (Value n 'Curried l t et ev f))
-    , cls (f (Type n 'Curried f))
-    )
-
-  FunctionConstraint cls n 'Uncurried l t et ev f =
-    ( cls (f (BindIdentifier n))
-    , cls (f (ReferenceIdentifier n))
-    , cls (f (Value n 'Uncurried l t et ev f))
-    , cls (f (Type n 'Uncurried f))
-    , cls (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))])
-    )
+type FunctionConstraint :: (K.Type -> K.Constraint) -> NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Constraint
+type family FunctionConstraint cls n c l t et ev f
 
 data instance Function n 'Curried 'LambdaUnlifted t et ev f =
   FunctionC (f (BindIdentifier n)) (f (Type n 'Curried f)) (f (Value n 'Curried 'LambdaUnlifted t et ev f))
   deriving Generic
+
+type instance FunctionConstraint cls n 'Curried l t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (ReferenceIdentifier n))
+  , cls (f (Value n 'Curried l t et ev f))
+  , cls (f (Type n 'Curried f))
+  )
 
 deriving instance FunctionConstraint Show n 'Curried 'LambdaUnlifted t et ev f => Show (Function n 'Curried 'LambdaUnlifted t et ev f)
 deriving instance FunctionConstraint Eq n 'Curried 'LambdaUnlifted t et ev f => Eq (Function n 'Curried 'LambdaUnlifted t et ev f)
@@ -741,6 +787,14 @@ instance FunctorB (Value n 'Curried 'LambdaUnlifted t et ev) => FunctorB (Functi
 data instance Function n 'Uncurried 'LambdaUnlifted t et ev f =
   FunctionN (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))]) (f (Value n 'Uncurried 'LambdaUnlifted t et ev f))
   deriving Generic
+
+type instance FunctionConstraint cls n 'Uncurried l t et ev f =
+  ( cls (f (BindIdentifier n))
+  , cls (f (ReferenceIdentifier n))
+  , cls (f (Value n 'Uncurried l t et ev f))
+  , cls (f (Type n 'Uncurried f))
+  , cls (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))])
+  )
 
 deriving instance FunctionConstraint Show n 'Uncurried 'LambdaUnlifted t et ev f => Show (Function n 'Uncurried 'LambdaUnlifted t et ev f)
 deriving instance FunctionConstraint Eq n 'Uncurried 'LambdaUnlifted t et ev f => Eq (Function n 'Uncurried 'LambdaUnlifted t et ev f)

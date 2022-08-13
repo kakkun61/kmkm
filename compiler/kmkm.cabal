@@ -84,6 +84,8 @@ library
                  pointed,
                  safe-exceptions,
                  text
+
+                 , recover-rtti
   default-extensions: Strict
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
@@ -126,6 +128,8 @@ test-suite spec
   hs-source-dirs: test/spec
   other-modules: Language.Kmkm.Internal.Build.C.CSpec
                  Language.Kmkm.Internal.Build.C.IntermediateCSpec
+                 Language.Kmkm.Internal.Build.C.ThunkSpec
+                 Language.Kmkm.Internal.Build.LambdaLiftSpec
                  Language.Kmkm.Internal.Build.TypeCheckSpec
                  Language.Kmkm.Internal.Parse.SexpSpec
                  Language.Kmkm.Internal.SyntaxSpec

@@ -94,6 +94,8 @@ type Application et ev = S.Application 'S.NameUnresolved 'S.Curried 'S.LambdaUnl
 
 type TypeAnnotation et ev = S.TypeAnnotation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
+type Instantiation et ev = S.Instantiation 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
+
 type ProcedureStep et ev  = S.ProcedureStep 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
 type EmbeddedValue = S.EmbeddedValue
@@ -470,7 +472,8 @@ value s =
       , (<$ s) . S.Procedure <$> procedure s
       , (<$ s) . S.TypeAnnotation <$> typeAnnotation s
       , fmap (uncurry S.Let) <$> let' s
-      , fmap (uncurry S.ForAll) <$> forAll s
+      , fmap (uncurry S.ForAllValue) <$> forAll s
+      , (<$ s) . S.Instantiation <$> instantiation s
       ]
 
 procedure :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, MayHave S.Location f) => SexpParser f m (f (NonEmpty (f (ProcedureStep et ev f))))
@@ -532,6 +535,13 @@ function s =
       S.FunctionC <$> identifier si <*> typ st <*> value sv
     s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "function" $ W.mayGet s]
 
+instantiation :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, MayHave S.Location f) => SexpParser f m (f (Instantiation et ev f))
+instantiation s =
+  for s $ \case
+    SS.List [sk, sv, st] -> do
+      symbol "instantiate" "instantiation" sk
+      S.InstantiationC <$> value sv <*> typ st
+    s' -> throwError [SexpException ("a list with 3 elements expected, but got " ++ abstractMessage s') "instantiation" $ W.mayGet s]
 
 list :: (MonadError [Exception] m, Traversable f, MayHave S.Location f) => SexpParser f m (f a) -> SexpParser f m (f [f a])
 list p s =

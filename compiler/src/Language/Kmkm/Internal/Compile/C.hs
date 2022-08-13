@@ -73,8 +73,7 @@ build2
      , Functor f
      , Foldable f
      , Copointed f
-     , MayHave KS.Location f
-     )
+     , MayHave KS.Location f, KS.Pretty (f (KS.Type 'KS.NameResolved 'KS.Uncurried f)))
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
   -> Map KS.ModuleName FilePath
@@ -119,8 +118,7 @@ build2'
      , Functor f
      , Foldable f
      , Copointed f
-     , MayHave KS.Location f
-     )
+     , MayHave KS.Location f, KS.Pretty (f (KS.Type 'KS.NameResolved 'KS.Uncurried f)))
   => (Text -> m ())
   -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
   -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue f)

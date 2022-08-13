@@ -235,7 +235,10 @@ dep identifiers v =
             valueBinds = M.fromList $ mapMaybe valueBind $ copoint ds
             identifiers' = identifiers S.\\ M.keysSet valueBinds
           in dep identifiers' =<< v : M.elems valueBinds
-        S.ForAll _ v -> dep identifiers v
+        S.ForAllValue _ v -> dep identifiers v
+        S.Instantiation i ->
+          let S.InstantiationC v _ = copoint i
+          in dep identifiers v
 
 typeOfTerm
   :: ( MonadThrow m
@@ -297,9 +300,6 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
                 S.FunctionType t ->
                   case copoint t of
                     S.FunctionTypeC t00 t01
-                      | S.TypeVariable i <- copoint t00 -> do
-                        let t01' = substitute i t1 t01
-                        pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01' <$ v
                       | S.toIdentity t1 == S.toIdentity t00 -> pure $ S.TypedValue (S.Application (S.ApplicationC v0' v1' <$ a) <$ v') t01 <$ v
                       | otherwise                           -> throw $ MismatchException (Right $ S.toIdentity t00) (S.toIdentity t1) $ W.mayGet v1'
                 _ -> throw $ MismatchException (Left "function") (S.toIdentity t0) $ W.mayGet v0'
@@ -332,10 +332,19 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
           v'' <- typeOfTerm variableTypes' prim v'
           let S.TypedValue _ t' = copoint v''
           pure $ S.TypedValue (S.Let ds' v'' <$ v') t' <$ v
-        S.ForAll i v' -> do
+        S.ForAllValue i v' -> do
           v'' <- typeOfTerm variableTypes prim v'
           let S.TypedValue _ t = copoint v''
-          pure $ S.TypedValue (S.ForAll i v'' <$ v) t <$ v
+          pure $ S.TypedValue (S.ForAllValue i v'' <$ v) (S.ForAllType i t <$ v) <$ v
+        S.Instantiation i -> do
+          let S.InstantiationC v0 t1 = copoint i
+          v0' <- typeOfTerm variableTypes prim v0
+          let S.TypedValue _ t0 = copoint v0'
+          case copoint t0 of
+            S.ForAllType j t01 -> do
+              let t01' = substitute j t1 t01
+              pure $ S.TypedValue (S.Instantiation (S.InstantiationC v0' t1 <$ i) <$ v) t01' <$ v
+            _ -> throw $ MismatchException (Left "for-all value") (S.toIdentity t0) $ W.mayGet v0'
 
 substitute :: (Functor f, Copointed f) => f S.QualifiedIdentifier -> f (Type f) -> f (Type f) -> f (Type f)
 substitute i value target =

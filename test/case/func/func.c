@@ -29,7 +29,7 @@ kmkm_prim_int func_closure2(kmkm_prim_int const a)
   return _l0(0);
 }
 
-kmkm_prim_int (* func_succ2(void))(kmkm_prim_int const)
+kmkm_prim_int const (* func_succ2(void))(kmkm_prim_int const)
 {
   return func_succ;
 }

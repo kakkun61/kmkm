@@ -4,6 +4,6 @@
     kmkm.prim)
   (list
     (bind-value id (for-all a (function a a a)))
-    (bind-value hello (apply id "Hello world!"))
+    (bind-value hello (apply (instantiate id kmkm.prim.string) "Hello world!"))
     (define solo (for-all a (list (solo (list (item a))))))
-    (bind-value solo1 (apply parametricPolymorphism.solo 1))))
+    (bind-value solo1 (apply (instantiate parametricPolymorphism.solo kmkm.prim.int) 1))))

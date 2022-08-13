@@ -123,11 +123,11 @@ spec = do
                     $ I $ UntypedValue $
                         I $ Application $
                           I $ ApplicationC
-                            ["spec", "id"]
+                            (I $ UntypedValue $ I $ Instantiation $ I $ InstantiationC ["spec", "id"] ["kmkm", "prim", "string"])
                             (I $ UntypedValue $ I $ Literal $ I $ String "hello")
               ]
           variableTypes :: Map QualifiedIdentifier (I (Type 'NameResolved 'Curried I))
-          variableTypes = [(["spec", "id"], I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"])]
+          variableTypes = [(["spec", "id"], I $ ForAllType "a" $ I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"])]
           result :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
           result =
             I $ Module
@@ -139,7 +139,12 @@ spec = do
                     $ I $ TypedValue
                         ( I $ Application $
                             I $ ApplicationC
-                              (I $ TypedValue ["spec", "id"] (I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"]))
+                              ( I $ TypedValue
+                                  ( I $ Instantiation $ I $ InstantiationC
+                                      (I $ TypedValue ["spec", "id"] $ I $ ForAllType "a" $ I $ FunctionType $ I $ FunctionTypeC ["a"] ["a"])
+                                      ["kmkm", "prim", "string"]
+                                  )
+                                  $ I $ FunctionType $ I $ FunctionTypeC ["kmkm", "prim", "string"] ["kmkm", "prim", "string"])
                               (I $ TypedValue (I $ Literal $ I $ String "hello") ["kmkm", "prim", "string"])
                         )
                         ["kmkm", "prim", "string"]

@@ -51,6 +51,8 @@ type Application n et ev = S.Application n 'S.Curried 'S.LambdaUnlifted 'S.Untyp
 
 type Function n et ev = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
+type Instantiation n et ev = S.Instantiation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
+
 type Type n = S.Type n 'S.Curried
 
 type FunctionType n = S.FunctionType n 'S.Curried
@@ -199,9 +201,10 @@ value' valueAffiliations typeAffiliations moduleName =
         S.Let
           <$> mapM (traverse $ definition valueAffiliations' typeAffiliations moduleName Local) ds
           <*> value valueAffiliations' typeAffiliations moduleName v
-    S.ForAll i v ->
+    S.ForAllValue i v ->
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
-      in S.ForAll (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations' moduleName v
+      in S.ForAllValue (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations' moduleName v
+    S.Instantiation i -> S.Instantiation <$> instantiation valueAffiliations typeAffiliations moduleName i
 
 procedureStep
   :: ( MonadThrow m
@@ -277,6 +280,23 @@ function valueAffiliations typeAffiliations moduleName =
   traverse $ \(S.FunctionC i t v) ->
     let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
     in S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
+
+instantiation
+  :: ( MonadThrow m
+     , Traversable f
+     , Copointed f
+     , MayHave S.Location f
+     , B.FunctorB et
+     , B.FunctorB ev
+     )
+  => Map S.Identifier Affiliation
+  -> Map S.Identifier Affiliation
+  -> S.ModuleName
+  -> f (Instantiation 'S.NameUnresolved et ev f)
+  -> m (f (Instantiation 'S.NameResolved et ev f))
+instantiation valueAffiliations typeAffiliations moduleName =
+  traverse $ \(S.InstantiationC v t) ->
+    S.InstantiationC <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
 
 typ
   :: ( MonadThrow m

@@ -72,11 +72,15 @@ data Exception
   | -- | A literal is used but its type is not imported while type checking.
     TypeCheckPrimitiveTypeException
       Text -- ^ identifier.
-      (Maybe S.Location) -- ^ location .
+      (Maybe S.Location) -- ^ location.
   | -- | A number of parameters of embedded C is different from one of its type while intermediate C translating.
     IntermediateCEmbeddedParameterMismatchException
       Word -- ^ expected
       Word -- ^ actual
+      (Maybe S.Location) -- ^ location.
+  | -- | A type variable not found while intermediate C translating.
+    IntermediateCTypeVariableNotFoundException
+      Text -- ^ identifier.
       (Maybe S.Location) -- ^ location.
   | -- | Modules' dependency have a recursion while compiling.
     CompileRecursionException
@@ -109,6 +113,7 @@ convertException e =
     (Nothing, Nothing, Just (T.RecursionException is), Nothing, Nothing) -> TypeCheckRecursionException $ H.map S.pretty is
     (Nothing, Nothing, Just (T.PrimitiveTypeException i r), Nothing, Nothing) -> TypeCheckPrimitiveTypeException (S.pretty i) r
     (Nothing, Nothing, Nothing, Just (I.EmbeddedParameterMismatchException e a r), Nothing) -> IntermediateCEmbeddedParameterMismatchException e a r
+    (Nothing, Nothing, Nothing, Just (I.TypeVariableNotFoundException i r), Nothing) -> IntermediateCTypeVariableNotFoundException i r
     (Nothing, Nothing, Nothing, Nothing, Just (C.RecursionException ms)) -> CompileRecursionException $ S.pretty <$> ms
     (Nothing, Nothing, Nothing, Nothing, Just (C.ModuleNameMismatchException f m r)) -> CompileModuleNameMismatchException f (S.pretty m) r
     (Nothing, Nothing, Nothing, Nothing, Just (C.DotDotPathException f)) -> CompileDotDotPathException f
