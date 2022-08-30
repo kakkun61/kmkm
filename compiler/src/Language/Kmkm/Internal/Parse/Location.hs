@@ -6,8 +6,8 @@ module Language.Kmkm.Internal.Parse.Location
 
 import qualified Language.Kmkm.Internal.Syntax as S
 
-import qualified Text.Megaparsec as M
-import Data.Functor.With ( With, pattern With )
+import           Data.Functor.With (With, pattern With)
+import qualified Text.Megaparsec   as M
 
 withLocation :: M.MonadParsec e s p => FilePath -> p a -> p (With S.Location a)
 withLocation filePath p = do

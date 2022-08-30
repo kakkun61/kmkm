@@ -18,11 +18,8 @@ module Language.Kmkm.Internal.Build.C.IntermediateC
 
 import qualified Language.Kmkm.Internal.Build.C.Syntax as I
 import qualified Language.Kmkm.Internal.Exception      as X
-import Language.Kmkm.Internal.Syntax
-    ( Identifier(SystemIdentifier, UserIdentifier),
-      ModuleName(ModuleName),
-      QualifiedIdentifier,
-      Pretty(pretty) )
+import           Language.Kmkm.Internal.Syntax         (Identifier (SystemIdentifier, UserIdentifier),
+                                                        ModuleName (ModuleName), QualifiedIdentifier)
 import qualified Language.Kmkm.Internal.Syntax         as S
 
 import qualified Control.Exception      as E
@@ -30,6 +27,8 @@ import           Control.Exception.Safe (MonadThrow, throw)
 import           Control.Monad          (join, (<=<))
 import           Data.Copointed         (Copointed (copoint))
 import           Data.Functor.Identity  (Identity (Identity))
+import           Data.Functor.With      (MayHave)
+import qualified Data.Functor.With      as W
 import qualified Data.List.NonEmpty     as N
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
@@ -38,12 +37,7 @@ import           Data.Text              (Text)
 import qualified Data.Text              as T
 import qualified Data.Typeable          as Y
 import           GHC.Generics           (Generic)
-import Data.Functor.With (MayHave)
-import qualified Data.Functor.With as W
-
-import Debug.Trace (trace)
-import Debug.RecoverRTTI
-import GHC.Stack
+import           GHC.Stack              (HasCallStack)
 
 type Module = S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
 
@@ -60,13 +54,15 @@ translate
      , Functor f
      , Foldable f
      , Copointed f
-     , MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)))
+     , MayHave S.Location f
+     , HasCallStack
+     )
   => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
   -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
   -> m I.File
 translate = module'
 
-module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Module f) -> m I.File
+module' :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Module f) -> m I.File
 module' definedVariables m =
   let S.Module n _ ds = copoint m
   in I.File (moduleName $ copoint n) . join <$> traverse (definition definedVariables n) (copoint ds)
@@ -83,7 +79,7 @@ module' definedVariables m =
 --            | n>0 | invalid | no tags   | has a tag
 --            |     |         | function  | function
 -- @
-definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
+definition :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Definition f) -> m [Either Text I.Element]
 definition definedVariables n d =
   case copoint d of
     S.DataDefinition i r -> do
@@ -125,12 +121,12 @@ definition definedVariables n d =
                 _ -> do
                   constructor' <- mapM constructor cs_
                   pure $ I.Field tagEnumType "tag" [] : [ I.Field ([], I.Union constructor') "body" [] | hasFields ]
-            field :: (MonadThrow m, Copointed f, Pretty (f (Type f)), MayHave S.Location f, HasCallStack) => f (S.Field 'S.NameResolved 'S.Uncurried l et ev f) -> m I.Field
+            field :: (MonadThrow m, Copointed f, MayHave S.Location f, HasCallStack) => f (S.Field 'S.NameResolved 'S.Uncurried l et ev f) -> m I.Field
             field f = do
               let S.Field i t = copoint f
               (t', ds) <- typ definedVariables' t
               pure $ I.Field t' (qualifiedIdentifier i) ds
-            constructor :: (MonadThrow m, Copointed f, Pretty (f (Type f)), MayHave S.Location f, HasCallStack) => f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted S.EmbeddedCType S.EmbeddedCValue f) -> m I.Field
+            constructor :: (MonadThrow m, Copointed f, MayHave S.Location f, HasCallStack) => f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted S.EmbeddedCType S.EmbeddedCValue f) -> m I.Field
             constructor c = do
               let S.ValueConstructor i fs = copoint c
               fields' <- mapM field $ copoint fs
@@ -142,7 +138,7 @@ definition definedVariables n d =
                 go c =
                   let S.ValueConstructor _ fs = copoint c
                   in not $ null $ copoint fs
-        constructor :: (MonadThrow m, Copointed f, Pretty (f (Type f)), MayHave S.Location f, HasCallStack) => Int -> f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev f) -> m I.Definition
+        constructor :: (MonadThrow m, Copointed f, MayHave S.Location f, HasCallStack) => Int -> f (S.ValueConstructor 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev f) -> m I.Definition
         constructor n c =
           case copoint c of
             S.ValueConstructor c' fs ->
@@ -152,7 +148,7 @@ definition definedVariables n d =
                   parameters <- mapM parameter fs_
                   pure $ I.StatementDefinition structType [] (qualifiedIdentifier c') [I.Function parameters] $ Right [blockItem]
                   where
-                    parameter :: (MonadThrow m, Copointed f, Pretty (f (Type f)), MayHave S.Location f, HasCallStack) => f (S.Field 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev f) -> m (I.QualifiedType, [I.VariableQualifier], Maybe (Either a I.Identifier), [I.Deriver])
+                    parameter :: (MonadThrow m, Copointed f, MayHave S.Location f, HasCallStack) => f (S.Field 'S.NameResolved 'S.Uncurried 'S.LambdaLifted et ev f) -> m (I.QualifiedType, [I.VariableQualifier], Maybe (Either a I.Identifier), [I.Deriver])
                     parameter p = do
                       let
                         S.Field i t = copoint p
@@ -167,14 +163,16 @@ definition definedVariables n d =
                     argument f | S.Field i _ <- copoint f = I.ExpressionInitializer $ Right $ I.Variable $ qualifiedIdentifier i
     S.ValueBind b ->
       case copoint b of
-        S.ValueBindV i v -> do
+        S.ValueBindV i is v -> do
           let
+            definedVariables' = M.fromList ((\a -> (copoint a, (([], I.Void), [I.Pointer []]))) <$> copoint is) `M.union` definedVariables
             S.TypedValue _ t = copoint v
-          (t', ds) <- typ definedVariables t
-          v' <- value definedVariables n v
+          (t', ds) <- typ definedVariables' t
+          v' <- value definedVariables' n v
           pure [Right $ I.Definition $ I.ExpressionDefinition t' [] (qualifiedIdentifier i) ds $ I.ExpressionInitializer $ Right v']
-        S.ValueBindN i is v -> do
-          b <- bindTermN definedVariables n i is v
+        S.ValueBindN i is ps v -> do
+          let definedVariables' = M.fromList ((\a -> (copoint a, (([], I.Void), [I.Pointer []]))) <$> copoint is) `M.union` definedVariables
+          b <- bindTermN definedVariables' n i ps v
           pure [Right b]
     S.ForeignValueBind i e t ->
       case copoint t of
@@ -226,7 +224,7 @@ definition definedVariables n d =
                       I.StatementDefinition t' [] (qualifiedIdentifier i) (I.Function [(([], I.Void), [], Nothing, [])] : ds) $ Left $ copoint b
                 ]
             else throw $ EmbeddedParameterMismatchException 0 (fromIntegral $ length $ copoint ps) $ W.mayGet e
-        _ -> X.unreachable
+        _ -> X.unreachable "others"
     S.TypeBind i t -> do
       t' <- typ definedVariables t
       pure [Right $ I.TypeDefinition (Right t') $ qualifiedIdentifier i]
@@ -238,8 +236,21 @@ definition definedVariables n d =
             , Right $ I.TypeDefinition (Left $ copoint b) (qualifiedIdentifier i)
             ]
 
-bindTermN :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f S.QualifiedIdentifier -> f [f (f S.QualifiedIdentifier, f (Type f))] -> f (Value f) -> m I.Element
-bindTermN definedVariables n i ps v = trace ("bindTermN: " ++ anythingToString v) $ do
+bindTermN
+  :: ( MonadThrow m
+     , Functor f
+     , Foldable f
+     , Copointed f
+     , MayHave S.Location f
+     , HasCallStack
+     )
+  => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
+  -> f ModuleName
+  -> f S.QualifiedIdentifier
+  -> f [f (f S.QualifiedIdentifier, f (Type f))]
+  -> f (Value f)
+  -> m I.Element
+bindTermN definedVariables n i ps v = do
   let
     ps_ = copoint ps
     S.TypedValue _ t = copoint v
@@ -264,7 +275,9 @@ bindTermN definedVariables n i ps v = trace ("bindTermN: " ++ anythingToString v
 
 parameters
   :: ( MonadThrow m, Functor f
-     , Copointed f, Pretty (f (Type f)), MayHave S.Location f)
+     , Copointed f
+     , MayHave S.Location f
+     )
   => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
   -> f [f (f (Either Text QualifiedIdentifier), f (Type f))]
   -> m [(([I.TypeQualifier], I.Type), [I.VariableQualifier], Maybe (Either Text I.Identifier), [I.Deriver])]
@@ -302,7 +315,18 @@ qualifiedIdentifierText i =
 moduleName :: ModuleName -> Text
 moduleName (ModuleName n) = T.intercalate "_" $ N.toList n
 
-value :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (Value f) -> m I.Expression
+value
+  :: ( MonadThrow m
+     , Functor f
+     , Foldable f
+     , Copointed f
+     , MayHave S.Location f
+     , HasCallStack
+     )
+  => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
+  -> f ModuleName
+  -> f (Value f)
+  -> m I.Expression
 value definedVariables n v =
   let S.TypedValue v' t = copoint v
   in
@@ -324,8 +348,8 @@ value definedVariables n v =
       S.Instantiation i -> do
         let S.InstantiationN v'' _ = copoint i
         I.Cast <$> typ definedVariables t <*> value definedVariables n v''
-      S.Function _ -> X.unreachable
-      S.TypeAnnotation _ -> X.unreachable
+      S.Function _ -> X.unreachable "function"
+      S.TypeAnnotation _ -> X.unreachable "type annotation"
 
 literal :: Copointed f => f S.Literal -> I.Literal
 literal l =
@@ -346,7 +370,18 @@ literal l =
           _  -> error $ "literal: base " ++ show b
     S.String s -> I.String s -- XXX バックスラッシュでバイナリー表記にした方がいいかも
 
-procedureStep :: (MonadThrow m, Functor f, Foldable f, Copointed f, MayHave S.Location f, Pretty (f (S.Type 'S.NameResolved 'S.Uncurried f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f ModuleName -> f (ProcedureStep f) -> m [I.BlockElement]
+procedureStep
+  :: ( MonadThrow m
+     , Functor f
+     , Foldable f
+     , Copointed f
+     , MayHave S.Location f
+     , HasCallStack
+     )
+  => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
+  -> f ModuleName
+  -> f (ProcedureStep f)
+  -> m [I.BlockElement]
 procedureStep definedVariables n s =
   case copoint s of
     S.BindProcedureStep i v -> do
@@ -361,12 +396,19 @@ procedureStep definedVariables n s =
       v' <- value definedVariables n v
       pure [I.BlockStatement $ I.ExpressionStatement v']
 
-typ :: (MonadThrow m, Copointed f, MayHave S.Location f, Pretty (f (Type f)), HasCallStack) => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver]) -> f (Type f) -> m (I.QualifiedType, [I.Deriver])
-typ definedVariables t = trace ("typ: " ++ anythingToString t) $
+typ
+  :: ( MonadThrow m
+     , Copointed f
+     , MayHave S.Location f
+     , HasCallStack
+     )
+  => Map QualifiedIdentifier (I.QualifiedType, [I.Deriver])
+  -> f (Type f)
+  -> m (I.QualifiedType, [I.Deriver])
+typ definedVariables t =
   case copoint t of
     S.TypeVariable n ->
       case M.lookup (copoint n) definedVariables of
-        -- Nothing -> throw $ TypeVariableNotFoundException (pretty $ copoint n) $ W.mayGet t
         Nothing -> error "!!!"
         Just c -> pure c
     S.FunctionType t' -> do
@@ -404,9 +446,8 @@ definedVariable d =
     S.ForeignTypeBind i _ -> Just (copoint i, (([], I.TypeVariable $ qualifiedIdentifier i), []))
     _                     -> Nothing
 
-data Exception
-  = EmbeddedParameterMismatchException { expected :: Word, actual :: Word, location :: Maybe S.Location }
-  | TypeVariableNotFoundException { variable :: Text, location :: Maybe S.Location }
+data Exception =
+  EmbeddedParameterMismatchException { expected :: Word, actual :: Word, location :: Maybe S.Location }
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where

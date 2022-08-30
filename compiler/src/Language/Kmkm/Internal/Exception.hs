@@ -16,5 +16,5 @@ deriving instance Show Exception
 
 instance E.Exception Exception
 
-unreachable :: HasCallStack => a
-unreachable = error "compiler bug"
+unreachable :: HasCallStack => String -> a
+unreachable message = error $ "compiler bug: " <> message

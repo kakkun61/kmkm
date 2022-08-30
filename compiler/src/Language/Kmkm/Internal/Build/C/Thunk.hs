@@ -1,7 +1,7 @@
-{-# LANGUAGE DataKinds    #-}
-{-# LANGUAGE LambdaCase   #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE TypeFamilies     #-}
 
 -- | “top-level thunk / compile-time expression” pass.
 module Language.Kmkm.Internal.Build.C.Thunk
@@ -11,11 +11,11 @@ module Language.Kmkm.Internal.Build.C.Thunk
 import qualified Language.Kmkm.Internal.Syntax as S
 
 import           Data.Copointed     (Copointed (copoint))
+import           Data.Functor.With  (MayHave)
 import           Data.List.NonEmpty (NonEmpty ((:|)))
 import           Data.Maybe         (mapMaybe)
 import           Data.Set           (Set)
 import qualified Data.Set           as S
-import Data.Functor.With (MayHave)
 
 -- XXX: smarter method wanted
 -- It is not necessary to convert all top-level value definitions,
@@ -45,8 +45,8 @@ thunk = fmap $ \(S.Module n ms ds) -> S.Module n ms $ fmap (definition (thunkIde
 definition :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition tids d =
   case copoint d of
-    S.ValueBind b | S.ValueBindV i v <- copoint b -> definition' tids (S.ValueBind (S.ValueBindN i ([] <$ d) v <$ b) <$ d)
-    _                              -> definition' tids d
+    S.ValueBind b | S.ValueBindV i is v <- copoint b -> definition' tids (S.ValueBind (S.ValueBindN i is ([] <$ d) v <$ b) <$ d)
+    _                                                -> definition' tids d
 
 definition' :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
 definition' tids =
@@ -54,14 +54,14 @@ definition' tids =
     S.ValueBind b ->
       S.ValueBind $
         flip fmap b $ \case
-          S.ValueBindV i v    -> valueBind tids i Nothing v
-          S.ValueBindN i ps v -> valueBind tids i (Just ps) v
-    m                                 -> m
+          S.ValueBindV i is v    -> valueBind tids i is Nothing v
+          S.ValueBindN i is ps v -> valueBind tids i is (Just ps) v
+    m -> m
 
-valueBind :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> ValueBind f
-valueBind tids i mps v =
+valueBind :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> f [f S.QualifiedIdentifier] -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> ValueBind f
+valueBind tids i is mps v =
   let v' = term tids v
-  in maybe (S.ValueBindV i v') (\ps -> S.ValueBindN i ps v') mps
+  in maybe (S.ValueBindV i is v') (\ps -> S.ValueBindN i is ps v') mps
 
 term :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
 term tids v =
@@ -104,12 +104,12 @@ identifiers :: Copointed f => f [f (Definition f)] -> Set S.QualifiedIdentifier
 identifiers =
   S.fromList . mapMaybe (go . copoint) . copoint
   where
-    go (S.ValueBind b) | S.ValueBindN i _ _ <- copoint b = Just $ copoint i
-    go _                                  = Nothing
+    go (S.ValueBind b) | S.ValueBindN i _ _ _ <- copoint b = Just $ copoint i
+    go _                                                   = Nothing
 
 thunkIdentifiers :: Copointed f => f [f (Definition f)] -> Set S.QualifiedIdentifier
 thunkIdentifiers =
   S.fromList . mapMaybe (go . copoint) . copoint
   where
-    go (S.ValueBind b) | S.ValueBindV i _ <- copoint b = Just $ copoint i
-    go _                                = Nothing
+    go (S.ValueBind b) | S.ValueBindV i _ _ <- copoint b = Just $ copoint i
+    go _                                                 = Nothing

@@ -34,6 +34,8 @@ import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
 import qualified Data.Functor.Barbie.Layered          as B
 import           Data.Functor.Identity                (Identity (Identity, runIdentity))
+import           Data.Functor.With                    (MayHave)
+import qualified Data.Functor.With                    as W
 import           Data.List                            (foldl')
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
@@ -45,8 +47,7 @@ import qualified Data.Set                             as S
 import           Data.Text                            (Text)
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
-import Data.Functor.With (MayHave)
-import qualified Data.Functor.With as W
+import           GHC.Stack                            (HasCallStack)
 
 type Module t et ev = S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted t et ev
 
@@ -70,6 +71,7 @@ typeCheck
      , Eq (f (S.Type 'S.NameResolved 'S.Curried f))
      , Show (f (S.Type 'S.NameResolved 'S.Curried f))
      , Show (f S.QualifiedIdentifier)
+     , HasCallStack
      )
   => Map S.QualifiedIdentifier (f (S.Type 'S.NameResolved 'S.Curried f))
   -> f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f)
@@ -87,6 +89,7 @@ typeCheck'
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
+     , HasCallStack
      )
   => VariableTypes f
   -> f (Module 'S.Untyped et ev f)
@@ -108,6 +111,7 @@ definitions
      , Eq (f (Type f))
      , Show (f (Type f))
      , Show (f S.QualifiedIdentifier)
+     , HasCallStack
      )
   => VariableTypes f
   -> PrimitivesImported
@@ -121,7 +125,7 @@ definitions variableTypes prim =
         valueBinds = M.fromList $ mapMaybe valueBind definitions'
         foreignValueBinds = M.fromList $ mapMaybe foreignValueBind definitions'
         dependencyGraph = G.overlays $ dependency (M.keysSet valueBinds) <$> definitions'
-        sortedIdentifiers = fromRight unreachable $ G.topSort $ G.scc dependencyGraph
+        sortedIdentifiers = fromRight (unreachable "empty") $ G.topSort $ G.scc dependencyGraph
         variableTypes' = M.unions $ M.mapMaybe annotatedType valueBinds : foreignValueBinds : variableTypes : [] -- why not a list literal? because of non-injective type families.
         typedValueBinds = M.unions $ mapMaybe valueConstructors definitions'
       typedValueBinds <- foldr (flip $ typeBind variableTypes' valueBinds prim) (pure typedValueBinds) sortedIdentifiers
@@ -169,13 +173,13 @@ annotatedType v
   , S.TypeAnnotation' _ t <- copoint a = Just t
 annotatedType _ = Nothing
 
-replaceValue :: (Functor f, Copointed f) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
+replaceValue :: (Functor f, Copointed f, HasCallStack) => Map S.QualifiedIdentifier (f (Value 'S.Typed et ev f)) -> f (Definition 'S.Untyped et ev f) -> f (Definition 'S.Typed et ev f)
 replaceValue typedValueBinds =
   fmap $ \case
     S.DataDefinition i cs -> S.DataDefinition i cs
     S.TypeBind i t -> S.TypeBind i t
     S.ForeignTypeBind i c -> S.ForeignTypeBind i c
-    S.ValueBind b -> S.ValueBind $ (\(S.ValueBindU i _) -> S.ValueBindU i $ fromMaybe unreachable $ M.lookup (copoint i) typedValueBinds) <$> b
+    S.ValueBind b -> S.ValueBind $ (\(S.ValueBindU i _) -> S.ValueBindU i $ fromMaybe (unreachable "not found") $ M.lookup (copoint i) typedValueBinds) <$> b
     S.ForeignValueBind i c t -> S.ForeignValueBind i c t
 
 valueBind :: Copointed f => f (Definition t et ev f) -> Maybe (S.QualifiedIdentifier, f (Value t et ev f))

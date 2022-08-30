@@ -3,11 +3,7 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE OverloadedStrings #-}
-import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException, IntermediateCTypeVariableNotFoundException),
+import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
                       Location (Location), ParseExceptionMessage (ParseSexpMessage, ParseTextMessage),
                       Position (Position), compile)
 
@@ -24,6 +20,7 @@ import           Data.Text              (Text)
 import qualified Data.Text              as T
 import qualified Data.Text.IO           as T
 import qualified Data.Text.IO.Utf8      as TU
+import           GHC.Stack              (HasCallStack)
 import           Main.Utf8              (withUtf8)
 import qualified Options.Declarative    as O
 import           System.Console.ANSI    (Color (Red), ColorIntensity (Vivid), ConsoleLayer (Foreground),
@@ -58,15 +55,16 @@ instance O.ArgRead Step where
           "c"       -> Just C
           _         -> Nothing
 
-main :: IO ()
+main :: HasCallStack => IO ()
 main = withUtf8 $ O.run_ main'
 
 main'
-  :: O.Flag "o" '["output"] "PATH" "output executable file path that is relative to --directory" (O.Def "prog" FilePath)
+  :: HasCallStack
+  => O.Flag "o" '["output"] "PATH" "output executable file path that is relative to --directory" (O.Def "prog" FilePath)
   -> O.Flag "d" '["directory"] "PATH" "output directory path" (O.Def "out" FilePath)
   -> O.Flag "l" '["library"] "PATH" "library path to find" [FilePath]
   -> O.Flag "n" '["dry-run"] "" "dry run" Bool
-  -> O.Flag "s" '["step"] "STEP" "to which step to run (compile, c)" (O.Def "c" Step)
+  -> O.Flag "s" '["step"] "STEP" "to which step to run (compile, c; default c)" (O.Def "c" Step)
   -> O.Flag "c" '["compiler"] "COMMAND" "compiler command" (O.Def "gcc" FilePath)
   -> O.Arg "SOURCE" String
   -> O.Cmd "Kmkm compiler" ()
@@ -77,7 +75,7 @@ main' output directory libraries dryRun step compiler src = do
     when (not (O.get dryRun) && C <= O.get step) $
       gcc (O.get compiler) (O.get output) (O.get directory) verbosity
 
-compile' :: FilePath -> [FilePath] -> Bool -> Verbosity -> String -> IO ()
+compile' :: HasCallStack => FilePath -> [FilePath] -> Bool -> Verbosity -> String -> IO ()
 compile' output libraries dryRun verbosity src =
   catch
     do
@@ -139,16 +137,13 @@ compile' output libraries dryRun verbosity src =
               T.hPutStrLn stderr $ "intermediate C error: C embedded parameter mismatch error: expected: " <> T.pack (show e) <> ", actual: " <> T.pack (show a)
               maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "A number of parameters of embedded C is different from one of its type."
-            IntermediateCTypeVariableNotFoundException i l -> do
-              T.hPutStrLn stderr $ "intermediate C error: type variable not found error: " <> i
-              maybe (pure ()) (printLocation stderr) l
             CompileRecursionException ms -> do
               T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
               T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."
             CompileModuleNameMismatchException f m l -> do
               T.hPutStrLn stderr $ "compile error: module name mismatch error: file name: " <> T.pack f <> ", module name: " <> m
               maybe (pure ()) (printLocation stderr) l
-              T.hPutStrLn stderr "A file's name and its enclosed module's name is mismatched while compiling."
+              T.hPutStrLn stderr "A file's name and its enclosed module's name are mismatched while compiling."
             CompileDotDotPathException f -> do
               T.hPutStrLn stderr $ "compile error: \"..\" path error: " <> T.pack f
               T.hPutStrLn stderr "A file path contains \"..\" while compiling."

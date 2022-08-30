@@ -46,6 +46,8 @@ import           Data.Copointed                        (Copointed (copoint))
 import           Data.Foldable                         (for_)
 import           Data.Functor                          (($>))
 import           Data.Functor.Identity                 (Identity)
+import           Data.Functor.With                     (MayHave, With)
+import qualified Data.Functor.With                     as W
 import qualified Data.Kind                             as K
 import qualified Data.List                             as L
 import           Data.List.NonEmpty                    (NonEmpty)
@@ -57,6 +59,7 @@ import           Data.Traversable                      (for)
 import qualified Data.Typeable                         as Y
 import           Data.Void                             (Void)
 import           GHC.Generics                          (Generic)
+import           GHC.Stack                             (HasCallStack)
 import qualified Language.Kmkm.Internal.Exception      as X
 import           Language.Kmkm.Internal.Parse.Location (withLocation)
 import qualified Language.Kmkm.Internal.Syntax         as S
@@ -67,8 +70,6 @@ import           Text.Megaparsec.Parsers               (ParsecT (unParsecT))
 import qualified Text.Parser.Char                      as P
 import qualified Text.Parser.Combinators               as P
 import qualified Text.Parser.Token                     as P
-import Data.Functor.With (With, MayHave)
-import qualified Data.Functor.With as W
 
 type Module et ev = S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 
@@ -213,9 +214,9 @@ foreignValueBind s =
       let evps = (\EmbeddedParser { embeddedValueParser } -> embeddedValueParser) <$> embeddedParsers
       evs <- list (runEmbeddedParsers evps) sevs
       t <- typ st
-      case mapMaybe isEmbeddedValue $ copoint evs of -- 選択は別ステップにする
+      case mapMaybe isEmbeddedValue $ copoint evs of -- TODO 選択は別ステップにする
         [ev] -> pure $ S.ForeignValueBind i ev t
-        _ -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ W.mayGet s]
+        _    -> throwError [SexpException "no or more than one embedded value parsers" "foreignValueBind" $ W.mayGet s]
     s' -> throwError [SexpException ("a list with 4 elements expected, but got " ++ abstractMessage s') "foreignValueBind" $ W.mayGet s]
 
 foreignTypeBind :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, MayHave S.Location f) => SexpParser f m (f (Definition et ev f))
@@ -461,7 +462,7 @@ identifier =
     b <- many $ P.choice [asciiAlphabet, P.digit]
     pure $ S.UserIdentifier $ T.pack $ a : b
 
-value :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, MayHave S.Location f) => SexpParser f m (f (Value et ev f))
+value :: (MonadAlternativeError [Exception] m, MonadReader (Env et ev f) m, Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => SexpParser f m (f (Value et ev f))
 value s =
   (<$ s) . S.UntypedValue <$>
     P.choice
@@ -476,7 +477,7 @@ value s =
       , (<$ s) . S.Instantiation <$> instantiation s
       ]
 
-procedure :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, MayHave S.Location f) => SexpParser f m (f (NonEmpty (f (ProcedureStep et ev f))))
+procedure :: (MonadReader (Env et ev f) m, MonadAlternativeError [Exception] m, Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => SexpParser f m (f (NonEmpty (f (ProcedureStep et ev f))))
 procedure s =
   case copoint s of
     SS.List [sk, sss] -> do
@@ -551,12 +552,12 @@ list p s =
       traverse p ss
     s' -> throwError [SexpException ("a list with some elements and the first element \"list\" expected, but got " ++ abstractMessage s') "list" $ W.mayGet s]
 
-list1 :: (MonadError [Exception] m, Traversable f, MayHave S.Location f) => SexpParser f m (f a) -> SexpParser f m (f (NonEmpty (f a)))
+list1 :: (MonadError [Exception] m, Traversable f, MayHave S.Location f, HasCallStack) => SexpParser f m (f a) -> SexpParser f m (f (NonEmpty (f a)))
 list1 p s =
   for s $ \case
     SS.List (l : ss) -> do
       symbol "list" "list1" l
-      fromMaybe X.unreachable . N.nonEmpty <$> traverse p ss
+      fromMaybe (X.unreachable "empty") . N.nonEmpty <$> traverse p ss
     s' -> throwError [SexpException ("a list with some elements and the first element \"list\" expected, but got " ++ abstractMessage s') "list1" $ W.mayGet s]
 
 atom :: (MonadError [Exception] m, Traversable f, MayHave S.Location f) => String -> ParsecT Void Text Identity a -> SexpParser f m (f a)

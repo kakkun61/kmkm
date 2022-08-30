@@ -1,6 +1,6 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Language.Kmkm.Internal.Parse.Sexp.C
   ( embeddedParser
@@ -9,10 +9,10 @@ module Language.Kmkm.Internal.Parse.Sexp.C
 import qualified Language.Kmkm.Internal.Parse.Sexp as R
 import qualified Language.Kmkm.Internal.Syntax     as S
 
+import           Data.Functor.With                  (MayHave)
+import qualified Data.Functor.With                  as W
 import           Data.Traversable                   (for)
 import qualified Language.Kmkm.Internal.Syntax.Sexp as S
-import Data.Functor.With (MayHave)
-import qualified Data.Functor.With as W
 
 embeddedParser :: (Traversable f, MayHave S.Location f) => R.EmbeddedParser f
 embeddedParser = R.EmbeddedParser value type'

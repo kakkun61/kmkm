@@ -10,13 +10,13 @@
 {-# LANGUAGE InstanceSigs             #-}
 {-# LANGUAGE MultiParamTypeClasses    #-}
 {-# LANGUAGE OverloadedStrings        #-}
+{-# LANGUAGE PatternSynonyms          #-}
 {-# LANGUAGE RankNTypes               #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 {-# LANGUAGE StandaloneDeriving       #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE UndecidableInstances     #-}
-{-# LANGUAGE PatternSynonyms #-}
 
 #if __GLASGOW_HASKELL__ < 902
 {-# OPTIONS_GHC -Wno-partial-fields #-}
@@ -78,6 +78,7 @@ import           Data.Copointed              (Copointed (copoint))
 import           Data.Foldable               (Foldable (fold))
 import           Data.Functor.Barbie.Layered (FunctorB (bmap))
 import           Data.Functor.Identity       (Identity (Identity))
+import           Data.Functor.With           (With, pattern With)
 import qualified Data.Kind                   as K
 import           Data.List.NonEmpty          (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty          as N
@@ -88,7 +89,6 @@ import qualified Data.Text                   as T
 import           GHC.Exts                    (IsList)
 import qualified GHC.Exts                    as E
 import           GHC.Generics                (Generic)
-import Data.Functor.With ( With, pattern With )
 
 -- Module
 
@@ -257,8 +257,8 @@ instance FunctorB (Value n c 'LambdaUnlifted t et ev) => FunctorB (ValueBind n c
   bmap f (ValueBindU i v) = ValueBindU (f i) (bmap f <$> f v)
 
 data instance ValueBind n c 'LambdaLifted t et ev f
-  = ValueBindV (f (BindIdentifier n)) (f (Value n c 'LambdaLifted t et ev f))
-  | ValueBindN (f (BindIdentifier n)) (f [f (f (BindIdentifier n), f (Type n c f))]) (f (Value n c 'LambdaLifted t et ev f))
+  = ValueBindV (f (BindIdentifier n)) (f [f (BindIdentifier n)]) (f (Value n c 'LambdaLifted t et ev f))
+  | ValueBindN (f (BindIdentifier n)) (f [f (BindIdentifier n)]) (f [f (f (BindIdentifier n), f (Type n c f))]) (f (Value n c 'LambdaLifted t et ev f))
   deriving Generic
 
 type instance ValueBindConstraint cls n c 'LambdaLifted t et ev f =
@@ -266,6 +266,7 @@ type instance ValueBindConstraint cls n c 'LambdaLifted t et ev f =
   , cls (f (Value n c 'LambdaLifted t et ev f))
   , cls (f (Type n c f))
   , cls (f [f (f (BindIdentifier n), f (Type n c f))])
+  , cls (f [f (BindIdentifier n)])
   )
 
 deriving instance ValueBindConstraint Show n c 'LambdaLifted t et ev f => Show (ValueBind n c 'LambdaLifted t et ev f)
@@ -273,8 +274,8 @@ deriving instance ValueBindConstraint Eq n c 'LambdaLifted t et ev f => Eq (Valu
 deriving instance ValueBindConstraint Ord n c 'LambdaLifted t et ev f => Ord (ValueBind n c 'LambdaLifted t et ev f)
 
 instance (FunctorB (Value n c 'LambdaLifted t et ev), FunctorB (FunctionType n c)) => FunctorB (ValueBind n c 'LambdaLifted t et ev) where
-  bmap f (ValueBindV i v) = ValueBindV (f i) (bmap f <$> f v)
-  bmap f (ValueBindN i ps v) = ValueBindN (f i) (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
+  bmap f (ValueBindV i is v) = ValueBindV (f i) (fmap f <$> f is) (bmap f <$> f v)
+  bmap f (ValueBindN i is ps v) = ValueBindN (f i) (fmap f <$> f is) (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
 
 -- EmbeddedValue
 
@@ -590,7 +591,7 @@ instance
   bmap f (Procedure ps)     = Procedure $ fmap (fmap (bmap f) . f) <$> f ps
   bmap f (TypeAnnotation a) = TypeAnnotation $ bmap f <$> f a
   bmap f (Let ds v)         = Let (fmap (fmap (bmap f) . f) <$> f ds) $ bmap f <$> f v
-  bmap f (ForAllValue i v)       = ForAllValue (f i) $ bmap f <$> f v
+  bmap f (ForAllValue i v)  = ForAllValue (f i) $ bmap f <$> f v
   bmap f (Instantiation i)  = Instantiation $ bmap f <$> f i
 
 instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Value' n c l t et ev f) where
@@ -690,7 +691,7 @@ deriving instance TypeAnnotationConstraint Eq n c l 'Typed et ev f => Eq (TypeAn
 deriving instance TypeAnnotationConstraint Ord n c l 'Typed et ev f => Ord (TypeAnnotation n c l 'Typed et ev f)
 
 instance FunctorB (TypeAnnotation n c l 'Typed et ev) where
-  bmap _ = X.unreachable
+  bmap _ = X.unreachable "bmap"
 
 -- ProcedureStep
 
@@ -806,7 +807,7 @@ instance FunctorB (Value n 'Uncurried 'LambdaUnlifted t et ev) => FunctorB (Func
 data instance Function n c 'LambdaLifted t f et ev deriving (Show, Read, Eq, Ord, Generic)
 
 instance FunctorB (Function n c 'LambdaLifted t et ev) where
-  bmap _ = X.unreachable
+  bmap _ = X.unreachable "bmap"
 
 -- Identifiers
 

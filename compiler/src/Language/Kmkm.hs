@@ -21,6 +21,7 @@ module Language.Kmkm
 import qualified Language.Kmkm.Internal.Build.C.IntermediateC as I
 import qualified Language.Kmkm.Internal.Build.NameResolve     as N
 import qualified Language.Kmkm.Internal.Build.TypeCheck       as T
+import qualified Language.Kmkm.Internal.Compile               as M
 import qualified Language.Kmkm.Internal.Compile.C             as C
 import qualified Language.Kmkm.Internal.Exception             as X
 import qualified Language.Kmkm.Internal.Parse.Sexp            as P
@@ -33,9 +34,10 @@ import           Data.List.NonEmpty     (NonEmpty)
 import           Data.Set               (Set)
 import qualified Data.Set               as H
 import           Data.Text              (Text)
+import           GHC.Stack              (HasCallStack)
 
 compile
-  :: (Alternative m, MonadCatch m)
+  :: (Alternative m, MonadCatch m, HasCallStack)
   => (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (FilePath -> Text -> m ()) -- ^ File writer.
@@ -78,14 +80,10 @@ data Exception
       Word -- ^ expected
       Word -- ^ actual
       (Maybe S.Location) -- ^ location.
-  | -- | A type variable not found while intermediate C translating.
-    IntermediateCTypeVariableNotFoundException
-      Text -- ^ identifier.
-      (Maybe S.Location) -- ^ location.
   | -- | Modules' dependency have a recursion while compiling.
     CompileRecursionException
       (NonEmpty Text) -- ^ modules.
-  | -- | A file's name and its enclosed module's name is mismatched while compiling.
+  | -- | A file's name and its enclosed module's name are mismatched while compiling.
     CompileModuleNameMismatchException
       FilePath -- ^ file name.
       Text -- ^ module name.
@@ -102,22 +100,21 @@ data ParseExceptionMessage
   | ParseSexpMessage String (Maybe S.Location)
   deriving (Show, Read, Eq, Ord)
 
-convertException :: X.Exception -> Exception
+convertException :: HasCallStack => X.Exception -> Exception
 convertException e =
   case (cast e, cast e, cast e, cast e, cast e) of
-    (Just es, Nothing, Nothing, Nothing, Nothing) -> ParseException $ convertParseExceptionMessage <$> es
-    (Nothing, Just (N.UnknownIdentifierException i r), Nothing, Nothing, Nothing) -> NameResolveUnknownIdentifierException (S.pretty i) r
-    (Nothing, Nothing, Just (T.NotFoundException i r), Nothing, Nothing) -> TypeCheckNotFoundException (S.pretty i) r
-    (Nothing, Nothing, Just (T.MismatchException e a r), Nothing, Nothing) -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
-    (Nothing, Nothing, Just (T.BindProcedureEndException r), Nothing, Nothing) -> TypeCheckBindProcedureEndException r
-    (Nothing, Nothing, Just (T.RecursionException is), Nothing, Nothing) -> TypeCheckRecursionException $ H.map S.pretty is
-    (Nothing, Nothing, Just (T.PrimitiveTypeException i r), Nothing, Nothing) -> TypeCheckPrimitiveTypeException (S.pretty i) r
+    (Just es, Nothing, Nothing, Nothing, Nothing)                                           -> ParseException $ convertParseExceptionMessage <$> es
+    (Nothing, Just (N.UnknownIdentifierException i r), Nothing, Nothing, Nothing)           -> NameResolveUnknownIdentifierException (S.pretty i) r
+    (Nothing, Nothing, Just (T.NotFoundException i r), Nothing, Nothing)                    -> TypeCheckNotFoundException (S.pretty i) r
+    (Nothing, Nothing, Just (T.MismatchException e a r), Nothing, Nothing)                  -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
+    (Nothing, Nothing, Just (T.BindProcedureEndException r), Nothing, Nothing)              -> TypeCheckBindProcedureEndException r
+    (Nothing, Nothing, Just (T.RecursionException is), Nothing, Nothing)                    -> TypeCheckRecursionException $ H.map S.pretty is
+    (Nothing, Nothing, Just (T.PrimitiveTypeException i r), Nothing, Nothing)               -> TypeCheckPrimitiveTypeException (S.pretty i) r
     (Nothing, Nothing, Nothing, Just (I.EmbeddedParameterMismatchException e a r), Nothing) -> IntermediateCEmbeddedParameterMismatchException e a r
-    (Nothing, Nothing, Nothing, Just (I.TypeVariableNotFoundException i r), Nothing) -> IntermediateCTypeVariableNotFoundException i r
-    (Nothing, Nothing, Nothing, Nothing, Just (C.RecursionException ms)) -> CompileRecursionException $ S.pretty <$> ms
-    (Nothing, Nothing, Nothing, Nothing, Just (C.ModuleNameMismatchException f m r)) -> CompileModuleNameMismatchException f (S.pretty m) r
-    (Nothing, Nothing, Nothing, Nothing, Just (C.DotDotPathException f)) -> CompileDotDotPathException f
-    _ -> X.unreachable
+    (Nothing, Nothing, Nothing, Nothing, Just (M.RecursionException ms))                    -> CompileRecursionException $ S.pretty <$> ms
+    (Nothing, Nothing, Nothing, Nothing, Just (M.ModuleNameMismatchException f m r))        -> CompileModuleNameMismatchException f (S.pretty m) r
+    (Nothing, Nothing, Nothing, Nothing, Just (M.DotDotPathException f))                    -> CompileDotDotPathException f
+    e'                                                                                      -> X.unreachable $ "unexpected exception: " ++ E.displayException e ++ ", " ++ show e'
   where
     cast :: (E.Exception e1, E.Exception e2) => e1 -> Maybe e2
     cast = E.fromException . E.toException

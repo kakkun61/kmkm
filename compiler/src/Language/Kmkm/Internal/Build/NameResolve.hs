@@ -17,6 +17,8 @@ import           Control.Exception.Safe           (MonadThrow, throw)
 import           Data.Copointed                   (Copointed (copoint))
 import qualified Data.Functor.Barbie.Layered      as B
 import           Data.Functor.Identity            (Identity (Identity, runIdentity))
+import           Data.Functor.With                (MayHave)
+import qualified Data.Functor.With                as W
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as M
 import           Data.Set                         (Set)
@@ -24,8 +26,6 @@ import qualified Data.Set                         as S
 import qualified Data.Typeable                    as Y
 import           GHC.Generics                     (Generic)
 import qualified Language.Kmkm.Internal.Exception as X
-import qualified Data.Functor.With as W
-import Data.Functor.With (MayHave)
 
 type Module n et ev = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
 

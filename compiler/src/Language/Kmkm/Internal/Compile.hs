@@ -32,6 +32,8 @@ import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
 import qualified Data.Functor.Barbie.Layered          as B
 import           Data.Functor.Identity                (Identity)
+import           Data.Functor.With                    (With)
+import qualified Data.Functor.With                    as W
 import           Data.List.NonEmpty                   (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                   as N
 import           Data.Map.Strict                      (Map)
@@ -43,10 +45,9 @@ import           Data.Text                            (Text)
 import qualified Data.Text                            as T
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
+import           GHC.Stack                            (HasCallStack)
 import           System.FilePath                      (isPathSeparator, pathSeparator)
 import qualified System.FilePath                      as F
-import Data.Functor.With (With)
-import qualified Data.Functor.With as W
 
 compile
   :: ( Alternative m
@@ -57,6 +58,7 @@ compile
      , Show (ev Identity)
      , Ord (et (With KS.Location))
      , Ord (ev (With KS.Location))
+     , HasCallStack
      )
   => [KP.EmbeddedParser (With KS.Location)]
   -> (With KS.Location (KS.EmbeddedType (With KS.Location)) -> Maybe (With KS.Location (et (With KS.Location)))) -- ^ Embedded type filter.
@@ -74,7 +76,7 @@ compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFil
   let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
   modules2 <- mapM (KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers) modules1
   mapM_ (writeLog . ("name resolved: " <>) . T.pack . show . second KS.toIdentity) $ M.toList modules2
-  let deps = G.gmap (fromMaybe X.unreachable . flip M.lookup modules2) nameDeps
+  let deps = G.gmap (fromMaybe (X.unreachable "name deps") . flip M.lookup modules2) nameDeps
   sortedModules <- sortModules deps
   modules3 <- snd <$> foldr (accumulate $ flip typeCheck) (pure mempty) sortedModules
   mapM_ (writeLog . ("typed module: " <>) . T.pack . show . KS.toIdentity) $ S.toList modules3
@@ -87,7 +89,7 @@ compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFil
       pure (M.union acc1 v1, S.insert v2 acc2)
 
 readRecursively
-  :: (Alternative m, MonadCatch m)
+  :: (Alternative m, MonadCatch m, HasCallStack)
   => [KP.EmbeddedParser (With KS.Location)]
   -> (With KS.Location (KS.EmbeddedType (With KS.Location)) -> Maybe (With KS.Location (et (With KS.Location))))
   -> (With KS.Location (KS.EmbeddedValue (With KS.Location)) -> Maybe (With KS.Location (ev (With KS.Location))))
@@ -127,11 +129,12 @@ sortModules
   :: ( MonadThrow m
      , Ord (et (With KS.Location))
      , Ord (ev (With KS.Location))
+     , HasCallStack
      )
   => G.AdjacencyMap (With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location)))
   -> m [With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Untyped et ev (With KS.Location))]
 sortModules deps =
-  mapM (go . GN.vertexList1) $ fromRight KE.unreachable (G.topSort $ G.scc deps)
+  mapM (go . GN.vertexList1) $ fromRight (KE.unreachable "empty") (G.topSort $ G.scc deps)
   where
     go ms@(m :| ms') = if null ms' then pure m else throw $ RecursionException $ (\(KS.Module n _ _) -> copoint n) . copoint <$> ms
 
@@ -178,8 +181,13 @@ build1 writeLog m2 = do
   writeLog $ "lambda-lifted module: " <> T.pack (show $ KS.toIdentity m5)
   pure m5
 
-filePathToModuleName :: FilePath -> KS.ModuleName
-filePathToModuleName path = KS.ModuleName $ fromMaybe X.unreachable $ N.nonEmpty $ T.split isPathSeparator $ T.pack path
+filePathToModuleName :: HasCallStack => FilePath -> KS.ModuleName
+filePathToModuleName path =
+  KS.ModuleName $ fromMaybe (X.unreachable "empty") $ N.nonEmpty $ removeDotDirectory $ T.split isPathSeparator $ T.pack path
+  where
+    removeDotDirectory []         = []
+    removeDotDirectory ("." : xs) = removeDotDirectory xs
+    removeDotDirectory (x : xs)   = x : removeDotDirectory xs
 
 moduleNameToFilePath :: KS.ModuleName -> FilePath
 moduleNameToFilePath (KS.ModuleName n) = T.unpack $ T.intercalate (T.singleton pathSeparator) $ N.toList n
