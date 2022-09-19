@@ -3,9 +3,12 @@
 
 module Language.Kmkm.Internal.Build.C.C
   ( render
+  , qualifiedType
   , element
+  , typeDefinition
   , field
   , derivers
+  , expression
   ) where
 
 import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
@@ -19,7 +22,7 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Identifier (Identifier),
                                               Initializer (ExpressionInitializer, ListInitializer),
                                               IntBase (IntBinary, IntDecimal, IntHexadecimal, IntOctal),
-                                              Literal (Fraction, Integer, String), QualifiedType,
+                                              Literal (Fraction, Integer, String), QualifiedType (QualifiedType),
                                               Statement (Block, Case, ExpressionStatement, If, Return),
                                               Type (Char, Double, Enumerable, EnumerableLiteral, Float, Int, Structure, StructureLiteral, TypeVariable, Union, Void),
                                               TypeQualifier (Unsigned), VariableQualifier (Constant, External))
@@ -56,7 +59,7 @@ definition (StatementDefinition t qs i ds es) =
     <> ["}"]
 
 qualifiedType :: QualifiedType -> Text
-qualifiedType (qs, t) =
+qualifiedType (QualifiedType qs t) =
   T.unwords $
     (typeQualifier <$> qs)
     <> [typ t]
@@ -117,11 +120,13 @@ derivers :: Text -> [Deriver] -> Text
 derivers = foldl deriver
 
 deriver :: Text -> Deriver -> Text
-deriver t (Pointer qs) =
+deriver t (Pointer qs ds) =
   fold
-    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [t | not $ T.null t]
+    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [dt | not $ T.null dt]
     , ")"
     ]
+  where
+    dt = derivers t ds
 deriver t (Function ps) =
   fold
     [ t
@@ -152,7 +157,10 @@ expression (StatementExpression es) =
     , "})"
     ]
 expression (Assign i e)             = identifier i <> " = " <> expression e
-expression (Cast (t, ds) e)         = "((" <> derivers (qualifiedType t) ds <> ") " <> expression e <> ")"
+expression (Cast (t, ds) e)         =
+  "((" <> T.unwords ([qualifiedType t] <> [dt | not $ T.null dt]) <> ") " <> expression e <> ")"
+  where
+    dt = derivers "" ds
 
 literal :: Literal -> Text
 literal (Integer v IntBinary) = "0x" <> T.pack (showHex v "")

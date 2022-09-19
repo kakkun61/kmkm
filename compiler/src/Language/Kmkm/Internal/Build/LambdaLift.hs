@@ -9,6 +9,7 @@ module Language.Kmkm.Internal.Build.LambdaLift
   , dataRepresentation
   , value
   , Pass
+  , peelForAll
   ) where
 
 import qualified Language.Kmkm.Internal.Syntax as S
@@ -40,7 +41,10 @@ type BindIdentifier = S.BindIdentifier 'S.NameResolved
 
 type Pass = State Word
 
-lambdaLift :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f) -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev f)
+lambdaLift
+  :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack)
+  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
+  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev f)
 lambdaLift = flip evalState 0 . module'
 
 module' :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
@@ -59,32 +63,31 @@ definition =
     definition' (S.ForeignValueBind i c t) = pure $ S.ForeignValueBind i c t
     definition' (S.ValueBind b) =
       scope $
-        let S.ValueBindU i v = copoint b
+        let
+          S.ValueBindU i v = copoint b
+          (is, v1) = peelForAll v
+          S.TypedValue v2 t = copoint v1
         in
-          case copoint v of
-            S.TypedValue v1 _
-              | S.Function f <- copoint v1
-              , S.FunctionN ps v2 <- copoint f -> do
-                  (v', ds) <- value v2
-                  let
-                    S.TypedValue _ t = copoint v'
-                    v'' =
-                      case ds of
-                        [] -> v'
-                        _ -> S.TypedValue (S.Let (ds <$ v2) v' <$ v1) t <$ v
-                    (is, v''') = peelForAll v''
-                  pure $ S.ValueBind $ S.ValueBindN i is ps v''' <$ b
-              | S.ForAllValue _ v1' <- copoint v1 -> definition' $ S.ValueBind $ S.ValueBindU i v1' <$ b
-            _ -> do
-              (v', ds) <- value v
+          case copoint v2 of
+            S.Function f -> do
+              let S.FunctionN ps v3 = copoint f
+              (v3', ds) <- value v3
               let
-                S.TypedValue _ t = copoint v'
-                v'' =
+                S.TypedValue _ t = copoint v3'
+                v3'' =
                   case ds of
-                    [] -> v'
-                    _ -> S.TypedValue (S.Let (ds <$ v) v' <$ v) t <$ v
-                (is, v''') = peelForAll v''
-              pure $ S.ValueBind $ S.ValueBindV i is v''' <$ b
+                    [] -> v3'
+                    _  -> S.TypedValue (S.Let (ds <$ v3) v3' <$ v2) t <$ v
+              pure $ S.ValueBind $ S.ValueBindN i is ps v3'' <$ b
+            S.ForAllValue {} -> X.unreachable "for-all value even after peel"
+            _ -> do
+              (v1', ds) <- value v1
+              let
+                v1'' =
+                  case ds of
+                    [] -> v1'
+                    _  -> S.TypedValue (S.Let (ds <$ v) v1' <$ v) t <$ v
+              pure $ S.ValueBind $ S.ValueBindV i is v1'' <$ b
 
 dataRepresentation :: Traversable f => f (DataRepresentation 'S.LambdaUnlifted et ev f) -> Pass (f (DataRepresentation 'S.LambdaLifted et ev f))
 dataRepresentation = traverse $ \(S.ForAllDataU is cs) -> S.ForAllDataU is <$> traverse (traverse valueConstructor) cs

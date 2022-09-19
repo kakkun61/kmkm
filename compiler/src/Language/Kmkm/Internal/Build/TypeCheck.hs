@@ -337,7 +337,8 @@ typeOfTerm variableTypes prim@PrimitivesImported { int = primInt, frac2 = primFr
           let S.TypedValue _ t' = copoint v''
           pure $ S.TypedValue (S.Let ds' v'' <$ v') t' <$ v
         S.ForAllValue i v' -> do
-          v'' <- typeOfTerm variableTypes prim v'
+          let variableTypes' = M.insert (copoint i) (S.TypeVariable i <$ i) variableTypes
+          v'' <- typeOfTerm variableTypes' prim v'
           let S.TypedValue _ t = copoint v''
           pure $ S.TypedValue (S.ForAllValue i v'' <$ v) (S.ForAllType i t <$ v) <$ v
         S.Instantiation i -> do

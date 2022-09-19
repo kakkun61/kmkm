@@ -734,7 +734,7 @@ data instance Application n 'Curried l t et ev f =
   deriving Generic
 
 type instance ApplicationConstraint cls n 'Curried l t et ev f =
-  (cls (f (Value n 'Curried l t et ev f)))
+  cls (f (Value n 'Curried l t et ev f))
 
 deriving instance ApplicationConstraint Show n 'Curried l t et ev f => Show (Application n 'Curried l t et ev f)
 deriving instance ApplicationConstraint Eq n 'Curried l t et ev f => Eq (Application n 'Curried l t et ev f)

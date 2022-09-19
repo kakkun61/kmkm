@@ -12,6 +12,4 @@ struct parametricPolymorphism_solo {
 };
 
 struct parametricPolymorphism_solo parametricPolymorphism_solo(void const (* const parametricPolymorphism_item));
-
-struct parametricPolymorphism_solo parametricPolymorphism_solo1(void);
 #endif

@@ -12,6 +12,12 @@ kmkm_prim_string parametricPolymorphism_hello(void)
   return *(((kmkm_prim_string (* (*)(kmkm_prim_string *)))parametricPolymorphism_id)(&_v0));
 }
 
+kmkm_prim_int parametricPolymorphism_zero(void)
+{
+  kmkm_prim_int _v0 = 0;
+  return ((kmkm_prim_int (* (*)(kmkm_prim_int *))) parametricPolymorphism_id)(&_v0);
+}
+
 struct parametricPolymorphism_solo parametricPolymorphism_solo(void const (* const parametricPolymorphism_item))
 {
   return (struct parametricPolymorphism_solo) { parametricPolymorphism_item };

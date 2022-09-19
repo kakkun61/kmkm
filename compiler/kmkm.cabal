@@ -130,7 +130,9 @@ test-suite spec
                  Language.Kmkm.Internal.Build.C.IntermediateCSpec
                  Language.Kmkm.Internal.Build.C.ThunkSpec
                  Language.Kmkm.Internal.Build.LambdaLiftSpec
+                 Language.Kmkm.Internal.Build.PartiallyApplySpec
                  Language.Kmkm.Internal.Build.TypeCheckSpec
+                 Language.Kmkm.Internal.Build.UncurrySpec
                  Language.Kmkm.Internal.Parse.SexpSpec
                  Language.Kmkm.Internal.SyntaxSpec
                  Utility

@@ -18,7 +18,7 @@ test:
 
 .PHONY: install
 install: $(INSTALL_DIR)
-	$(MAKE) -C compiler install INSTALL_DIR=$(INSTALL_DIR)\bin
+	$(MAKE) -C compiler -f Makefile.windows install "CABAL_OPTS=--overwrite-policy=always --installdir=$(INSTALL_DIR)\bin"
 	$(PWSH) -Command "Copy-Item -Recurse library $(INSTALL_DIR)"
 
 $(INSTALL_DIR):

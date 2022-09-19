@@ -1,20 +1,21 @@
-{-# LANGUAGE OverloadedLists   #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds                #-}
+{-# LANGUAGE OverloadedLists          #-}
+{-# LANGUAGE OverloadedStrings        #-}
+{-# LANGUAGE PolyKinds                #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE PolyKinds #-}
 
 module Language.Kmkm.Internal.Build.LambdaLiftSpec where
 
 import Language.Kmkm.Internal.Build.LambdaLift
-import Language.Kmkm.Internal.Syntax hiding (value)
+import Language.Kmkm.Internal.Syntax           hiding (value)
 
 import Utility
 
-import Control.Monad.State.Strict (evalState)
-import Test.Hspec
-import Data.Functor.Identity (Identity)
-import qualified Data.Kind as K
+import           Control.Monad.State.Strict (evalState)
+import           Data.Functor.Const         (Const)
+import           Data.Functor.Identity      (Identity)
+import qualified Data.Kind                  as K
+import           Test.Hspec
 
 spec :: Spec
 spec = do
@@ -25,10 +26,64 @@ spec = do
           I (ForAllDataU [["a"]] [I $ ValueConstructor "solo" [I $ Field "item" "a"]])
 
   describe "value" $ do
-    it "(for-all 0)" $ do
-      eval value (I $ TypedValue (I $ ForAllValue "a" $ I $ TypedValue "a" "a") "a" :: Value_)
+    it "(for-all a a a)" $ do
+      eval value (I $ TypedValue (I $ ForAllValue "a" $ I $ TypedValue "a" "a") $ I $ ForAllType "a" "a" :: Value_)
         `shouldBe`
-          (I $ TypedValue (I $ ForAllValue "a" $ I $ TypedValue "a" "a") "a", [])
+          (I $ TypedValue (I $ ForAllValue "a" $ I $ TypedValue "a" "a") $ I $ ForAllType "a" "a", [])
+
+  describe "lambdaLift" $ do
+    it "for-all value" $ do
+      let
+        source :: I (Module 'NameResolved 'Uncurried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+        source =
+          I $ Module
+            "spec"
+            []
+            [ I $ ValueBind $
+                I $ ValueBindU
+                  ["spec", "id"]
+                  $ I $ TypedValue
+                    ( I $ ForAllValue
+                        "a"
+                        $ I $ TypedValue
+                          (I $ Variable "a")
+                          $ I $ TypeVariable "a"
+                    )
+                    $ I $ ForAllType "a" $ I $ TypeVariable "a"
+            ]
+        result :: I (Module 'NameResolved 'Uncurried 'LambdaLifted 'Typed (Const ()) (Const ()) I)
+        result =
+          I $ Module
+            "spec"
+            []
+            [ I $ ValueBind $
+                I $ ValueBindV
+                  ["spec", "id"]
+                  ["a"]
+                  $ I $ TypedValue
+                    (I $ Variable "a")
+                    $ I $ TypeVariable "a"
+            ]
+      lambdaLift source `shouldBe` result
+
+  describe "peelForAll" $ do
+    it "(for-all a a)" $ do
+      let
+        source :: I (Value 'NameResolved 'Uncurried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+        source =
+          I $ TypedValue
+            ( I $ ForAllValue
+                "a"
+                $ I $ TypedValue
+                  (I $ Variable "a")
+                  $ I $ TypeVariable "a"
+            )
+            $ I $ ForAllType "a" $ I $ TypeVariable "a"
+        result =
+          I $ TypedValue
+            (I $ Variable "a")
+            $ I $ TypeVariable "a"
+      peelForAll source `shouldBe` (["a"], result)
 
 eval :: (a -> Pass b) -> a -> b
 eval pass = flip evalState 0 . pass

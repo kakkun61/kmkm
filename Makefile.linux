@@ -1,0 +1,35 @@
+INSTALL_BIN_DIR = $(HOME)/.local/bin
+XDG_DATA_HOME = $(HOME)/.local/share
+INSTALL_LIB_DIR = $(XDG_DATA_HOME)/kmkm
+
+.PHONY: all
+all: compiler vscode
+
+.PHONY: compiler
+compiler:
+	$(MAKE) -C compiler
+
+.PHONY: vscode
+vscode:
+	cd editor/vscode && npm run package
+
+.PHONY: test
+test:
+	>&2 echo 'test script for linux does not yet exist'
+
+.PHONY: install
+install: $(INSTALL_BIN_DIR) $(INSTALL_LIB_DIR)
+	$(MAKE) -C compiler -f Makefile.linux install "CABAL_OPTS=--overwrite-policy=always --installdir=$(INSTALL_BIN_DIR) --constraint='kmkm +cygpath'"
+	cp -rf library $(INSTALL_LIB_DIR)
+
+$(INSTALL_BIN_DIR):
+	mkdir -p $(INSTALL_BIN_DIR)
+
+$(INSTALL_LIB_DIR):
+	mkdir -p $(INSTALL_LIB_DIR)
+
+.PHONY: clean
+clean:
+	-rm -rf out
+	-$(MAKE) -C compiler clean
+	-cd editor/vscode && npm run clean

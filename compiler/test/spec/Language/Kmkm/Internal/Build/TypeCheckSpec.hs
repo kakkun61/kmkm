@@ -150,3 +150,39 @@ spec = do
                         ["kmkm", "prim", "string"]
               ]
         typeCheck variableTypes source `shouldReturn` result
+
+      it "for-all value" $ do
+        let
+          source :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Untyped (Const ()) (Const ()) I)
+          source =
+            I $ Module
+              "spec"
+              []
+              [ I $ ValueBind $
+                  I $ ValueBindU
+                    ["spec", "id"]
+                    $ I $ UntypedValue $
+                      I $ ForAllValue
+                        "a"
+                        $ I $ UntypedValue $
+                          I $ Variable "a"
+              ]
+          result :: I (Module 'NameResolved 'Curried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+          result =
+            I $ Module
+              "spec"
+              []
+              [ I $ ValueBind $
+                  I $ ValueBindU
+                    ["spec", "id"]
+                    $ I $ TypedValue
+                      ( I $ ForAllValue
+                          "a"
+                          $ I $ TypedValue
+                            (I $ Variable "a")
+                            $ I $ TypeVariable "a"
+                      )
+                      $ I $ ForAllType "a" $ I $ TypeVariable "a"
+              ]
+        typeCheck [] source `shouldReturn` result
+

@@ -2,3 +2,4 @@
 dist-newstyle/
 *.local
 .ghc.environment.*
+/Makefile
