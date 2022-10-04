@@ -27,8 +27,8 @@ import           System.Console.ANSI    (Color (Red), ColorIntensity (Vivid), Co
                                          SGR (Reset, SetColor), hSetSGR)
 import           System.Directory       (createDirectoryIfMissing, doesFileExist, setCurrentDirectory)
 import           System.Exit            (exitFailure)
-import           System.FilePath        ((</>))
 import qualified System.FilePath        as F
+import           System.FilePath        ((</>))
 import qualified System.FilePath.Glob   as G
 import           System.IO              (Handle, IOMode (ReadMode), hPutStrLn, openFile, stderr)
 

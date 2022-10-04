@@ -69,11 +69,13 @@ module Language.Kmkm.Internal.Syntax
   , toIdentity
     -- * Pretty printing
   , Pretty (..)
+  , Pretty1 (..)
   ) where
 
 import qualified Language.Kmkm.Internal.Exception as X
 
 import           Data.Bifunctor              (Bifunctor (bimap))
+import qualified Data.Char                   as C
 import           Data.Copointed              (Copointed (copoint))
 import           Data.Foldable               (Foldable (fold))
 import           Data.Functor.Barbie.Layered (FunctorB (bmap))
@@ -89,6 +91,7 @@ import qualified Data.Text                   as T
 import           GHC.Exts                    (IsList)
 import qualified GHC.Exts                    as E
 import           GHC.Generics                (Generic)
+import           Text.Show.Unicode           (ushow)
 
 -- Module
 
@@ -118,6 +121,18 @@ instance
   ) =>
   FunctorB (Module n c l t et ev) where
   bmap f (Module n ms ds) = Module (f n) (fmap f <$> f ms) (fmap (fmap (bmap f) . f) <$> f ds)
+
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (FunctionType n c f)
+  , Pretty (ValueBind n c l t et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (Module n c l t et ev f) where
+  pretty (Module n is ds) = prettyList "module" [pretty n, pretty is, pretty ds]
 
 -- Definition
 
@@ -151,8 +166,24 @@ instance (FunctorB (Type n c), FunctorB (DataRepresentation n c l et ev), Functo
   bmap f (DataDefinition n r)     = DataDefinition (f n) $ bmap f <$> f r
   bmap f (TypeBind i t)           = TypeBind (f i) (bmap f <$> f t)
   bmap f (ValueBind b)            = ValueBind (bmap f <$> f b)
-  bmap f (ForeignTypeBind i c)    =  ForeignTypeBind (f i) (bmap f <$> f c)
+  bmap f (ForeignTypeBind i c)    = ForeignTypeBind (f i) (bmap f <$> f c)
   bmap f (ForeignValueBind i c t) = ForeignValueBind (f i) (bmap f <$> f c) (bmap f <$> f t)
+
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (FunctionType n c f)
+  , Pretty (ValueBind n c l t et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (Definition n c l t et ev f) where
+  pretty (DataDefinition n r)     = prettyList "define" [pretty n, pretty r]
+  pretty (TypeBind i t)           = prettyList "bind-type" [pretty i, pretty t]
+  pretty (ValueBind b)            = prettyList "bind-value" [pretty b]
+  pretty (ForeignTypeBind i c)    = prettyList "bind-type-foreign" [pretty i, pretty c]
+  pretty (ForeignValueBind i c t) = prettyList "bind-value-foreign" [pretty i, pretty c, pretty t]
 
 -- DataRepresentation
 
@@ -181,6 +212,14 @@ instance (FunctorB (Type n 'Curried), FunctorB (FunctionType n 'Curried), Functo
   bmap f (ForAllDataC i r)          = ForAllDataC (f i) $ bmap f <$> f r
   bmap f (ValueConstructorsData cs) = ValueConstructorsData $ fmap (fmap (bmap f) . f) <$> f cs
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  ) => Pretty (DataRepresentation n 'Curried l et ev f) where
+  pretty (ForAllDataC i rs)         = prettyList "for-all" [pretty i, pretty rs]
+  pretty (ValueConstructorsData cs) = pretty cs
+
 data instance DataRepresentation n 'Uncurried l et ev f = ForAllDataU (f [f (BindIdentifier n)]) (f [f (ValueConstructor n 'Uncurried l et ev f)])
 
 type instance DataRepresentationConstraint cls n 'Uncurried l et ev f =
@@ -194,6 +233,13 @@ deriving instance DataRepresentationConstraint Ord n 'Uncurried l et ev f => Ord
 
 instance FunctorB (FunctionType n 'Uncurried) => FunctorB (DataRepresentation n 'Uncurried l et ev) where
   bmap f (ForAllDataU is cs) = ForAllDataU (fmap f <$> f is) $ fmap (fmap (bmap f) . f) <$> f cs
+
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  ) => Pretty (DataRepresentation n 'Uncurried l et ev f) where
+  pretty (ForAllDataU is cs) = prettyList "for-all" [pretty is, pretty cs]
 
 -- ValueConstructor
 
@@ -213,6 +259,17 @@ deriving instance ValueConstructorConstraint Ord n c l et ev f => Ord (ValueCons
 instance FunctorB (FunctionType n c) => FunctorB (ValueConstructor n c l et ev) where
   bmap f (ValueConstructor i fs) = ValueConstructor (f i) (fmap (fmap (bmap f) . f) <$> f fs)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (FunctionType n c f)
+  ) => Pretty (ValueConstructor n c l et ev f) where
+  pretty (ValueConstructor i fs) =
+    case pretty fs of
+      "(list)" -> pretty i
+      t        -> "(" <> pretty i <> " " <> t <> ")"
+
 -- Field
 
 type Field :: NameResolving -> Currying -> LambdaLifting -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
@@ -231,6 +288,14 @@ deriving instance FieldConstraint Ord n c l et ev f => Ord (Field n c l et ev f)
 instance FunctorB (FunctionType n c) => FunctorB (Field n c l et ev) where
   bmap f (Field i t) = Field (f i) (bmap f <$> f t)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (FunctionType n c f)
+  ) => Pretty (Field n c l et ev f) where
+  pretty (Field i t) = "(" <> pretty i <> " " <> pretty t <> ")"
+
 -- ValueBind
 
 type ValueBind :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
@@ -248,13 +313,19 @@ type instance ValueBindConstraint cls n c 'LambdaUnlifted t et ev f =
   , cls (f (Value n c 'LambdaUnlifted t et ev f))
   )
 
-
 deriving instance ValueBindConstraint Show n c 'LambdaUnlifted t et ev f => Show (ValueBind n c 'LambdaUnlifted t et ev f)
 deriving instance ValueBindConstraint Eq n c 'LambdaUnlifted t et ev f => Eq (ValueBind n c 'LambdaUnlifted t et ev f)
 deriving instance ValueBindConstraint Ord n c 'LambdaUnlifted t et ev f => Ord (ValueBind n c 'LambdaUnlifted t et ev f)
 
 instance FunctorB (Value n c 'LambdaUnlifted t et ev) => FunctorB (ValueBind n c 'LambdaUnlifted t et ev) where
   bmap f (ValueBindU i v) = ValueBindU (f i) (bmap f <$> f v)
+
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (Value n c 'LambdaUnlifted t et ev f)
+  ) => Pretty (ValueBind n c 'LambdaUnlifted t et ev f) where
+  pretty (ValueBindU i v) = pretty i <> " " <> pretty v
 
 data instance ValueBind n c 'LambdaLifted t et ev f
   = ValueBindV (f (BindIdentifier n)) (f [f (BindIdentifier n)]) (f (Value n c 'LambdaLifted t et ev f))
@@ -277,6 +348,16 @@ instance (FunctorB (Value n c 'LambdaLifted t et ev), FunctorB (FunctionType n c
   bmap f (ValueBindV i is v) = ValueBindV (f i) (fmap f <$> f is) (bmap f <$> f v)
   bmap f (ValueBindN i is ps v) = ValueBindN (f i) (fmap f <$> f is) (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (Value n c 'LambdaLifted t et ev f)
+  , Pretty (FunctionType n c f)
+  ) => Pretty (ValueBind n c 'LambdaLifted t et ev f) where
+  pretty (ValueBindV i is v)    = prettyList "bind-value" [pretty i, pretty is, pretty v]
+  pretty (ValueBindN i is ps v) = prettyList "bind-value" [pretty i, pretty is, pretty ps, pretty v]
+
 -- EmbeddedValue
 
 newtype EmbeddedValue f
@@ -290,6 +371,9 @@ deriving instance Ord (EmbeddedCValue f) => Ord (EmbeddedValue f)
 
 instance FunctorB EmbeddedValue where
   bmap f (EmbeddedValueC v) = EmbeddedValueC (bmap f v)
+
+instance Pretty1 f => Pretty (EmbeddedValue f) where
+  pretty (EmbeddedValueC v) = pretty v
 
 -- EmbeddedCValue
 
@@ -308,6 +392,9 @@ instance FunctorB EmbeddedCValue where
 isEmbeddedCValue :: Traversable f => f (EmbeddedValue f) -> Maybe (f (EmbeddedCValue f))
 isEmbeddedCValue = traverse $ \(EmbeddedValueC v) -> Just v
 
+instance Pretty1 f => Pretty (EmbeddedCValue f) where
+  pretty (EmbeddedCValue i ps b) = prettyList "c-value" [pretty i, pretty ps, pretty b]
+
 -- EmbeddedType
 
 newtype EmbeddedType f
@@ -321,6 +408,9 @@ deriving instance (Ord (f Text), Ord (f [f Text])) => Ord (EmbeddedType f)
 
 instance FunctorB EmbeddedType where
   bmap f (EmbeddedTypeC t) = EmbeddedTypeC (bmap f t)
+
+instance Pretty1 f => Pretty (EmbeddedType f) where
+  pretty (EmbeddedTypeC t) = pretty t
 
 -- EmbeddedCType
 
@@ -338,6 +428,9 @@ instance FunctorB EmbeddedCType where
 
 isEmbeddedCType :: Traversable f => f (EmbeddedType f) -> Maybe (f (EmbeddedCType f))
 isEmbeddedCType = traverse $ \(EmbeddedTypeC v) -> Just v
+
+instance Pretty1 f => Pretty (EmbeddedCType f) where
+  pretty (EmbeddedCType i b) = prettyList "c-type" [pretty i, pretty b]
 
 -- CHeader
 
@@ -492,6 +585,22 @@ instance
 
   bmap f (UntypedValue v) = UntypedValue (bmap f <$> f v)
 
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (BindIdentifier n)
+  , Pretty (Function n c l 'Untyped et ev f)
+  , Pretty (Application n c l 'Untyped et ev f)
+  , Pretty (TypeAnnotation n c l 'Untyped et ev f)
+  , Pretty (ValueBind n c l 'Untyped et ev f)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (FunctionType n c f)
+  , Pretty (Instantiation n c l 'Untyped et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (Value n c l 'Untyped et ev f) where
+  pretty (UntypedValue v) = pretty v
+
 data instance Value n c l 'Typed et ev f =
   TypedValue (f (Value' n c l 'Typed et ev f)) (f (Type n c f))
   deriving Generic
@@ -531,6 +640,22 @@ instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text,
   toList (UntypedValue v)
     | Variable i <- copoint v = E.toList $ copoint i
   toList _ = error "only variable acceptable"
+
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (BindIdentifier n)
+  , Pretty (FunctionType n c f)
+  , Pretty (Function n c l 'Typed et ev f)
+  , Pretty (Application n c l 'Typed et ev f)
+  , Pretty (TypeAnnotation n c l 'Typed et ev f)
+  , Pretty (ValueBind n c l 'Typed et ev f)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (Instantiation n c l 'Typed et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (Value n c l 'Typed et ev f) where
+  pretty (TypedValue v t) = prettyList "type" [pretty v, pretty t]
 
 -- Value'
 
@@ -603,6 +728,31 @@ instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text,
   toList (Variable i) = E.toList $ copoint i
   toList _            = error "only variable acceptable"
 
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (Function n c l t et ev f)
+  , Pretty (Application n c l t et ev f)
+  , Pretty (BindIdentifier n)
+  , Pretty (Value n c l t et ev f)
+  , Pretty (TypeAnnotation n c l t et ev f)
+  , Pretty (ValueBind n c l t et ev f)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (FunctionType n c f)
+  , Pretty (Instantiation n c l t et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (Value' n c l t et ev f) where
+  pretty (Variable n)       = pretty n
+  pretty (Literal l)        = pretty l
+  pretty (Function f)       = pretty f
+  pretty (Application a)    = pretty a
+  pretty (Procedure ps)     = prettyList "procedure" [pretty ps]
+  pretty (TypeAnnotation n) = pretty n
+  pretty (Let ds v)         = prettyList "let" [pretty ds, pretty v]
+  pretty (ForAllValue i v)  = prettyList "for-all" [pretty i, pretty v]
+  pretty (Instantiation i)  = pretty i
+
 -- Instantiation
 
 type Instantiation :: NameResolving -> Currying -> LambdaLifting -> Typing -> ((K.Type -> K.Type) -> K.Type) -> ((K.Type -> K.Type) -> K.Type) -> (K.Type -> K.Type) -> K.Type
@@ -624,6 +774,14 @@ deriving instance InstantiationConstraint Show n 'Curried l t et ev f => Show (I
 deriving instance InstantiationConstraint Eq n 'Curried l t et ev f => Eq (Instantiation n 'Curried l t et ev f)
 deriving instance InstantiationConstraint Ord n 'Curried l t et ev f => Ord (Instantiation n 'Curried l t et ev f)
 
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (BindIdentifier n)
+  , Pretty (Value n 'Curried l t et ev f)
+  ) => Pretty (Instantiation n 'Curried l t et ev f) where
+  pretty (InstantiationC v t) = prettyList "instantiate" [pretty v, pretty t]
+
 data instance Instantiation n 'Uncurried l t et ev f =
   InstantiationN (f (Value n 'Uncurried l t et ev f)) (f [f (Type n 'Uncurried f)])
   deriving Generic
@@ -642,6 +800,14 @@ instance (FunctorB (Value n 'Curried l t et ev)) => FunctorB (Instantiation n 'C
 
 instance (FunctorB (Value n 'Uncurried l t et ev)) => FunctorB (Instantiation n 'Uncurried l t et ev) where
   bmap f (InstantiationN v ts) = InstantiationN (bmap f <$> f v) $ fmap (fmap (bmap f) . f) <$> f ts
+
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (BindIdentifier n)
+  , Pretty (Value n 'Uncurried l t et ev f)
+  ) => Pretty (Instantiation n 'Uncurried l t et ev f) where
+  pretty (InstantiationN v ts) = prettyList "instantiate" [pretty v, pretty ts]
 
 -- TypeAnnotation
 
@@ -683,6 +849,21 @@ instance
 
   bmap f (TypeAnnotation' v t) = TypeAnnotation' (bmap f <$> f v) (bmap f <$> f t)
 
+instance
+  ( Pretty1 f
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (BindIdentifier n)
+  , Pretty (FunctionType n c f)
+  , Pretty (Function n c l 'Untyped et ev f)
+  , Pretty (Application n c l 'Untyped et ev f)
+  , Pretty (ValueBind n c l 'Untyped et ev f)
+  , Pretty (DataRepresentation n c l et ev f)
+  , Pretty (Instantiation n c l 'Untyped et ev f)
+  , Pretty (et f)
+  , Pretty (ev f)
+  ) => Pretty (TypeAnnotation n c l 'Untyped et ev f) where
+  pretty (TypeAnnotation' v t) = prettyList "type" [pretty v, pretty t]
+
 data instance TypeAnnotation n c l 'Typed et ev f
   deriving Generic
 
@@ -692,6 +873,9 @@ deriving instance TypeAnnotationConstraint Ord n c l 'Typed et ev f => Ord (Type
 
 instance FunctorB (TypeAnnotation n c l 'Typed et ev) where
   bmap _ = X.unreachable "bmap"
+
+instance Pretty (TypeAnnotation n c l 'Typed et ev f) where
+  pretty = X.unreachable "pretty"
 
 -- ProcedureStep
 
@@ -713,6 +897,14 @@ instance FunctorB (Value n c l t et ev) => FunctorB (ProcedureStep n c l t et ev
   bmap f (BindProcedureStep i v) = BindProcedureStep (f i) (bmap f <$> f v)
   bmap f (CallProcedureStep v)   = CallProcedureStep (bmap f <$> f v)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (Value n c l t et ev f)
+  ) => Pretty (ProcedureStep n c l t et ev f) where
+  pretty (BindProcedureStep n v) = prettyList "bind" [pretty n, pretty v]
+  pretty (CallProcedureStep v)   = prettyList "call" [pretty v]
+
 -- Literal
 
 data Literal
@@ -720,6 +912,31 @@ data Literal
   | Fraction { significand :: Integer, fractionDigits :: Word, exponent :: Int, base :: Word }
   | String Text
   deriving (Show, Read, Eq, Ord, Generic)
+
+instance Pretty Literal where
+  pretty (Integer v 2)  = "0b" <> integerToText 2 v
+  pretty (Integer v 8)  = "0o" <> integerToText 8 v
+  pretty (Integer v 10) = integerToText 10 v
+  pretty (Integer v 16) = "0x" <> integerToText 16 v
+  pretty (Integer _ b)  = X.unreachable $ "base " ++ show b ++ " is not supported"
+  pretty v@Fraction {}  = T.pack $ show v
+  pretty (String v)     = T.pack $ ushow v
+
+integerToText :: Word -> Integer -> Text
+integerToText b v =
+  T.pack $ go v []
+  where
+    go 0 [] = "0"
+    go 0 acc = acc
+    go v acc =
+      let
+        (p, q) = v `divMod` fromIntegral b
+        q' = fromIntegral q
+        acc' =
+          if q < 10
+            then C.chr (q' + C.ord '0') : acc
+            else C.chr (q' + C.ord 'A') : acc
+      in go p acc'
 
 -- Application
 
@@ -743,6 +960,12 @@ deriving instance ApplicationConstraint Ord n 'Curried l t et ev f => Ord (Appli
 instance FunctorB (Value n 'Curried l t et ev) => FunctorB (Application n 'Curried l t et ev) where
   bmap f (ApplicationC v1 v2) = ApplicationC (bmap f <$> f v1) (bmap f <$> f v2)
 
+instance
+  ( Pretty1 f
+  , Pretty (Value n 'Curried l t et ev f)
+  ) => Pretty (Application n 'Curried l t et ev f) where
+  pretty (ApplicationC v1 v2) = prettyList "apply" [pretty v1, pretty v2]
+
 data instance Application n 'Uncurried l t et ev f =
   ApplicationN (f (Value n 'Uncurried l t et ev f)) (f [f (Value n 'Uncurried l t et ev f)])
   deriving Generic
@@ -758,6 +981,12 @@ deriving instance ApplicationConstraint Ord n 'Uncurried l t et ev f => Ord (App
 
 instance FunctorB (Value n 'Uncurried l t et ev) => FunctorB (Application n 'Uncurried l t et ev) where
   bmap f (ApplicationN v1 vs) = ApplicationN (bmap f <$> f v1) $ fmap (fmap (bmap f) . f) <$> f vs
+
+instance
+  ( Pretty1 f
+  , Pretty (Value n 'Uncurried l t et ev f)
+  ) => Pretty (Application n 'Uncurried l t et ev f) where
+  pretty (ApplicationN v1 v2s) = prettyList "apply" [pretty v1, pretty v2s]
 
 -- Function
 
@@ -785,6 +1014,14 @@ deriving instance FunctionConstraint Ord n 'Curried 'LambdaUnlifted t et ev f =>
 instance FunctorB (Value n 'Curried 'LambdaUnlifted t et ev) => FunctorB (Function n 'Curried 'LambdaUnlifted t et ev) where
   bmap f (FunctionC i t v) = FunctionC (f i) (bmap f <$> f t) (bmap f <$> f v)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (Value n 'Curried 'LambdaUnlifted t et ev f)
+  ) => Pretty (Function n 'Curried 'LambdaUnlifted t et ev f) where
+  pretty (FunctionC n t v) = prettyList "function" [pretty n, pretty t, pretty v]
+
 data instance Function n 'Uncurried 'LambdaUnlifted t et ev f =
   FunctionN (f [f (f (BindIdentifier n), f (Type n 'Uncurried f))]) (f (Value n 'Uncurried 'LambdaUnlifted t et ev f))
   deriving Generic
@@ -804,10 +1041,21 @@ deriving instance FunctionConstraint Ord n 'Uncurried 'LambdaUnlifted t et ev f 
 instance FunctorB (Value n 'Uncurried 'LambdaUnlifted t et ev) => FunctorB (Function n 'Uncurried 'LambdaUnlifted t et ev) where
   bmap f (FunctionN ps v) = FunctionN (fmap (fmap (bimap f (fmap (bmap f) . f)) . f) <$> f ps) (bmap f <$> f v)
 
+instance
+  ( Pretty1 f
+  , Pretty (BindIdentifier n)
+  , Pretty (ReferenceIdentifier n)
+  , Pretty (Value n 'Uncurried 'LambdaUnlifted t et ev f)
+  ) => Pretty (Function n 'Uncurried 'LambdaUnlifted t et ev f) where
+  pretty (FunctionN ps v) = prettyList "function" [pretty ps, pretty v]
+
 data instance Function n c 'LambdaLifted t f et ev deriving (Show, Read, Eq, Ord, Generic)
 
 instance FunctorB (Function n c 'LambdaLifted t et ev) where
   bmap _ = X.unreachable "bmap"
+
+instance Pretty (Function n c 'LambdaLifted t et ev f) where
+  pretty = X.unreachable "pretty"
 
 -- Identifiers
 
@@ -962,8 +1210,26 @@ toIdentity = Identity . bmap (Identity . copoint) . copoint
 class Pretty a where
   pretty :: a -> Text
 
-instance Pretty a => Pretty [a] where
-  pretty as = "(list " <> T.intercalate " " (pretty <$> as) <> ")"
+class Pretty1 f where
+  liftPretty :: (a -> Text) -> f a -> Text
 
-instance Pretty a => Pretty (Identity a) where
-  pretty (Identity a) = pretty a
+instance Pretty Text where
+  pretty = T.pack . show
+
+instance (Pretty1 f, Pretty a) => Pretty (f a) where
+  pretty a = liftPretty pretty a
+
+instance Pretty1 Identity where
+  liftPretty p (Identity a) = p a
+
+instance Pretty1 [] where
+  liftPretty p as = prettyList "list" $ p <$> as
+
+instance Pretty1 NonEmpty where
+  liftPretty p as = prettyList "list" $ N.toList $ p <$> as
+
+instance Pretty a => Pretty1 ((,) a) where
+  liftPretty p (a, b) = "(" <> pretty a <> ", " <> p b <> ")"
+
+prettyList :: Text -> [Text] -> Text
+prettyList s ss = "(" <> s <> fold ((" " <>) <$> ss) <> ")"

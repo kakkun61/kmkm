@@ -423,7 +423,7 @@ typ definedVariables t =
         ds' =
           case reverse ds of -- maybe not good implementation
             I.Pointer qs pds : ds_ -> reverse $ I.Pointer qs (pds ++ ds'') : ds_
-            rds -> rds ++ ds''
+            rds                    -> rds ++ ds''
       pure (t''', ds')
       where
         go t = do

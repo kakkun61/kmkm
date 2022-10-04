@@ -27,7 +27,6 @@ import           Control.Applicative                  (Alternative)
 import qualified Control.Exception                    as E
 import           Control.Exception.Safe               (MonadCatch, MonadThrow, throw)
 import           Control.Monad                        (when)
-import           Data.Bifunctor                       (Bifunctor (second))
 import           Data.Copointed                       (Copointed (copoint))
 import           Data.Either                          (fromRight)
 import qualified Data.Functor.Barbie.Layered          as B
@@ -46,18 +45,18 @@ import qualified Data.Text                            as T
 import qualified Data.Typeable                        as Y
 import           GHC.Generics                         (Generic)
 import           GHC.Stack                            (HasCallStack)
-import           System.FilePath                      (isPathSeparator, pathSeparator)
 import qualified System.FilePath                      as F
+import           System.FilePath                      (isPathSeparator, pathSeparator)
 
 compile
   :: ( Alternative m
      , MonadCatch m
      , B.FunctorB et
      , B.FunctorB ev
-     , Show (et Identity)
-     , Show (ev Identity)
      , Ord (et (With KS.Location))
      , Ord (ev (With KS.Location))
+     , KS.Pretty (et Identity)
+     , KS.Pretty (ev Identity)
      , HasCallStack
      )
   => [KP.EmbeddedParser (With KS.Location)]
@@ -72,14 +71,14 @@ compile
 compile _ _ _ _ _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile embeddedParsers isEmbeddedType isEmbeddedValue lastStep findFile readFile writeLog src = do
   (nameDeps, modules1, paths) <- readRecursively embeddedParsers isEmbeddedType isEmbeddedValue findFile readFile src
-  mapM_ (writeLog . ("original module: " <>) . T.pack . show . second KS.toIdentity) $ M.toList modules1
+  mapM_ (writeLog . ("original module: " <>) . \(n, s) -> KS.pretty n <> ": " <> KS.pretty (KS.toIdentity s)) $ M.toList modules1
   let (boundValueIdentifiers, boundTypeIdentifiers) = KBN.boundIdentifiers modules1
   modules2 <- mapM (KBN.nameResolve boundValueIdentifiers boundTypeIdentifiers) modules1
-  mapM_ (writeLog . ("name resolved: " <>) . T.pack . show . second KS.toIdentity) $ M.toList modules2
+  mapM_ (writeLog . ("name resolved: " <>) . \(n, s) -> KS.pretty n <> ": " <> KS.pretty (KS.toIdentity s)) $ M.toList modules2
   let deps = G.gmap (fromMaybe (X.unreachable "name deps") . flip M.lookup modules2) nameDeps
   sortedModules <- sortModules deps
   modules3 <- snd <$> foldr (accumulate $ flip typeCheck) (pure mempty) sortedModules
-  mapM_ (writeLog . ("typed module: " <>) . T.pack . show . KS.toIdentity) $ S.toList modules3
+  mapM_ (writeLog . ("typed module: " <>) . KS.pretty . KS.toIdentity) $ S.toList modules3
   modules4 <- mapM (build1 writeLog) $ S.toList modules3
   lastStep (S.fromList modules4) paths
   where
@@ -166,19 +165,19 @@ build1
   :: ( Applicative m
      , B.FunctorB et
      , B.FunctorB ev
-     , Show (et Identity)
-     , Show (ev Identity)
+     , KS.Pretty (et Identity)
+     , KS.Pretty (ev Identity)
      )
   => (Text -> m ())
   -> With KS.Location (KS.Module 'KS.NameResolved 'KS.Curried 'KS.LambdaUnlifted 'KS.Typed et ev (With KS.Location))
   -> m (With KS.Location (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed et ev (With KS.Location)))
 build1 writeLog m2 = do
   let m3 = KBU.uncurry m2
-  writeLog $ "uncurried module: " <> T.pack (show $ KS.toIdentity m3)
+  writeLog $ "uncurried module: " <> KS.pretty (KS.toIdentity m3)
   let m4 = KBP.partiallyApply m3
-  writeLog $ "non-partial-application module: " <> T.pack (show $ KS.toIdentity m4)
+  writeLog $ "non-partial-application module: " <> KS.pretty (KS.toIdentity m4)
   let m5 = KBL.lambdaLift m4
-  writeLog $ "lambda-lifted module: " <> T.pack (show $ KS.toIdentity m5)
+  writeLog $ "lambda-lifted module: " <> KS.pretty (KS.toIdentity m5)
   pure m5
 
 filePathToModuleName :: HasCallStack => FilePath -> KS.ModuleName

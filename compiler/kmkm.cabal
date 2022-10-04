@@ -83,9 +83,8 @@ library
                  parsers-megaparsec,
                  pointed,
                  safe-exceptions,
-                 text
-
-                 , recover-rtti
+                 text,
+                 unicode-show
   default-extensions: Strict
   if impl(ghc >= 9.2)
     ghc-options: -Wpartial-fields
