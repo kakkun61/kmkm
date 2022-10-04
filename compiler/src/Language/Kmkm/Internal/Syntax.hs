@@ -181,7 +181,7 @@ instance
   ) => Pretty (Definition n c l t et ev f) where
   pretty (DataDefinition n r)     = prettyList "define" [pretty n, pretty r]
   pretty (TypeBind i t)           = prettyList "bind-type" [pretty i, pretty t]
-  pretty (ValueBind b)            = prettyList "bind-value" [pretty b]
+  pretty (ValueBind b)            = pretty b
   pretty (ForeignTypeBind i c)    = prettyList "bind-type-foreign" [pretty i, pretty c]
   pretty (ForeignValueBind i c t) = prettyList "bind-value-foreign" [pretty i, pretty c, pretty t]
 
@@ -471,6 +471,15 @@ instance FunctorB (FunctionType n c) => FunctorB (Type n c) where
   bmap f (ProcedureType t)       = ProcedureType (bmap f <$> f t)
   bmap f (ForAllType i t)        = ForAllType (f i) (bmap f <$> f t)
 
+instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Type n c f) where
+  fromString = TypeVariable . point . fromString
+
+instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text, Pointed f, Copointed f) => IsList (Type n c f) where
+  type Item (Type n c f) = Text
+  fromList = TypeVariable . point . E.fromList
+  toList (TypeVariable v) = E.toList $ copoint v
+  toList _                = error "only type variable acceptable"
+
 instance
   ( Pretty (f (Type n c f))
   , Pretty (f (ReferenceIdentifier n))
@@ -484,15 +493,6 @@ instance
   pretty (FunctionType f)        = pretty f
   pretty (ProcedureType t)       = "(procedure " <> pretty t <> ")"
   pretty (ForAllType i t)        = "(for-all " <> pretty i <> " " <> pretty t <> ")"
-
-instance (IsString (ReferenceIdentifier n), Pointed f) => IsString (Type n c f) where
-  fromString = TypeVariable . point . fromString
-
-instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text, Pointed f, Copointed f) => IsList (Type n c f) where
-  type Item (Type n c f) = Text
-  fromList = TypeVariable . point . E.fromList
-  toList (TypeVariable v) = E.toList $ copoint v
-  toList _                = error "only type variable acceptable"
 
 -- FunctionType
 
@@ -585,6 +585,14 @@ instance
 
   bmap f (UntypedValue v) = UntypedValue (bmap f <$> f v)
 
+instance Pointed f => Num (Value n c l 'Untyped et ev f) where
+  fromInteger = UntypedValue . point . fromInteger
+  (+) = X.unreachable "(+)"
+  (*) = X.unreachable "(*)"
+  abs = X.unreachable "abs"
+  signum = X.unreachable "signum"
+  negate = X.unreachable "negate"
+
 instance
   ( Pretty1 f
   , Pretty (ReferenceIdentifier n)
@@ -640,6 +648,14 @@ instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text,
   toList (UntypedValue v)
     | Variable i <- copoint v = E.toList $ copoint i
   toList _ = error "only variable acceptable"
+
+instance Pointed f => Num (Value 'NameResolved c l 'Typed et ev f) where
+  fromInteger = flip TypedValue (point $ TypeVariable $ point $ GlobalIdentifier (ModuleName $ "kmkm" N.:| ["prim"]) "int") . point . fromInteger
+  (+) = X.unreachable "(+)"
+  (*) = X.unreachable "(*)"
+  abs = X.unreachable "abs"
+  signum = X.unreachable "signum"
+  negate = X.unreachable "negate"
 
 instance
   ( Pretty1 f
@@ -727,6 +743,14 @@ instance (IsList (ReferenceIdentifier n), E.Item (ReferenceIdentifier n) ~ Text,
   fromList = Variable . point . E.fromList
   toList (Variable i) = E.toList $ copoint i
   toList _            = error "only variable acceptable"
+
+instance Pointed f => Num (Value' n c l t et ev f) where
+  fromInteger = Literal . point . fromInteger
+  (+) = X.unreachable "(+)"
+  (*) = X.unreachable "(*)"
+  abs = X.unreachable "abs"
+  signum = X.unreachable "signum"
+  negate = X.unreachable "negate"
 
 instance
   ( Pretty1 f
@@ -912,6 +936,17 @@ data Literal
   | Fraction { significand :: Integer, fractionDigits :: Word, exponent :: Int, base :: Word }
   | String Text
   deriving (Show, Read, Eq, Ord, Generic)
+
+instance Num Literal where
+  fromInteger v = Integer v 10
+  (+) = X.unreachable "(+)"
+  (*) = X.unreachable "(*)"
+  abs = X.unreachable "abs"
+  signum = X.unreachable "signum"
+  negate = X.unreachable "negate"
+
+instance IsString Literal where
+  fromString = String . fromString
 
 instance Pretty Literal where
   pretty (Integer v 2)  = "0b" <> integerToText 2 v

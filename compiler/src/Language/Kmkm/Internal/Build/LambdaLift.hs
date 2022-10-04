@@ -105,19 +105,21 @@ value v =
       case copoint v' of
         S.Variable i -> pure (S.TypedValue (S.Variable i <$ v') t <$ v, [])
         S.Literal l -> do
-          pure (S.TypedValue (S.Literal l <$ v') t <$ v, [])
-        S.Function f
-          | S.FunctionN ps v'' <- copoint f -> do
-              i <- (<$ v) <$> newIdentifier
-              (v3, ds) <- value v''
-              let (is, v4) = peelForAll v3
-              let m = S.ValueBind (S.ValueBindN i is ps v4 <$ v)
-              pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
-        S.Application a
-          | S.ApplicationN v1 vs <- copoint a -> do
-              (v1', ds) <- value v1
-              (vs', dss) <- mapAndUnzipM value (copoint vs)
-              pure (S.TypedValue (S.Application (S.ApplicationN v1' (vs' <$ vs) <$ a) <$ v') t <$ v, mconcat $ ds : dss)
+          i <- (<$ v') <$> newIdentifier
+          let m = S.ValueBind $ S.ValueBindV i ([] <$ v') (S.TypedValue (S.Literal l <$ v') t <$ v) <$ v'
+          pure (S.TypedValue (S.Variable i <$ v') t <$ v', [m <$ v'])
+        S.Function f -> do
+          let S.FunctionN ps v'' = copoint f
+          i <- (<$ v) <$> newIdentifier
+          (v3, ds) <- value v''
+          let (is, v4) = peelForAll v3
+          let m = S.ValueBind (S.ValueBindN i is ps v4 <$ v)
+          pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
+        S.Application a -> do
+          let S.ApplicationN v1 vs = copoint a
+          (v1', ds) <- value v1
+          (vs', dss) <- mapAndUnzipM value (copoint vs)
+          pure (S.TypedValue (S.Application (S.ApplicationN v1' (vs' <$ vs) <$ a) <$ v') t <$ v, mconcat $ ds : dss)
         S.Procedure ps -> do
           (ps', dss) <- N.unzip <$> mapM procedureStep (copoint ps)
           pure (S.TypedValue (S.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)

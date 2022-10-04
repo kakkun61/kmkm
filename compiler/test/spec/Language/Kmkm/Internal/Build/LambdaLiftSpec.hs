@@ -31,6 +31,11 @@ spec = do
         `shouldBe`
           (I $ TypedValue (I $ ForAllValue "a" $ I $ TypedValue "a" "a") $ I $ ForAllType "a" "a", [])
 
+    it "1" $ do
+      eval value (I $ TypedValue 1 $ I $ TypeVariable ["kmkm", "prim", "int"] :: Value_)
+        `shouldBe`
+          (I $ TypedValue (I $ Variable $ I $ LocalIdentifier $ SystemIdentifier 'l' 0) $ I $ TypeVariable ["kmkm", "prim", "int"], [I $ ValueBind $ I $ ValueBindV (I $ LocalIdentifier $ SystemIdentifier 'l' 0) [] 1])
+
   describe "lambdaLift" $ do
     it "for-all value" $ do
       let
