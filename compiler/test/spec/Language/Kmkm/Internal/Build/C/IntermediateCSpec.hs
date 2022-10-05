@@ -86,3 +86,19 @@ spec = do
       typ tos (I $ S.FunctionType $ I $ S.FunctionTypeN [["kmkm", "prim", "string"]] ["kmkm", "prim", "string"])
         `shouldReturn`
           ("kmkm_prim_string", [C.Pointer [] [C.Pointer [] [], C.Function [("kmkm_prim_string", [C.Constant], Nothing, [C.Pointer [C.Constant] []])]]])
+
+  describe "value" $ do
+    it "id @Int one => *(id(&one))" $ do
+      value tos "spec"
+        (I $ S.TypedValue
+          (I $ S.Application $ I $ S.ApplicationN
+            (I $ S.TypedValue
+              (I $ S.ForAllValue "a" $ I $ S.TypedValue "id" $ I $ S.FunctionType $ I $ S.FunctionTypeN ["a"] "a")
+              $ I $ S.ForAllType "a" $ I $ S.FunctionType $ I $ S.FunctionTypeN ["a"] "a"
+            )
+            [I $ S.TypedValue "one" $ I ["kmkm", "prim", "int"]]
+          )
+          ["kmkm", "prim", "int"]
+        )
+        `shouldReturn`
+          C.Dereference (C.Call "id" [C.Address "one"])

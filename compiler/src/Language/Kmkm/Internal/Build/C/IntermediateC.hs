@@ -13,6 +13,7 @@ module Language.Kmkm.Internal.Build.C.IntermediateC
   , Module
   , definition
   , typ
+  , value
   , Exception (..)
   ) where
 
@@ -329,7 +330,7 @@ value
   -> f ModuleName
   -> f (Value f)
   -> m I.Expression
-value definedVariables n v =
+value definedVariables n v = -- TODO instantiation された関数を適用する場合、引数をポインターにする
   let S.TypedValue v' t = copoint v
   in
     case copoint v' of

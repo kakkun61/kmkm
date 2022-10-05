@@ -101,6 +101,8 @@ data Expression
   | StatementExpression [Either Text BlockElement] -- ^ GCC extension.
   | Assign Identifier Expression
   | Cast (QualifiedType, [Deriver]) Expression
+  | Dereference Expression
+  | Address Expression
   deriving (Show, Eq, Ord, Generic)
 
 instance IsString Expression where
