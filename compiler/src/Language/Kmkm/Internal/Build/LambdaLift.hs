@@ -1,6 +1,4 @@
-{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies     #-}
 
 -- | “Lambda lifting” pass.
 module Language.Kmkm.Internal.Build.LambdaLift
@@ -9,148 +7,130 @@ module Language.Kmkm.Internal.Build.LambdaLift
   , dataRepresentation
   , value
   , Pass
-  , peelForAll
+  , peelForAll4
+  , peelForAll5
   ) where
 
-import qualified Language.Kmkm.Internal.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax.Core.Common                                      as SC
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaLifted   as S5
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaUnlifted as S4
 
 import           Control.Monad                    (mapAndUnzipM)
 import           Control.Monad.State.Strict       (State, evalState)
 import qualified Control.Monad.State.Strict       as S
 import           Data.Copointed                   (Copointed (copoint))
+import           Data.Functor.F                   (F)
 import           Data.Functor.With                (MayHave)
 import qualified Data.List.NonEmpty               as N
 import           GHC.Stack                        (HasCallStack)
 import qualified Language.Kmkm.Internal.Exception as X
 
-type Module l et ev = S.Module 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
-
-type Definition l et ev = S.Definition 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
-
-type DataRepresentation l et ev = S.DataRepresentation 'S.NameResolved 'S.Uncurried l et ev
-
-type ValueConstructor l et ev = S.ValueConstructor 'S.NameResolved 'S.Uncurried l et ev
-
-type Field l et ev = S.Field 'S.NameResolved 'S.Uncurried l et ev
-
-type Value l et ev = S.Value 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
-
-type ProcedureStep l et ev = S.ProcedureStep 'S.NameResolved 'S.Uncurried l 'S.Typed et ev
-
-type BindIdentifier = S.BindIdentifier 'S.NameResolved
-
 type Pass = State Word
 
 lambdaLift
-  :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack)
-  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed et ev f)
+  :: (Traversable f, Copointed f, MayHave SC.Location f, HasCallStack)
+  => F f (S4.Module et ev f)
+  -> F f (S5.Module et ev f)
 lambdaLift = flip evalState 0 . module'
 
-module' :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (Module 'S.LambdaUnlifted et ev f) -> Pass (f (Module 'S.LambdaLifted et ev f))
+module' :: (Traversable f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S4.Module et ev f) -> Pass (F f (S5.Module et ev f))
 module' =
-  traverse $ \(S.Module mn ms ds) -> do
+  traverse $ \(S4.Module mn ms ds) -> do
     ds' <- mapM (traverse definition) ds
-    pure $ S.Module mn ms ds'
+    pure $ S5.Module mn ms ds'
 
-definition :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (Definition 'S.LambdaUnlifted et ev f) -> Pass (f (Definition 'S.LambdaLifted et ev f))
+definition :: (Traversable f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S4.Definition et ev f) -> Pass (F f (S5.Definition et ev f))
 definition =
   traverse definition'
   where
-    definition' (S.DataDefinition i r)    = S.DataDefinition i <$> dataRepresentation r
-    definition' (S.TypeBind i t)           = pure $ S.TypeBind i t
-    definition' (S.ForeignTypeBind i c)    = pure $ S.ForeignTypeBind i c
-    definition' (S.ForeignValueBind i c t) = pure $ S.ForeignValueBind i c t
-    definition' (S.ValueBind b) =
+    definition' (S4.DataDefinition i r)    = S5.DataDefinition i <$> dataRepresentation r
+    definition' (S4.TypeBind i t)           = pure $ S5.TypeBind i t
+    definition' (S4.ForeignTypeBind i c)    = pure $ S5.ForeignTypeBind i c
+    definition' (S4.ForeignValueBind i c t) = pure $ S5.ForeignValueBind i c t
+    definition' (S4.ValueBind i v) =
       scope $
         let
-          S.ValueBindU i v = copoint b
-          (is, v1) = peelForAll v
-          S.TypedValue v2 t = copoint v1
+          (is, v1) = peelForAll4 v
+          S4.TypedValue v2 t = copoint v1
         in
           case copoint v2 of
-            S.Function f -> do
-              let S.FunctionN ps v3 = copoint f
+            S4.Function ps v3 -> do
               (v3', ds) <- value v3
               let
-                S.TypedValue _ t = copoint v3'
+                S5.TypedValue _ t = copoint v3'
                 v3'' =
                   case ds of
                     [] -> v3'
-                    _  -> S.TypedValue (S.Let (ds <$ v3) v3' <$ v2) t <$ v
-              pure $ S.ValueBind $ S.ValueBindN i is ps v3'' <$ b
-            S.ForAllValue {} -> X.unreachable "for-all value even after peel"
+                    _  -> S5.TypedValue (S5.Let (ds <$ v3) v3' <$ v2) t <$ v
+              pure $ S5.ValueBindN i is ps v3''
+            S4.ForAllValue {} -> X.unreachable "for-all value even after peel"
             _ -> do
               (v1', ds) <- value v1
               let
                 v1'' =
                   case ds of
                     [] -> v1'
-                    _  -> S.TypedValue (S.Let (ds <$ v) v1' <$ v) t <$ v
-              pure $ S.ValueBind $ S.ValueBindV i is v1'' <$ b
+                    _  -> S5.TypedValue (S5.Let (ds <$ v) v1' <$ v) t <$ v
+              pure $ S5.ValueBindV i is v1''
 
-dataRepresentation :: Traversable f => f (DataRepresentation 'S.LambdaUnlifted et ev f) -> Pass (f (DataRepresentation 'S.LambdaLifted et ev f))
-dataRepresentation = traverse $ \(S.ForAllDataU is cs) -> S.ForAllDataU is <$> traverse (traverse valueConstructor) cs
+dataRepresentation :: Traversable f => F f (S4.DataRepresentation et ev f) -> Pass (F f (S5.DataRepresentation et ev f))
+dataRepresentation = traverse $ \(S4.ForAllData is cs) -> S5.ForAllData is <$> traverse (traverse valueConstructor) cs
 
-valueConstructor :: Traversable f => f (ValueConstructor 'S.LambdaUnlifted et ev f) -> Pass (f (ValueConstructor 'S.LambdaLifted et ev f))
-valueConstructor = traverse $ \(S.ValueConstructor i fs) -> S.ValueConstructor i <$> traverse (traverse field) fs
+valueConstructor :: Traversable f => F f (S4.ValueConstructor et ev f) -> Pass (F f (S5.ValueConstructor et ev f))
+valueConstructor = traverse $ \(S4.ValueConstructor i fs) -> S5.ValueConstructor i <$> traverse (traverse field) fs
 
-field :: Traversable f => f (Field 'S.LambdaUnlifted et ev f) -> Pass (f (Field 'S.LambdaLifted et ev f))
-field = traverse $ \(S.Field i t) -> pure $ S.Field i t
+field :: Traversable f => F f (S4.Field et ev f) -> Pass (F f (S5.Field et ev f))
+field = traverse $ \(S4.Field i t) -> pure $ S5.Field i t
 
-value :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (Value 'S.LambdaUnlifted et ev f) -> Pass (f (Value 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
+value :: (Traversable f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S4.Value et ev f) -> Pass (F f (S5.Value et ev f), [F f (S5.Definition et ev f)])
 value v =
   case copoint v of
-    S.TypedValue v' t ->
+    S4.TypedValue v' t ->
       case copoint v' of
-        S.Variable i -> pure (S.TypedValue (S.Variable i <$ v') t <$ v, [])
-        S.Literal l -> do
+        S4.Variable i -> pure (S5.TypedValue (S5.Variable i <$ v') t <$ v, [])
+        S4.Literal l -> do
           i <- (<$ v') <$> newIdentifier
-          let m = S.ValueBind $ S.ValueBindV i ([] <$ v') (S.TypedValue (S.Literal l <$ v') t <$ v) <$ v'
-          pure (S.TypedValue (S.Variable i <$ v') t <$ v', [m <$ v'])
-        S.Function f -> do
-          let S.FunctionN ps v'' = copoint f
+          let m = S5.ValueBindV i ([] <$ v') (S5.TypedValue (S5.Literal l <$ v') t <$ v) <$ v'
+          pure (S5.TypedValue (S5.Variable i <$ v') t <$ v', [m])
+        S4.Function ps v'' -> do
           i <- (<$ v) <$> newIdentifier
           (v3, ds) <- value v''
-          let (is, v4) = peelForAll v3
-          let m = S.ValueBind (S.ValueBindN i is ps v4 <$ v)
-          pure (S.TypedValue (S.Variable i <$ v') t <$ v, ds ++ [m <$ v])
-        S.Application a -> do
-          let S.ApplicationN v1 vs = copoint a
+          let (is, v4) = peelForAll5 v3
+          let m = S5.ValueBindN i is ps v4 <$ v
+          pure (S5.TypedValue (S5.Variable i <$ v') t <$ v, ds ++ [m])
+        S4.Application v1 vs -> do
           (v1', ds) <- value v1
           (vs', dss) <- mapAndUnzipM value (copoint vs)
-          pure (S.TypedValue (S.Application (S.ApplicationN v1' (vs' <$ vs) <$ a) <$ v') t <$ v, mconcat $ ds : dss)
-        S.Procedure ps -> do
+          pure (S5.TypedValue (S5.Application v1' (vs' <$ vs) <$ v') t <$ v, mconcat $ ds : dss)
+        S4.Procedure ps -> do
           (ps', dss) <- N.unzip <$> mapM procedureStep (copoint ps)
-          pure (S.TypedValue (S.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)
-        S.Let ds v1 -> do
+          pure (S5.TypedValue (S5.Procedure (ps' <$ ps) <$ v') t <$ v, mconcat $ N.toList dss)
+        S4.Let ds v1 -> do
           ds' <- mapM (traverse definition) ds
           (v1', vds) <- value v1
-          pure (S.TypedValue (S.Let ds' v1' <$ v') t <$ v, vds)
-        S.ForAllValue i v1 -> do
+          pure (S5.TypedValue (S5.Let ds' v1' <$ v') t <$ v, vds)
+        S4.ForAllValue i v1 -> do
           (v1', ds) <- value v1
-          pure (S.TypedValue (S.ForAllValue i v1' <$ v') t <$ v, ds)
-        S.TypeAnnotation _ -> X.unreachable "type annotation"
-        S.Instantiation i -> do
-          let S.InstantiationN v ts = copoint i
+          pure (S5.TypedValue (S5.ForAllValue i v1' <$ v') t <$ v, ds)
+        S4.Instantiation v ts -> do
           (v', ds) <- value v
-          pure (S.TypedValue (S.Instantiation (S.InstantiationN v' ts <$ i) <$ v) t <$ v, ds)
+          pure (S5.TypedValue (S5.Instantiation v' ts <$ v) t <$ v, ds)
 
-procedureStep :: (Traversable f, Copointed f, MayHave S.Location f, HasCallStack) => f (ProcedureStep 'S.LambdaUnlifted et ev f) -> Pass (f (ProcedureStep 'S.LambdaLifted et ev f), [f (Definition 'S.LambdaLifted et ev f)])
+procedureStep :: (Traversable f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S4.ProcedureStep et ev f) -> Pass (F f (S5.ProcedureStep et ev f), [F f (S5.Definition et ev f)])
 procedureStep s =
   case copoint s of
-    S.BindProcedureStep i v ->do
+    S4.BindProcedureStep i v ->do
       (v', ds) <- value v
-      pure (S.BindProcedureStep i v' <$ v, ds)
-    S.CallProcedureStep v -> do
+      pure (S5.BindProcedureStep i v' <$ v, ds)
+    S4.CallProcedureStep v -> do
       (v', ds) <- value v
-      pure (S.CallProcedureStep v' <$ v, ds)
+      pure (S5.CallProcedureStep v' <$ v, ds)
 
-newIdentifier :: Pass S.QualifiedIdentifier
+newIdentifier :: Pass SC.QualifiedIdentifier
 newIdentifier = do
   n <- S.get
   S.put $ n + 1
-  pure $ S.LocalIdentifier $ S.SystemIdentifier 'l' n
+  pure $ SC.LocalIdentifier $ SC.SystemIdentifier 'l' n
 
 scope :: Pass a -> Pass a
 scope p = do
@@ -159,12 +139,22 @@ scope p = do
   S.put n
   pure r
 
-peelForAll :: (Functor f, Copointed f) => f (Value l et ev f) -> (f [f BindIdentifier], f (Value l et ev f))
-peelForAll v =
+peelForAll4 :: (Functor f, Copointed f) => F f (S4.Value et ev f) -> (F f [F f SC.QualifiedIdentifier], F f (S4.Value et ev f))
+peelForAll4 v =
   case copoint v of
-    S.TypedValue v' _ ->
+    S4.TypedValue v' _ ->
       case copoint v' of
-        S.ForAllValue i v'' ->
-          let (is, v''') = peelForAll v''
+        S4.ForAllValue i v'' ->
+          let (is, v''') = peelForAll4 v''
+          in ((i : copoint is) <$ v, v''')
+        _ -> ([] <$ v, v)
+
+peelForAll5 :: (Functor f, Copointed f) => F f (S5.Value et ev f) -> (F f [F f SC.QualifiedIdentifier], F f (S5.Value et ev f))
+peelForAll5 v =
+  case copoint v of
+    S5.TypedValue v' _ ->
+      case copoint v' of
+        S5.ForAllValue i v'' ->
+          let (is, v''') = peelForAll5 v''
           in ((i : copoint is) <$ v, v''')
         _ -> ([] <$ v, v)

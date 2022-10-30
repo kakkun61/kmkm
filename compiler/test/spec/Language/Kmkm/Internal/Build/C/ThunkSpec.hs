@@ -4,7 +4,7 @@
 module Language.Kmkm.Internal.Build.C.ThunkSpec where
 
 import Language.Kmkm.Internal.Build.C.Thunk
-import Language.Kmkm.Internal.Syntax
+import Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaLifted
 
 import Utility
 

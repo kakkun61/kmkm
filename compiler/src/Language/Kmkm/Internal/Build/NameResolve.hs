@@ -1,8 +1,6 @@
-{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE DeriveGeneric    #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE TypeFamilies     #-}
 
 module Language.Kmkm.Internal.Build.NameResolve
   ( nameResolve
@@ -10,12 +8,15 @@ module Language.Kmkm.Internal.Build.NameResolve
   , Exception (..)
   ) where
 
-import qualified Language.Kmkm.Internal.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax.Core.Common                                        as SC
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Untyped.Curried.LambdaUnlifted   as S2
+import qualified Language.Kmkm.Internal.Syntax.Core.NameUnresolved.Untyped.Curried.LambdaUnlifted as S1
 
 import qualified Control.Exception                as E
 import           Control.Exception.Safe           (MonadThrow, throw)
 import           Data.Copointed                   (Copointed (copoint))
 import qualified Data.Functor.Barbie.Layered      as B
+import           Data.Functor.F                   (F (F), unf)
 import           Data.Functor.Identity            (Identity (Identity, runIdentity))
 import           Data.Functor.With                (MayHave)
 import qualified Data.Functor.With                as W
@@ -27,64 +28,20 @@ import qualified Data.Typeable                    as Y
 import           GHC.Generics                     (Generic)
 import qualified Language.Kmkm.Internal.Exception as X
 
-type Module n et ev = S.Module n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Definition n et ev = S.Definition n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type DataRepresentation n et ev = S.DataRepresentation n 'S.Curried 'S.LambdaUnlifted et ev
-
-type ValueConstructor n et ev = S.ValueConstructor n 'S.Curried 'S.LambdaUnlifted et ev
-
-type Field n et ev = S.Field n 'S.Curried 'S.LambdaUnlifted et ev
-
-type ValueBind n et ev = S.ValueBind n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Value n et ev = S.Value n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Value' n et ev = S.Value' n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type ProcedureStep n et ev = S.ProcedureStep n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type TypeAnnotation n et ev = S.TypeAnnotation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Application n et ev = S.Application n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Function n et ev = S.Function n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Instantiation n et ev = S.Instantiation n 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev
-
-type Type n = S.Type n 'S.Curried
-
-type FunctionType n = S.FunctionType n 'S.Curried
-
 nameResolve
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      , B.FunctorB et
      , B.FunctorB ev
      )
-  => Map S.ModuleName (Set S.Identifier)
-  -> Map S.ModuleName (Set S.Identifier)
-  -> f (S.Module 'S.NameUnresolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f)
-  -> m (f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Untyped et ev f))
-nameResolve = module'
-
-module'
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.ModuleName (Set S.Identifier)
-  -> Map S.ModuleName (Set S.Identifier)
-  -> f (Module 'S.NameUnresolved et ev f)
-  -> m (f (Module 'S.NameResolved et ev f))
-module' valueIdentifiers typeIdentifiers =
-  traverse $ \(S.Module moduleName ms ds) -> do
+  => Map SC.ModuleName (Set SC.Identifier)
+  -> Map SC.ModuleName (Set SC.Identifier)
+  -> F f (S1.Module et ev f)
+  -> m (F f (S2.Module et ev f))
+nameResolve valueIdentifiers typeIdentifiers =
+  traverse $ \(S1.Module moduleName ms ds) -> do
     let
       moduleName' = copoint moduleName
       ms' = moduleName' : (copoint <$> copoint ms)
@@ -92,305 +49,190 @@ module' valueIdentifiers typeIdentifiers =
       valueAffiliations = importedAffiliations valueIdentifiers' $ S.fromList ms'
       typeIdentifiers' = M.insert moduleName' (S.unions $ boundTypeIdentifier <$> copoint ds) typeIdentifiers
       typeAffiliations = importedAffiliations typeIdentifiers' $ S.fromList ms'
-    S.Module moduleName ms <$> mapM (traverse $ definition valueAffiliations typeAffiliations moduleName' $ Global moduleName') ds
+    S2.Module moduleName ms <$> mapM (traverse $ definition valueAffiliations typeAffiliations moduleName' $ Global moduleName') ds
 
 definition
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      , B.FunctorB et
      , B.FunctorB ev
      )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
+  => Map SC.Identifier Affiliation
+  -> Map SC.Identifier Affiliation
+  -> SC.ModuleName
   -> Affiliation
-  -> f (Definition 'S.NameUnresolved et ev f)
-  -> m (f (Definition 'S.NameResolved et ev f))
+  -> F f (S1.Definition et ev f)
+  -> m (F f (S2.Definition et ev f))
 definition valueAffiliations typeAffiliations moduleName affiliation =
   traverse $ \case
-    S.ValueBind b -> S.ValueBind <$> valueBind valueAffiliations typeAffiliations moduleName affiliation b
-    S.TypeBind i t -> S.TypeBind (S.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
-    S.ForeignTypeBind i c -> pure $ S.ForeignTypeBind (S.GlobalIdentifier moduleName <$> i) c
-    S.DataDefinition i r -> S.DataDefinition (S.GlobalIdentifier moduleName <$> i) <$> dataRepresentation typeAffiliations moduleName r
-    S.ForeignValueBind i c t -> S.ForeignValueBind (S.GlobalIdentifier moduleName <$> i) c <$> typ typeAffiliations moduleName t
+    S1.ValueBind i v ->
+      case affiliation of
+        Global _ -> S2.ValueBind (SC.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+        Local -> S2.ValueBind (SC.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+    S1.TypeBind i t -> S2.TypeBind (SC.GlobalIdentifier moduleName <$> i) <$> typ typeAffiliations moduleName t
+    S1.ForeignTypeBind i c -> pure $ S2.ForeignTypeBind (SC.GlobalIdentifier moduleName <$> i) c
+    S1.DataDefinition i r -> S2.DataDefinition (SC.GlobalIdentifier moduleName <$> i) <$> dataRepresentation typeAffiliations moduleName r
+    S1.ForeignValueBind i c t -> S2.ForeignValueBind (SC.GlobalIdentifier moduleName <$> i) c <$> typ typeAffiliations moduleName t
 
-dataRepresentation :: (MonadThrow m, Traversable f, Copointed f, MayHave S.Location f) => Map S.Identifier Affiliation -> S.ModuleName -> f (DataRepresentation 'S.NameUnresolved et ev f) -> m (f (DataRepresentation 'S.NameResolved et ev f))
+dataRepresentation :: (MonadThrow m, Traversable f, Copointed f, MayHave SC.Location f) => Map SC.Identifier Affiliation -> SC.ModuleName -> F f (S1.DataRepresentation et ev f) -> m (F f (S2.DataRepresentation et ev f))
 dataRepresentation typeAffiliations moduleName =
   traverse $ \case
-    S.ForAllDataC i r -> S.ForAllDataC (S.LocalIdentifier <$> i) <$> dataRepresentation (M.insert (copoint i) Local typeAffiliations) moduleName r
-    S.ValueConstructorsData cs -> S.ValueConstructorsData <$> mapM (traverse $ valueConstructor typeAffiliations moduleName) cs
+    S1.ForAllData i r -> S2.ForAllData (SC.LocalIdentifier <$> i) <$> dataRepresentation (M.insert (copoint i) Local typeAffiliations) moduleName r
+    S1.ValueConstructorsData cs -> S2.ValueConstructorsData <$> mapM (traverse $ valueConstructor typeAffiliations moduleName) cs
 
-valueConstructor :: (MonadThrow m, Traversable f, Copointed f, MayHave S.Location f) => Map S.Identifier Affiliation -> S.ModuleName -> f (ValueConstructor 'S.NameUnresolved et ev f) -> m (f (ValueConstructor 'S.NameResolved et ev f))
+valueConstructor :: (MonadThrow m, Traversable f, Copointed f, MayHave SC.Location f) => Map SC.Identifier Affiliation -> SC.ModuleName -> F f (S1.ValueConstructor et ev f) -> m (F f (S2.ValueConstructor et ev f))
 valueConstructor typeAffiliations moduleName =
-  traverse $ \(S.ValueConstructor i fs) -> do
+  traverse $ \(S1.ValueConstructor i fs) -> do
     fs' <- mapM (traverse $ field typeAffiliations moduleName) fs
-    pure $ S.ValueConstructor (S.GlobalIdentifier moduleName <$> i) fs'
+    pure $ S2.ValueConstructor (SC.GlobalIdentifier moduleName <$> i) fs'
 
-field :: (MonadThrow m, Traversable f, Copointed f, MayHave S.Location f) => Map S.Identifier Affiliation -> S.ModuleName -> f (Field 'S.NameUnresolved et ev f) -> m (f (Field 'S.NameResolved et ev f))
+field :: (MonadThrow m, Traversable f, Copointed f, MayHave SC.Location f) => Map SC.Identifier Affiliation -> SC.ModuleName -> F f (S1.Field et ev f) -> m (F f (S2.Field et ev f))
 field typeAffiliations moduleName =
-  traverse $ \(S.Field i t) -> do
+  traverse $ \(S1.Field i t) -> do
     t' <- typ typeAffiliations moduleName t
-    pure $ S.Field (S.GlobalIdentifier moduleName <$> i) t'
-
-valueBind
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> Affiliation
-  -> f (ValueBind 'S.NameUnresolved et ev f)
-  -> m (f (ValueBind 'S.NameResolved et ev f))
-valueBind valueAffiliations typeAffiliations moduleName (Global _) =
-  traverse $ \(S.ValueBindU i v) ->
-    S.ValueBindU (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
-valueBind valueAffiliations typeAffiliations moduleName Local =
-  traverse $ \(S.ValueBindU i v) ->
-    S.ValueBindU (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+    pure $ S2.Field (SC.GlobalIdentifier moduleName <$> i) t'
 
 value
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      , B.FunctorB et
      , B.FunctorB ev
      )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Value 'S.NameUnresolved et ev f)
-  -> m (f (Value 'S.NameResolved et ev f))
+  => Map SC.Identifier Affiliation
+  -> Map SC.Identifier Affiliation
+  -> SC.ModuleName
+  -> F f (S1.Value et ev f)
+  -> m (F f (S2.Value et ev f))
 value valueAffiliations typeAffiliations moduleName =
-  traverse $ \(S.UntypedValue v) -> S.UntypedValue <$> value' valueAffiliations typeAffiliations moduleName v
-
-value'
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Value' 'S.NameUnresolved et ev f)
-  -> m (f (Value' 'S.NameResolved et ev f))
-value' valueAffiliations typeAffiliations moduleName =
   traverse $ \case
-    S.Variable i -> S.Variable <$> referenceIdentifier valueAffiliations i
-    S.Procedure ss -> S.Procedure <$> mapM (traverse $ procedureStep valueAffiliations typeAffiliations moduleName) ss
-    S.Literal l -> pure $ S.Literal $ literal <$> l
-    S.Function f -> S.Function <$> function valueAffiliations typeAffiliations moduleName f
-    S.TypeAnnotation a -> S.TypeAnnotation <$> typeAnnotation valueAffiliations typeAffiliations moduleName a
-    S.Application a -> S.Application <$> application valueAffiliations typeAffiliations moduleName a
-    S.Let ds v ->
+    S1.Variable i -> S2.Variable <$> referenceIdentifier valueAffiliations i
+    S1.Procedure ss -> S2.Procedure <$> mapM (traverse $ procedureStep valueAffiliations typeAffiliations moduleName) ss
+    S1.Literal l -> pure $ S2.Literal $ literal <$> l
+    S1.Function i t v ->
+      let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
+      in S2.Function (SC.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
+    S1.TypeAnnotation v t -> S2.TypeAnnotation <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
+    S1.Application v1 v2 -> S2.Application <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
+    S1.Let ds v ->
       let
         localIdentifiers = S.unions $ boundValueIdentifier <$> copoint ds
         localAffiliations = M.fromSet (const Local) localIdentifiers
         valueAffiliations' = M.union localAffiliations valueAffiliations
       in
-        S.Let
+        S2.Let
           <$> mapM (traverse $ definition valueAffiliations' typeAffiliations moduleName Local) ds
           <*> value valueAffiliations' typeAffiliations moduleName v
-    S.ForAllValue i v ->
+    S1.ForAllValue i v ->
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
-      in S.ForAllValue (S.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations' moduleName v
-    S.Instantiation i -> S.Instantiation <$> instantiation valueAffiliations typeAffiliations moduleName i
+      in S2.ForAllValue (SC.LocalIdentifier <$> i) <$> value valueAffiliations typeAffiliations' moduleName v
+    S1.Instantiation v t -> S2.Instantiation <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
 
 procedureStep
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      , B.FunctorB et
      , B.FunctorB ev
      )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (ProcedureStep 'S.NameUnresolved et ev f)
-  -> m (f (ProcedureStep 'S.NameResolved et ev f))
+  => Map SC.Identifier Affiliation
+  -> Map SC.Identifier Affiliation
+  -> SC.ModuleName
+  -> F f (S1.ProcedureStep et ev f)
+  -> m (F f (S2.ProcedureStep et ev f))
 procedureStep valueAffiliations typeAffiliations moduleName =
   traverse $ \case
-    S.CallProcedureStep v   -> S.CallProcedureStep <$> value valueAffiliations typeAffiliations moduleName v
-    S.BindProcedureStep i v -> S.BindProcedureStep (S.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
+    S1.CallProcedureStep v   -> S2.CallProcedureStep <$> value valueAffiliations typeAffiliations moduleName v
+    S1.BindProcedureStep i v -> S2.BindProcedureStep (SC.GlobalIdentifier moduleName <$> i) <$> value valueAffiliations typeAffiliations moduleName v
 
-literal :: S.Literal -> S.Literal
-literal (S.Integer v b)      = S.Integer v b
-literal (S.Fraction f s e b) = S.Fraction f s e b
-literal (S.String s)         = S.String s
-
-typeAnnotation
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (TypeAnnotation 'S.NameUnresolved et ev f)
-  -> m (f (TypeAnnotation 'S.NameResolved et ev f))
-typeAnnotation valueAffiliations typeAffiliations moduleName =
-  traverse $ \(S.TypeAnnotation' v t) ->
-    S.TypeAnnotation' <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
-
-application
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Application 'S.NameUnresolved et ev f)
-  -> m (f (Application 'S.NameResolved et ev f))
-application valueAffiliations typeAffiliations moduleName =
-  traverse $ \(S.ApplicationC v1 v2) ->
-    S.ApplicationC <$> value valueAffiliations typeAffiliations moduleName v1 <*> value valueAffiliations typeAffiliations moduleName v2
-
-function
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Function 'S.NameUnresolved et ev f)
-  -> m (f (Function 'S.NameResolved et ev f))
-function valueAffiliations typeAffiliations moduleName =
-  traverse $ \(S.FunctionC i t v) ->
-    let valueAffiliations' = M.insert (copoint i) Local valueAffiliations
-    in S.FunctionC (S.LocalIdentifier <$> i) <$> typ typeAffiliations moduleName t <*> value valueAffiliations' typeAffiliations moduleName v
-
-instantiation
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     , B.FunctorB et
-     , B.FunctorB ev
-     )
-  => Map S.Identifier Affiliation
-  -> Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Instantiation 'S.NameUnresolved et ev f)
-  -> m (f (Instantiation 'S.NameResolved et ev f))
-instantiation valueAffiliations typeAffiliations moduleName =
-  traverse $ \(S.InstantiationC v t) ->
-    S.InstantiationC <$> value valueAffiliations typeAffiliations moduleName v <*> typ typeAffiliations moduleName t
+literal :: S1.Literal -> S2.Literal
+literal (S1.Integer v b)      = S2.Integer v b
+literal (S1.Fraction f s e b) = S2.Fraction f s e b
+literal (S1.String s)         = S2.String s
 
 typ
   :: ( MonadThrow m
      , Traversable f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      )
-  => Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (Type 'S.NameUnresolved f)
-  -> m (f (Type 'S.NameResolved f))
+  => Map SC.Identifier Affiliation
+  -> SC.ModuleName
+  -> F f (S1.Type f)
+  -> m (F f (S2.Type f))
 typ typeAffiliations moduleName =
   traverse $ \case
-    S.TypeVariable i  -> S.TypeVariable <$> referenceIdentifier typeAffiliations i
-    S.ProcedureType t -> S.ProcedureType <$> typ typeAffiliations moduleName t
-    S.TypeApplication t1 t2 -> S.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
-    S.FunctionType t -> S.FunctionType <$> functionType typeAffiliations moduleName t
-    S.ForAllType i t -> do
+    S1.TypeVariable i  -> S2.TypeVariable <$> referenceIdentifier typeAffiliations i
+    S1.ProcedureType t -> S2.ProcedureType <$> typ typeAffiliations moduleName t
+    S1.TypeApplication t1 t2 -> S2.TypeApplication <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+    S1.FunctionType t1 t2 -> S2.FunctionType <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+    S1.ForAllType i t -> do
       let typeAffiliations' = M.insert (copoint i) Local typeAffiliations
-      S.ForAllType (S.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
-
-functionType
-  :: ( MonadThrow m
-     , Traversable f
-     , Copointed f
-     , MayHave S.Location f
-     )
-  => Map S.Identifier Affiliation
-  -> S.ModuleName
-  -> f (FunctionType 'S.NameUnresolved f)
-  -> m (f (FunctionType 'S.NameResolved f))
-functionType typeAffiliations moduleName =
-  traverse $ \(S.FunctionTypeC t1 t2) ->
-    S.FunctionTypeC <$> typ typeAffiliations moduleName t1 <*> typ typeAffiliations moduleName t2
+      S2.ForAllType (SC.LocalIdentifier <$> i) <$> typ typeAffiliations' moduleName t
 
 referenceIdentifier
   :: ( MonadThrow m
      , Functor f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      )
-  => Map S.Identifier Affiliation
-  -> f (S.ReferenceIdentifier 'S.NameUnresolved)
-  -> m (f (S.ReferenceIdentifier 'S.NameResolved))
+  => Map SC.Identifier Affiliation
+  -> F f S1.ReferenceIdentifier
+  -> m (F f S2.ReferenceIdentifier)
 referenceIdentifier affiliations i =
   case copoint i of
-    S.UnqualifiedIdentifier i' ->
+    SC.UnqualifiedIdentifier i' ->
       case M.lookup i' affiliations of
-        Just (Global n) -> pure $ S.GlobalIdentifier n i' <$ i
-        Just Local      -> pure $ S.LocalIdentifier i' <$ i
+        Just (Global n) -> pure $ SC.GlobalIdentifier n i' <$ i
+        Just Local      -> pure $ SC.LocalIdentifier i' <$ i
         Nothing         -> throw $ UnknownIdentifierException (copoint i) $ W.mayGet i
-    S.QualifiedIdentifier i'@(S.GlobalIdentifier n i'') ->
+    SC.QualifiedIdentifier i'@(SC.GlobalIdentifier n i'') ->
       case M.lookup i'' affiliations of
         Just (Global n') | n == n' -> pure $ i' <$ i
         _                          -> throw $ UnknownIdentifierException (copoint i) $ W.mayGet i
-    S.QualifiedIdentifier i' -> pure $ i' <$ i
+    SC.QualifiedIdentifier i' -> pure $ i' <$ i
 
-boundIdentifiers :: (Functor f, Functor g, Copointed g, B.FunctorB et, B.FunctorB ev) => f (g (Module 'S.NameUnresolved et ev g)) -> (f (Set S.Identifier), f (Set S.Identifier))
+boundIdentifiers :: (Functor f, Functor g, Copointed g, B.FunctorB et, B.FunctorB ev) => f (F g (S1.Module et ev g)) -> (f (Set SC.Identifier), f (Set SC.Identifier))
 boundIdentifiers modules =
   (eachModule boundValueIdentifier <$> modules, eachModule boundTypeIdentifier <$> modules)
   where
-    eachModule f m = let S.Module _ _ ds = copoint m in S.unions $ f <$> copoint ds
+    eachModule f m = let S1.Module _ _ ds = copoint m in S.unions $ f <$> copoint ds
 
-boundValueIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
+boundValueIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => F f (S1.Definition et ev f) -> Set SC.Identifier
 boundValueIdentifier =
-  boundValueIdentifier' . runIdentity . S.toIdentity
+  boundValueIdentifier' . runIdentity . SC.toIdentity . unf
   where
-    boundValueIdentifier' (S.DataDefinition _ (Identity r))                      = identifiers r
-    boundValueIdentifier' (S.ValueBind (Identity (S.ValueBindU (Identity i) _))) = S.singleton i
-    boundValueIdentifier' (S.ForeignValueBind (Identity i) _ _)                  = S.singleton i
-    boundValueIdentifier' _                                                      = S.empty
-    identifiers (S.ForAllDataC _ (Identity r)) = identifiers r
-    identifiers (S.ValueConstructorsData (Identity cs))               = S.fromList $ (\(Identity (S.ValueConstructor (Identity i) _)) -> i) <$> cs
+    boundValueIdentifier' (S1.DataDefinition _ (F (Identity r)))     = identifiers r
+    boundValueIdentifier' (S1.ValueBind (F (Identity i)) _)          = S.singleton i
+    boundValueIdentifier' (S1.ForeignValueBind (F (Identity i)) _ _) = S.singleton i
+    boundValueIdentifier' _                                          = S.empty
+    identifiers (S1.ForAllData _ (F (Identity r))) = identifiers r
+    identifiers (S1.ValueConstructorsData (F (Identity cs)))               = S.fromList $ (\(F (Identity (S1.ValueConstructor (F (Identity i)) _))) -> i) <$> cs
 
-boundTypeIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => f (Definition 'S.NameUnresolved et ev f) -> Set S.Identifier
+boundTypeIdentifier :: (Functor f, Copointed f, B.FunctorB et, B.FunctorB ev) => F f (S1.Definition et ev f) -> Set SC.Identifier
 boundTypeIdentifier =
-  boundTypeIdentifier' . runIdentity . S.toIdentity
+  boundTypeIdentifier' . runIdentity . SC.toIdentity . unf
   where
-    boundTypeIdentifier' (S.DataDefinition (Identity i) _)  = S.singleton i
-    boundTypeIdentifier' (S.TypeBind (Identity i) _)        = S.singleton i
-    boundTypeIdentifier' (S.ForeignTypeBind (Identity i) _) = S.singleton i
-    boundTypeIdentifier' _                                  = S.empty
+    boundTypeIdentifier' (S1.DataDefinition (F (Identity i)) _)  = S.singleton i
+    boundTypeIdentifier' (S1.TypeBind (F (Identity i)) _)        = S.singleton i
+    boundTypeIdentifier' (S1.ForeignTypeBind (F (Identity i)) _) = S.singleton i
+    boundTypeIdentifier' _                                       = S.empty
 
-importedAffiliations :: Map S.ModuleName (Set S.Identifier) -> Set S.ModuleName -> Map S.Identifier Affiliation
+importedAffiliations :: Map SC.ModuleName (Set SC.Identifier) -> Set SC.ModuleName -> Map SC.Identifier Affiliation
 importedAffiliations identifiers importedModuleNames =
   M.unions $ S.map (\n -> M.fromSet (const $ Global n) $ identifiers M.! n) importedModuleNames
 
 data Affiliation
-  = Global S.ModuleName
+  = Global SC.ModuleName
   | Local
   deriving (Show, Read, Eq, Ord, Generic)
 
 data Exception
-  = UnknownIdentifierException S.EitherIdentifier (Maybe S.Location)
+  = UnknownIdentifierException SC.EitherIdentifier (Maybe SC.Location)
   deriving (Show, Read, Eq, Ord, Generic)
 
 instance E.Exception Exception where

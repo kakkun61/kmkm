@@ -1,172 +1,121 @@
-{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
 
 -- | \"Uncurry\" pass.
 module Language.Kmkm.Internal.Build.Uncurry
   ( uncurry
   ) where
 
-import qualified Language.Kmkm.Internal.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax.Core.Common                                      as SC
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Curried.LambdaUnlifted   as S3
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaUnlifted as S4
 
-import           Data.Copointed                   (Copointed (copoint))
-import           Data.Functor.With                (MayHave)
-import           Data.List.NonEmpty               (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty               as N
-import           GHC.Stack                        (HasCallStack)
-import qualified Language.Kmkm.Internal.Exception as X
-import           Prelude                          (Functor (fmap, (<$)), flip, otherwise, ($), (<$>))
-
-type Module c et ev = S.Module 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Definition c et ev = S.Definition 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type DataRepresentation c et ev = S.DataRepresentation 'S.NameResolved c 'S.LambdaUnlifted et ev
-
-type ValueConstructor c et ev = S.ValueConstructor 'S.NameResolved c 'S.LambdaUnlifted et ev
-
-type Field c et ev = S.Field 'S.NameResolved c 'S.LambdaUnlifted et ev
-
-type Value c et ev = S.Value 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Value' c et ev = S.Value' 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type ProcedureStep c et ev = S.ProcedureStep 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Application c et ev = S.Application 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Function c et ev = S.Function 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Instantiation c et ev = S.Instantiation 'S.NameResolved c 'S.LambdaUnlifted 'S.Typed et ev
-
-type Type c = S.Type 'S.NameResolved c
-
-type FunctionType c = S.FunctionType 'S.NameResolved c
+import           Data.Copointed     (Copointed (copoint))
+import           Data.Functor.F     (F)
+import           Data.Functor.With  (MayHave)
+import           Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty as N
+import           GHC.Stack          (HasCallStack)
+import           Prelude            (Functor (fmap, (<$)), flip, otherwise, ($), (<$>))
+import qualified Prelude
 
 uncurry
   :: ( Functor f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      , HasCallStack
      )
-  => f (S.Module 'S.NameResolved 'S.Curried 'S.LambdaUnlifted 'S.Typed et ev f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaUnlifted 'S.Typed et ev f)
-uncurry = module'
+  => F f (S3.Module et ev f)
+  -> F f (S4.Module et ev f)
+uncurry = fmap $ \(S3.Module i ds ms) -> S4.Module i ds $ fmap definition <$> ms
 
-module' :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Module 'S.Curried et ev f) -> f (Module 'S.Uncurried et ev f)
-module' = fmap $ \(S.Module i ds ms) -> S.Module i ds $ fmap definition <$> ms
-
-definition :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Definition 'S.Curried et ev f) -> f (Definition 'S.Uncurried et ev f)
+definition :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S3.Definition et ev f) -> F f (S4.Definition et ev f)
 definition =
   fmap $ \case
-    S.DataDefinition i r     -> S.DataDefinition i $ dataRepresentation r
-    S.TypeBind i t           -> S.TypeBind i $ typ t
-    S.ForeignTypeBind i c    -> S.ForeignTypeBind i c
-    S.ValueBind b            -> S.ValueBind $ (\(S.ValueBindU i v) -> S.ValueBindU i $ typedValue v) <$> b
-    S.ForeignValueBind i c t -> S.ForeignValueBind i c $ typ t
+    S3.DataDefinition i r     -> S4.DataDefinition i $ dataRepresentation r
+    S3.TypeBind i t           -> S4.TypeBind i $ typ t
+    S3.ForeignTypeBind i c    -> S4.ForeignTypeBind i c
+    S3.ValueBind i v          -> S4.ValueBind i $ typedValue v
+    S3.ForeignValueBind i c t -> S4.ForeignValueBind i c $ typ t
 
-dataRepresentation :: (Functor f, Copointed f, MayHave S.Location f) => f (DataRepresentation 'S.Curried et ev f) -> f (DataRepresentation 'S.Uncurried et ev f)
+dataRepresentation :: (Functor f, Copointed f, MayHave SC.Location f) => F f (S3.DataRepresentation et ev f) -> F f (S4.DataRepresentation et ev f)
 dataRepresentation r =
   flip fmap r $ \r' ->
     let (is, cs) = go r'
-    in S.ForAllDataU (is <$ r) cs
+    in S4.ForAllData (is <$ r) cs
   where
-    go (S.ForAllDataC i r) =
+    go (S3.ForAllData i r) =
       let (is, cs) = go $ copoint r
       in (i : is, cs)
-    go (S.ValueConstructorsData cs) = ([], fmap valueConstructor <$> cs)
+    go (S3.ValueConstructorsData cs) = ([], fmap valueConstructor <$> cs)
 
-valueConstructor :: (Functor f, Copointed f, MayHave S.Location f) => f (ValueConstructor 'S.Curried et ev f) -> f (ValueConstructor 'S.Uncurried et ev f)
-valueConstructor = fmap $ \(S.ValueConstructor i fs) -> S.ValueConstructor i (fmap field <$> fs)
+valueConstructor :: (Functor f, Copointed f, MayHave SC.Location f) => F f (S3.ValueConstructor et ev f) -> F f (S4.ValueConstructor et ev f)
+valueConstructor = fmap $ \(S3.ValueConstructor i fs) -> S4.ValueConstructor i (fmap field <$> fs)
 
-field :: (Functor f, Copointed f, MayHave S.Location f) => f (Field 'S.Curried et ev f) -> f (Field 'S.Uncurried et ev f)
-field = fmap $ \(S.Field i t) -> S.Field i (typ t)
+field :: (Functor f, Copointed f, MayHave SC.Location f) => F f (S3.Field et ev f) -> F f (S4.Field et ev f)
+field = fmap $ \(S3.Field i t) -> S4.Field i (typ t)
 
-typ :: (Functor f, Copointed f, MayHave S.Location f) => f (Type 'S.Curried f) -> f (Type 'S.Uncurried f)
+typ :: (Functor f, Copointed f, MayHave SC.Location f) => F f (S3.Type f) -> F f (S4.Type f)
 typ =
   fmap $ \case
-    S.TypeVariable i      -> S.TypeVariable i
-    S.TypeApplication t s -> S.TypeApplication (typ t) $ typ s
-    S.FunctionType a      -> S.FunctionType $ functionType a
-    S.ProcedureType t     -> S.ProcedureType $ typ t
-    S.ForAllType i t      -> S.ForAllType i $ typ t
+    S3.TypeVariable i      -> S4.TypeVariable i
+    S3.TypeApplication t s -> S4.TypeApplication (typ t) $ typ s
+    S3.FunctionType t0 t1  -> Prelude.uncurry S4.FunctionType $ functionType t0 t1
+    S3.ProcedureType t     -> S4.ProcedureType $ typ t
+    S3.ForAllType i t      -> S4.ForAllType i $ typ t
 
-typedValue :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Value 'S.Curried et ev f) -> f (Value 'S.Uncurried et ev f)
-typedValue = fmap $ \case S.TypedValue v t -> S.TypedValue (value' v) $ typ t
+typedValue :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S3.Value et ev f) -> F f (S4.Value et ev f)
+typedValue = fmap $ \case S3.TypedValue v t -> S4.TypedValue (value' v) $ typ t
 
-value' :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Value' 'S.Curried et ev f) -> f (Value' 'S.Uncurried et ev f)
+value' :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S3.Value' et ev f) -> F f (S4.Value' et ev f)
 value' =
   fmap $ \case
-    S.Variable i       -> S.Variable i
-    S.Literal l        -> S.Literal $ literal <$> l
-    S.Function f       -> S.Function $ function f
-    S.Application a    -> S.Application $ application a
-    S.Procedure ps     -> S.Procedure $ ((procedureStep <$>) <$>) <$> ps
-    S.Let ds v         -> S.Let (fmap definition <$> ds) $ typedValue v
-    S.ForAllValue i v  -> S.ForAllValue i $ typedValue v
-    S.TypeAnnotation _ -> X.unreachable "type annotation"
-    S.Instantiation i  -> S.Instantiation $ instantiation i
-
-literal :: S.Literal -> S.Literal
-literal (S.Integer v b)      = S.Integer v b
-literal (S.Fraction s f e b) = S.Fraction s f e b
-literal (S.String t)         = S.String t
-
-functionType :: (Functor f, Copointed f, MayHave S.Location f) => f (FunctionType 'S.Curried f) -> f (FunctionType 'S.Uncurried f)
-functionType =
-  fmap $ \case
-    (S.FunctionTypeC t0 t) | S.FunctionType a <- copoint t ->
+    S3.Variable i       -> S4.Variable i
+    S3.Literal l        -> S4.Literal $ literal <$> l
+    S3.Function i t v       -> Prelude.uncurry S4.Function $ function i t v
+    S3.Application v0 v1    ->
       let
-        S.FunctionTypeN ts t = copoint $ functionType a
+        v :| vs = N.reverse $ go v0 v1
+        go v0 v1 =
+          let S3.TypedValue v0' _ = copoint v0
+          in
+            case copoint v0' of
+              S3.Application v0_ v1_ -> typedValue v1 :| N.toList (go v0_ v1_)
+              _                      -> typedValue v1 :| [typedValue v0]
+      in S4.Application v (vs <$ v1)
+    S3.Procedure ps     -> S4.Procedure $ ((procedureStep <$>) <$>) <$> ps
+    S3.Let ds v         -> S4.Let (fmap definition <$> ds) $ typedValue v
+    S3.ForAllValue i v  -> S4.ForAllValue i $ typedValue v
+    S3.Instantiation v t -> S4.Instantiation (typedValue v) $ typ t
+
+literal :: S3.Literal -> S4.Literal
+literal (S3.Integer v b)      = S4.Integer v b
+literal (S3.Fraction s f e b) = S4.Fraction s f e b
+literal (S3.String t)         = S4.String t
+
+functionType :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => F f (S3.Type f) -> F f (S3.Type f) -> (F f [F f (S4.Type f)], F f (S4.Type f))
+functionType t0 t1
+  | S3.FunctionType t10 t11 <- copoint t1 =
+      let
+        (ts, t') = functionType t10 t11
         t0' = typ t0
-      in S.FunctionTypeN ((t0' :) <$> ts) t
-    (S.FunctionTypeC t0 t) -> S.FunctionTypeN ([typ t0] <$ t0) $ typ t
+      in ((t0' :) <$> ts, t')
+  | otherwise = ([typ t0] <$ t0, typ t1)
 
-application :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Application 'S.Curried et ev f) -> f (Application 'S.Uncurried et ev f)
-application a =
-  S.ApplicationN v (vs <$ a) <$ a
-  where
-    v :| vs = N.reverse $ go a
-    go a =
-      case copoint a of
-        S.ApplicationC v0 v1
-          | S.TypedValue v0' _ <- copoint v0
-          , S.Application a <- copoint v0' -> typedValue v1 :| N.toList (go a)
-          | otherwise -> typedValue v1 :| [typedValue v0]
+procedureStep :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => S3.ProcedureStep et ev f -> S4.ProcedureStep et ev f
+procedureStep (S3.BindProcedureStep i v) = S4.BindProcedureStep i $ typedValue v
+procedureStep (S3.CallProcedureStep v)   = S4.CallProcedureStep $ typedValue v
 
-procedureStep :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => ProcedureStep 'S.Curried et ev f -> ProcedureStep 'S.Uncurried et ev f
-procedureStep (S.BindProcedureStep i v) = S.BindProcedureStep i $ typedValue v
-procedureStep (S.CallProcedureStep v)   = S.CallProcedureStep $ typedValue v
-
-function :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Function 'S.Curried et ev f) -> f (Function 'S.Uncurried et ev f)
-function f =
+function :: (Functor f, Copointed f, MayHave SC.Location f, HasCallStack) => F f SC.QualifiedIdentifier -> F f (S3.Type f) -> F f (S3.Value et ev f) -> (F f [F f (F f SC.QualifiedIdentifier, F f (S4.Type f))], F f (S4.Value et ev f))
+function i t v =
   let
-    S.FunctionC i t v = copoint f
-    S.TypedValue v' _ = copoint v
+    S3.TypedValue v' _ = copoint v
     t' = typ t
   in
     case copoint v' of
-      S.Function f' ->
-        let S.FunctionN ps v'' = copoint $ function f'
-        in S.FunctionN ((((i, t') <$ f) : copoint ps) <$ f) v'' <$ f
-      _ ->
-        let v' = typedValue v
-        in S.FunctionN ([(i, t') <$ f] <$ f) v' <$ f
-
-instantiation :: (Functor f, Copointed f, MayHave S.Location f, HasCallStack) => f (Instantiation 'S.Curried et ev f) -> f (Instantiation 'S.Uncurried et ev f)
-instantiation i =
-  let
-    S.InstantiationC v t = copoint i
-    S.TypedValue v' _ = copoint v
-    t' = typ t
-  in
-    case copoint v' of
-      S.Instantiation i' ->
-        let S.InstantiationN v'' ts = copoint $ instantiation i'
-        in S.InstantiationN v'' (t' : copoint ts <$ i) <$ i
-      _ ->
-        let v' = typedValue v
-        in S.InstantiationN v' ([t'] <$ i) <$ i
+      S3.Function i_ t_ v_ ->
+        let (ps, v_') = function i_ t_ v_
+        in ((((i, t') <$ i) : copoint ps) <$ i, v_')
+      _ -> ([(i, t') <$ i] <$ i, typedValue v)

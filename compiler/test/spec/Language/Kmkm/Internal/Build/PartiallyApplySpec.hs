@@ -1,13 +1,11 @@
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds         #-}
 
 module Language.Kmkm.Internal.Build.PartiallyApplySpec where
 
 import Language.Kmkm.Internal.Build.PartiallyApply
-import Language.Kmkm.Internal.Syntax
+import Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaUnlifted
 
 import Utility
 
@@ -19,37 +17,31 @@ spec = do
   describe "partiallyApply" $ do
     it "for-all value" $ do
       let
-        source, result :: I (Module 'NameResolved 'Uncurried 'LambdaUnlifted 'Typed (Const ()) (Const ()) I)
+        source, result :: FI (Module (Const ()) (Const ()) I)
         source =
-          I $ Module
+          FI $ Module
             "spec"
             []
-            [ I $ ValueBind $
-                I $ ValueBindU
-                  ["spec", "id"]
-                  $ I $ TypedValue
-                    ( I $ ForAllValue
-                        "a"
-                        $ I $ TypedValue
-                          (I $ Variable "a")
-                          $ I $ TypeVariable "a"
-                    )
-                    $ I $ ForAllType "a" $ I $ TypeVariable "a"
+            [ FI $ ValueBind
+                ["spec", "id"]
+                $ FI $ TypedValue
+                  ( FI $ ForAllValue
+                      "a"
+                      $ FI $ TypedValue "a" "a"
+                  )
+                  $ FI $ ForAllType "a" "a"
             ]
         result =
-          I $ Module
+          FI $ Module
             "spec"
             []
-            [ I $ ValueBind $
-                I $ ValueBindU
-                  ["spec", "id"]
-                  $ I $ TypedValue
-                    ( I $ ForAllValue
-                        "a"
-                        $ I $ TypedValue
-                          (I $ Variable "a")
-                          $ I $ TypeVariable "a"
-                    )
-                    $ I $ ForAllType "a" $ I $ TypeVariable "a"
+            [ FI $ ValueBind
+                ["spec", "id"]
+                $ FI $ TypedValue
+                  ( FI $ ForAllValue
+                      "a"
+                      $ FI $ TypedValue "a" "a"
+                  )
+                  $ FI $ ForAllType "a" "a"
             ]
       partiallyApply source `shouldBe` result

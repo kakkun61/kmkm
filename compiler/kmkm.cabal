@@ -47,11 +47,13 @@ library
   import: common,
           warnings
   hs-source-dirs: src
-  exposed-modules: Data.Functor.With
+  exposed-modules: Data.Functor.F
+                   Data.Functor.With
                    Language.Kmkm
                    Language.Kmkm.Internal.Build.C.C
                    Language.Kmkm.Internal.Build.C.Header
                    Language.Kmkm.Internal.Build.C.IntermediateC
+                   Language.Kmkm.Internal.Build.C.PolymorphicPoint
                    Language.Kmkm.Internal.Build.C.Simplify
                    Language.Kmkm.Internal.Build.C.Source
                    Language.Kmkm.Internal.Build.C.Syntax
@@ -67,8 +69,19 @@ library
                    Language.Kmkm.Internal.Parse.Location
                    Language.Kmkm.Internal.Parse.Sexp
                    Language.Kmkm.Internal.Parse.Sexp.C
-                   Language.Kmkm.Internal.Syntax
                    Language.Kmkm.Internal.Syntax.Sexp
+                   Language.Kmkm.Internal.Syntax.Core.Common
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Curried
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Curried.LambdaUnlifted
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaLifted
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaUnlifted
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Uncurried
+                   Language.Kmkm.Internal.Syntax.Core.NameResolved.Untyped.Curried.LambdaUnlifted
+                   Language.Kmkm.Internal.Syntax.Core.NameUnresolved
+                   Language.Kmkm.Internal.Syntax.Core.NameUnresolved.Curried
+                   Language.Kmkm.Internal.Syntax.Core.NameUnresolved.Untyped.Curried.LambdaUnlifted
+                   Language.Kmkm.Internal.Syntax.C.PolymorphicPointed
   build-depends: algebraic-graphs,
                  barbies,
                  barbies-layered,
@@ -133,7 +146,6 @@ test-suite spec
                  Language.Kmkm.Internal.Build.TypeCheckSpec
                  Language.Kmkm.Internal.Build.UncurrySpec
                  Language.Kmkm.Internal.Parse.SexpSpec
-                 Language.Kmkm.Internal.SyntaxSpec
                  Utility
   build-depends: kmkm == 0.1.0.0,
                  barbies-layered,

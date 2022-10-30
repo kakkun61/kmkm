@@ -1,16 +1,16 @@
-{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE TypeFamilies     #-}
 
 -- | “top-level thunk / compile-time expression” pass.
 module Language.Kmkm.Internal.Build.C.Thunk
   ( thunk
   ) where
 
-import qualified Language.Kmkm.Internal.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax.Core.Common                                    as SC
+import qualified Language.Kmkm.Internal.Syntax.Core.NameResolved.Typed.Uncurried.LambdaLifted as S
 
 import           Data.Copointed     (Copointed (copoint))
+import           Data.Functor.F     (F)
 import           Data.Functor.With  (MayHave)
 import           Data.List.NonEmpty (NonEmpty ((:|)))
 import           Data.Maybe         (mapMaybe)
@@ -23,60 +23,52 @@ import qualified Data.Set           as S
 -- I think that a smarter method needs topological sort for dependencies
 -- of value definitions.
 
-type Definition = S.Definition 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
+type Definition = S.Definition S.EmbeddedCType S.EmbeddedCValue
 
-type ValueBind = S.ValueBind 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
+type Value = S.Value S.EmbeddedCType S.EmbeddedCValue
 
-type Type = S.Type 'S.NameResolved 'S.Uncurried
-
-type Value = S.Value 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
-
-type ProcedureStep = S.ProcedureStep 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue
+type ProcedureStep = S.ProcedureStep S.EmbeddedCType S.EmbeddedCValue
 
 thunk
   :: ( Functor f
      , Copointed f
-     , MayHave S.Location f
+     , MayHave SC.Location f
      )
-  => f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
-  -> f (S.Module 'S.NameResolved 'S.Uncurried 'S.LambdaLifted 'S.Typed S.EmbeddedCType S.EmbeddedCValue f)
+  => F f (S.Module S.EmbeddedCType S.EmbeddedCValue f)
+  -> F f (S.Module S.EmbeddedCType S.EmbeddedCValue f)
 thunk = fmap $ \(S.Module n ms ds) -> S.Module n ms $ fmap (definition (thunkIdentifiers ds)) <$> ds
 
-definition :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition :: (Functor f, Copointed f, MayHave SC.Location f) => Set SC.QualifiedIdentifier -> F f (Definition f) -> F f (Definition f)
 definition tids d =
   case copoint d of
-    S.ValueBind b | S.ValueBindV i is v <- copoint b -> definition' tids (S.ValueBind (S.ValueBindN i is ([] <$ d) v <$ b) <$ d)
-    _                                                -> definition' tids d
+    S.ValueBindV i is v -> definition' tids (S.ValueBindN i is ([] <$ d) v <$ d)
+    _                   -> definition' tids d
 
-definition' :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Definition f) -> f (Definition f)
+definition' :: (Functor f, Copointed f, MayHave SC.Location f) => Set SC.QualifiedIdentifier -> F f (Definition f) -> F f (Definition f)
 definition' tids =
   fmap $ \case
-    S.ValueBind b ->
-      S.ValueBind $
-        flip fmap b $ \case
-          S.ValueBindV i is v    -> valueBind tids i is Nothing v
-          S.ValueBindN i is ps v -> valueBind tids i is (Just ps) v
-    m -> m
+    S.ValueBindV i is v    -> valueBind tids i is Nothing v
+    S.ValueBindN i is ps v -> valueBind tids i is (Just ps) v
+    m                      -> m
 
-valueBind :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f S.QualifiedIdentifier -> f [f S.QualifiedIdentifier] -> Maybe (f [f (f S.QualifiedIdentifier, f (Type f))]) -> f (Value f) -> ValueBind f
+valueBind :: (Functor f, Copointed f, MayHave SC.Location f) => Set SC.QualifiedIdentifier -> F f SC.QualifiedIdentifier -> F f [F f SC.QualifiedIdentifier] -> Maybe (F f [F f (F f SC.QualifiedIdentifier, F f (S.Type f))]) -> F f (Value f) -> Definition f
 valueBind tids i is mps v =
   let v' = term tids v
   in maybe (S.ValueBindV i is v') (\ps -> S.ValueBindN i is ps v') mps
 
-term :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (Value f) -> f (Value f)
+term :: (Functor f, Copointed f, MayHave SC.Location f) => Set SC.QualifiedIdentifier -> F f (Value f) -> F f (Value f)
 term tids v =
   let S.TypedValue v1 t = copoint v
   in
     case copoint v1 of
       S.Variable i
-        | copoint i `S.member` tids -> S.TypedValue (S.Application (S.ApplicationN (S.TypedValue (S.Variable i <$ v1) (S.FunctionType (S.FunctionTypeN ([] <$ v1) t <$ t) <$ t) <$ v1) ([] <$ v1) <$ v1) <$ v1) t <$ v
+        | copoint i `S.member` tids -> S.TypedValue (S.Application (S.TypedValue (S.Variable i <$ v1) (S.FunctionType ([] <$ v1) t <$ t) <$ v1) ([] <$ v1) <$ v1) t <$ v
         | otherwise                 -> v
-      S.Application a
-        | S.ApplicationN v vs <- copoint a ->
-            let
-              v' = term tids v
-              vs' = term tids <$> copoint vs
-            in S.TypedValue (S.Application (S.ApplicationN v' (vs' <$ vs) <$ a) <$ v1) t <$ v
+      S.Application v vs ->
+        let
+          v' = term tids v
+          vs' = term tids <$> copoint vs
+        in S.TypedValue (S.Application v' (vs' <$ vs) <$ v1) t <$ v
       S.Procedure ps ->
         let
           p :| ps' = copoint ps
@@ -94,22 +86,22 @@ term tids v =
         in S.TypedValue (S.Let ds'' v' <$ v1) t <$ v
       _ -> v
 
-procedureStep :: (Functor f, Copointed f, MayHave S.Location f) => Set S.QualifiedIdentifier -> f (ProcedureStep f) -> (Set S.QualifiedIdentifier, f (ProcedureStep f))
+procedureStep :: (Functor f, Copointed f, MayHave SC.Location f) => Set SC.QualifiedIdentifier -> F f (ProcedureStep f) -> (Set SC.QualifiedIdentifier, F f (ProcedureStep f))
 procedureStep tids p =
   case copoint p of
     S.BindProcedureStep i v -> (tids S.\\ S.singleton (copoint i), S.BindProcedureStep i (term tids v) <$ p)
     S.CallProcedureStep v   ->   (tids, S.CallProcedureStep (term tids v) <$ p)
 
-identifiers :: Copointed f => f [f (Definition f)] -> Set S.QualifiedIdentifier
+identifiers :: Copointed f => F f [F f (Definition f)] -> Set SC.QualifiedIdentifier
 identifiers =
   S.fromList . mapMaybe (go . copoint) . copoint
   where
-    go (S.ValueBind b) | S.ValueBindN i _ _ _ <- copoint b = Just $ copoint i
-    go _                                                   = Nothing
+    go (S.ValueBindN i _ _ _) = Just $ copoint i
+    go _                      = Nothing
 
-thunkIdentifiers :: Copointed f => f [f (Definition f)] -> Set S.QualifiedIdentifier
+thunkIdentifiers :: Copointed f => F f [F f (Definition f)] -> Set SC.QualifiedIdentifier
 thunkIdentifiers =
   S.fromList . mapMaybe (go . copoint) . copoint
   where
-    go (S.ValueBind b) | S.ValueBindV i _ _ <- copoint b = Just $ copoint i
-    go _                                                 = Nothing
+    go (S.ValueBindV i _ _) = Just $ copoint i
+    go _                    = Nothing

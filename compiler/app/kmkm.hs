@@ -1,9 +1,8 @@
-{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
+import Language.Kmkm (Exception (CompileDotDotPathException, CompileModuleNameMismatchException, CompileRecursionException, IntermediateCEmbeddedParameterMismatchException, NameResolveUnknownIdentifierException, ParseException, PolymorphicPointNoMetadataException, PolymorphicPointNotFoundException, TypeCheckBindProcedureEndException, TypeCheckMismatchException, TypeCheckNotFoundException, TypeCheckPrimitiveTypeException, TypeCheckRecursionException),
                       Location (Location), ParseExceptionMessage (ParseSexpMessage, ParseTextMessage),
                       Position (Position), compile)
 
@@ -30,7 +29,7 @@ import           System.Exit            (exitFailure)
 import qualified System.FilePath        as F
 import           System.FilePath        ((</>))
 import qualified System.FilePath.Glob   as G
-import           System.IO              (Handle, IOMode (ReadMode), hPutStrLn, openFile, stderr)
+import           System.IO              (Handle, IOMode (ReadMode), hPutStr, hPutStrLn, openFile, stderr)
 
 #ifdef CYGPATH
 import System.Process (callProcess, readProcess)
@@ -137,6 +136,12 @@ compile' output libraries dryRun verbosity src =
               T.hPutStrLn stderr $ "intermediate C error: C embedded parameter mismatch error: expected: " <> T.pack (show e) <> ", actual: " <> T.pack (show a)
               maybe (pure ()) (printLocation stderr) l
               T.hPutStrLn stderr "A number of parameters of embedded C is different from one of its type."
+            PolymorphicPointNotFoundException i l -> do
+              T.hPutStrLn stderr $ "polymorphic point error: not found error: " <> i
+              maybe (pure ()) (printLocation stderr) l
+            PolymorphicPointNoMetadataException l -> do
+              T.hPutStrLn stderr "polymorphic point error: no metadata error"
+              maybe (pure ()) (printLocation stderr) l
             CompileRecursionException ms -> do
               T.hPutStrLn stderr $ "compile error: recursion error: " <> T.intercalate ", " (N.toList ms)
               T.hPutStrLn stderr "Modules' dependency have a recursion while compiling."

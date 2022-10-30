@@ -1,4 +1,3 @@
-{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Internal.Build.C.C
@@ -16,7 +15,7 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Definition (ExpressionDefinition, StatementDefinition),
                                               Deriver (Function, Pointer),
                                               Element (Declaration, Definition, TypeDefinition),
-                                              Expression (ArithmeticExpression, Assign, Call, Cast, CompoundLiteral, Literal, StatementExpression, Variable),
+                                              Expression (Address, ArithmeticExpression, Assign, Call, Cast, CompoundLiteral, Dereference, Literal, StatementExpression, Variable),
                                               Field (Field), File (File),
                                               FractionBase (FractionDecimal, FractionHexadecimal),
                                               Identifier (Identifier),
@@ -161,6 +160,8 @@ expression (Cast (t, ds) e)         =
   "((" <> T.unwords ([qualifiedType t] <> [dt | not $ T.null dt]) <> ") " <> expression e <> ")"
   where
     dt = derivers "" ds
+expression (Dereference e) = "*(" <> expression e <> ")"
+expression (Address e) = "&(" <> expression e <> ")"
 
 literal :: Literal -> Text
 literal (Integer v IntBinary) = "0x" <> T.pack (showHex v "")
