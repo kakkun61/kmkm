@@ -7,7 +7,7 @@ module Language.Kmkm.Internal.Build.C.Syntax
   , VariableQualifier (..)
   , TypeQualifier (..)
   , Type (..)
-  , QualifiedType
+  , QualifiedType (..)
   , Deriver (..)
   , Field (..)
   , Identifier (..)
@@ -64,10 +64,16 @@ data Type
   | EnumerableLiteral (Maybe Identifier) [Identifier]
   deriving (Show, Read, Eq, Ord, Generic)
 
-type QualifiedType = ([TypeQualifier], Type)
+instance IsString Type where
+  fromString = TypeVariable . fromString
+
+data QualifiedType = QualifiedType [TypeQualifier] Type deriving (Show, Read, Eq, Ord, Generic)
+
+instance IsString QualifiedType where
+  fromString = QualifiedType [] . fromString
 
 data Deriver
-  = Pointer [VariableQualifier]
+  = Pointer [VariableQualifier] [Deriver]
   | Function [(QualifiedType, [VariableQualifier], Maybe (Either Text Identifier), [Deriver])]
   deriving (Show, Read, Eq, Ord, Generic)
 
@@ -94,7 +100,13 @@ data Expression
   | Call Expression [Expression]
   | StatementExpression [Either Text BlockElement] -- ^ GCC extension.
   | Assign Identifier Expression
+  | Cast (QualifiedType, [Deriver]) Expression
+  | Dereference Expression
+  | Address Expression
   deriving (Show, Eq, Ord, Generic)
+
+instance IsString Expression where
+  fromString = Variable . fromString
 
 data Literal
   = Integer Integer IntBase

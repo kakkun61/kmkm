@@ -21,3 +21,8 @@ struct definition_passenger definition_pet(kmkm_prim_uint const definition_speci
 }
 
 struct definition_unit const definition_unit = { definition_unit_tag };
+
+struct definition_myBool definition_falseValue(void)
+{
+  return definition_myFalse;
+}

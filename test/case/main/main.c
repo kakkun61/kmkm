@@ -4,5 +4,6 @@
 
 kmkm_prim_int main(void)
 {
-  return kmkm_proc_pureInt(1);
+  kmkm_prim_int _l0 = 1;
+  return kmkm_proc_pureInt(_l0);
 }

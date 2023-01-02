@@ -4,12 +4,12 @@ module Language.Kmkm.Internal.Parse.Location
   ( withLocation
   ) where
 
-import qualified Language.Kmkm.Internal.Syntax as S
+import qualified Language.Kmkm.Internal.Syntax.Core.Common as S
 
-import qualified Text.Megaparsec as M
-import Data.Functor.With ( With, pattern With )
+import           Data.Functor.With (With, pattern With)
+import qualified Text.Megaparsec   as M
 
-withLocation :: M.MonadParsec e s p => FilePath -> p a -> p (With S.Location a)
+withLocation :: (M.MonadParsec e s p, M.TraversableStream s) => FilePath -> p a -> p (With S.Location a)
 withLocation filePath p = do
   M.SourcePos _ beginLine beginColumn <- M.getSourcePos
   a <- p

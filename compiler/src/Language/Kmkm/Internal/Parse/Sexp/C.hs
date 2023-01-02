@@ -1,23 +1,24 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Language.Kmkm.Internal.Parse.Sexp.C
   ( embeddedParser
   ) where
 
-import qualified Language.Kmkm.Internal.Parse.Sexp as R
-import qualified Language.Kmkm.Internal.Syntax     as S
+import qualified Language.Kmkm.Internal.Parse.Sexp         as R
+import qualified Language.Kmkm.Internal.Syntax.Core.Common as S
 
+import           Data.Functor.F                     (F)
+import           Data.Functor.With                  (MayHave)
+import qualified Data.Functor.With                  as W
 import           Data.Traversable                   (for)
 import qualified Language.Kmkm.Internal.Syntax.Sexp as S
-import Data.Functor.With (MayHave)
-import qualified Data.Functor.With as W
 
 embeddedParser :: (Traversable f, MayHave S.Location f) => R.EmbeddedParser f
 embeddedParser = R.EmbeddedParser value type'
 
-value :: (Traversable f, MayHave S.Location f) => f (S.Sexp f) -> Either [R.Exception] (f (S.EmbeddedValue f))
+value :: (Traversable f, MayHave S.Location f) => F f (S.Sexp f) -> Either [R.Exception] (F f (S.EmbeddedValue f))
 value s =
   for s $ \case
     S.List [sv, si, sps, sb] -> do
@@ -28,7 +29,7 @@ value s =
       pure $ S.EmbeddedValueC $ S.EmbeddedCValue i ps b
     _ -> Left [R.SexpException "unexpected format" "value" $ W.mayGet s]
 
-type' :: (Traversable f, MayHave S.Location f) => f (S.Sexp f) -> Either [R.Exception] (f (S.EmbeddedType f))
+type' :: (Traversable f, MayHave S.Location f) => F f (S.Sexp f) -> Either [R.Exception] (F f (S.EmbeddedType f))
 type' s =
   for s $ \case
     S.List [st, si, sb] -> do

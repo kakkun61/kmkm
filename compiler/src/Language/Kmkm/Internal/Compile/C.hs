@@ -1,90 +1,84 @@
-{-# LANGUAGE ApplicativeDo     #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 
 module Language.Kmkm.Internal.Compile.C
   ( compile
-  , Exception (..)
   ) where
 
-import qualified Language.Kmkm.Internal.Build.C.C             as KBCC
-import qualified Language.Kmkm.Internal.Build.C.Header        as KBCH
-import qualified Language.Kmkm.Internal.Build.C.IntermediateC as KBCI
-import qualified Language.Kmkm.Internal.Build.C.Simplify      as KBCS
-import qualified Language.Kmkm.Internal.Build.C.Source        as KBCR
-import qualified Language.Kmkm.Internal.Build.C.Syntax        as KBCY
-import qualified Language.Kmkm.Internal.Build.C.Thunk         as KBCT
-import qualified Language.Kmkm.Internal.Compile               as KC
-import qualified Language.Kmkm.Internal.Exception             as KE
-import qualified Language.Kmkm.Internal.Parse.Sexp.C          as KPC
-import qualified Language.Kmkm.Internal.Syntax                as KS
+import qualified Language.Kmkm.Internal.Build.C.C                   as KBCC
+import qualified Language.Kmkm.Internal.Build.C.Header              as KBCH
+import qualified Language.Kmkm.Internal.Build.C.IntermediateC       as KBCI
+import qualified Language.Kmkm.Internal.Build.C.PolymorphicPoint    as KBCP
+import qualified Language.Kmkm.Internal.Build.C.Simplify            as KBCS
+import qualified Language.Kmkm.Internal.Build.C.Source              as KBCR
+import qualified Language.Kmkm.Internal.Build.C.Syntax              as KBCY
+import qualified Language.Kmkm.Internal.Build.C.Thunk               as KBCT
+import qualified Language.Kmkm.Internal.Compile                     as KC
+import qualified Language.Kmkm.Internal.Exception                   as KE
+import qualified Language.Kmkm.Internal.Parse.Sexp.C                as KPC
+import qualified Language.Kmkm.Internal.Syntax.C.PolymorphicPointed as KS6
+import qualified Language.Kmkm.Internal.Syntax.Core.Common          as KSC
 
 import           Control.Applicative    (Alternative)
-import qualified Control.Exception      as E
-import           Control.Exception.Safe (MonadCatch, MonadThrow, throw)
+import           Control.Exception.Safe (MonadCatch, MonadThrow)
 import           Data.Copointed         (Copointed (copoint))
 import           Data.Foldable          (Foldable (fold))
+import           Data.Functor.F         (F)
+import           Data.Functor.With      (With)
 import qualified Data.List              as L
 import qualified Data.List.NonEmpty     as N
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as M
-import qualified Data.Set               as S
 import           Data.Text              (Text)
 import qualified Data.Text              as T
-import qualified Data.Typeable          as Y
-import           GHC.Generics           (Generic)
+import           Data.Traversable       (for)
+import           GHC.Stack              (HasCallStack)
 import qualified System.FilePath        as F
-import Data.Functor.With (MayHave)
+
+type WL = With KSC.Location
 
 compile
-  :: (Alternative m, MonadCatch m)
+  :: (Alternative m, MonadCatch m, HasCallStack)
   => (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (FilePath -> Text -> m ()) -- ^ File writer.
   -> (Text -> m ()) -- ^ Logger.
   -> FilePath -- ^ Source file path.
   -> m ()
-compile _ _ _ _ src@('.' : '.' : _) = throw $ DotDotPathException src
 compile findFile readFile writeFile writeLog src =
-  KC.compile [KPC.embeddedParser] KS.isEmbeddedCType KS.isEmbeddedCValue lastStep findFile readFile writeLog src
+  KC.compile [KPC.embeddedParser] KSC.isEmbeddedCType KSC.isEmbeddedCValue lastStep findFile readFile writeLog src
   where
     lastStep ms fs = do
-      let ms' = S.map KBCT.thunk ms
-      let definedVariables = M.unions $ S.map KBCI.definedVariables ms'
-      docs <- mapM (build2_ definedVariables) $ S.toList ms'
+      let
+        ms' = KBCT.thunk <$> ms
+        variablePolymorphicPoints = M.unions $ KBCP.variablePolymorphicPoints <$> ms'
+      ms'' <- traverse (KBCP.attach variablePolymorphicPoints) ms'
+      let definedVariables = M.unions $ KBCI.definedVariables <$> ms''
+      docs <-
+        for ms'' $ \m -> do
+          let KS6.Module n _ _ = copoint m
+          ds <- build2 writeLog definedVariables fs m
+          pure (copoint n, ds)
       mapM_ write docs
       where
         write (k, (c, h)) = do
           let path = fs M.! k
           writeFile (F.addExtension path "c") c
           writeFile (F.addExtension path "h") h
-        build2_ definedVariables m =
-          let
-            KS.Module n _ _ = copoint m
-          in do
-            ds <- build2 writeLog definedVariables fs m
-            pure (copoint n, ds)
 
 build2
-  :: ( MonadThrow m
-     , Functor f
-     , Foldable f
-     , Copointed f
-     , MayHave KS.Location f
-     )
+  :: (MonadThrow m, HasCallStack)
   => (Text -> m ())
-  -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
-  -> Map KS.ModuleName FilePath
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue f)
+  -> Map KSC.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
+  -> Map KSC.ModuleName FilePath
+  -> F WL (KS6.Module KSC.EmbeddedCType KSC.EmbeddedCValue WL)
   -> m (Text, Text)
 build2 writeLog definedVariables fs m = do
-  let KS.Module n ms _ = copoint m
+  let KS6.Module n ms _ = copoint m
   (c, h) <- build2' writeLog definedVariables m
   let
-    n'@(KS.ModuleName i) = copoint n
+    n'@(KSC.ModuleName i) = copoint n
     ms' = copoint <$> copoint ms
     key = T.toUpper (T.intercalate "_" $ N.toList i) <> "_H"
     newline :: Text
@@ -115,15 +109,10 @@ build2 writeLog definedVariables fs m = do
     )
 
 build2'
-  :: ( MonadThrow m
-     , Functor f
-     , Foldable f
-     , Copointed f
-     , MayHave KS.Location f
-     )
+  :: (MonadThrow m, HasCallStack)
   => (Text -> m ())
-  -> Map KS.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
-  -> f (KS.Module 'KS.NameResolved 'KS.Uncurried 'KS.LambdaLifted 'KS.Typed KS.EmbeddedCType KS.EmbeddedCValue f)
+  -> Map KSC.QualifiedIdentifier (KBCY.QualifiedType, [KBCY.Deriver])
+  -> F WL (KS6.Module KSC.EmbeddedCType KSC.EmbeddedCValue WL)
   -> m (Text, Text)
 build2' writeLog definedVariables m6 = do
   m7 <- KBCI.translate definedVariables m6
@@ -132,7 +121,7 @@ build2' writeLog definedVariables m6 = do
   writeLog $ "simplified abstract C file: " <> T.pack (show c)
   pure (KBCC.render $ KBCR.source c, KBCC.render $ KBCH.header c)
 
-makeRelativePath :: FilePath -> FilePath -> FilePath
+makeRelativePath :: HasCallStack => FilePath -> FilePath -> FilePath
 makeRelativePath base path =
   let
     baseDirs =
@@ -150,16 +139,4 @@ makeRelativePath base path =
       then L.intercalate "/" $ drop cl pathDirs
       else if bl > cl
         then L.intercalate "/" $ replicate (bl - cl) "../" ++ drop cl pathDirs
-        else KE.unreachable
-
-data Exception
-  = RecursionException (N.NonEmpty KS.ModuleName)
-  | ModuleNameMismatchException FilePath KS.ModuleName (Maybe KS.Location)
-  | DotDotPathException FilePath
-  deriving (Show, Read, Eq, Ord, Generic)
-
-instance E.Exception Exception where
-  toException = E.toException . KE.Exception
-  fromException e = do
-    KE.Exception e <- E.fromException e
-    Y.cast e
+        else KE.unreachable "length of base ≦ length of common"

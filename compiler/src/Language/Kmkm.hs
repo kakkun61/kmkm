@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP                   #-}
-{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase            #-}
 
-#if __GLASGOW_HASKELL__ < 902
+#if __GLASGOW_HASKELL__ <= 902
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 #endif
 
@@ -18,24 +18,29 @@ module Language.Kmkm
     --
   ) where
 
-import qualified Language.Kmkm.Internal.Build.C.IntermediateC as I
-import qualified Language.Kmkm.Internal.Build.NameResolve     as N
-import qualified Language.Kmkm.Internal.Build.TypeCheck       as T
-import qualified Language.Kmkm.Internal.Compile.C             as C
-import qualified Language.Kmkm.Internal.Exception             as X
-import qualified Language.Kmkm.Internal.Parse.Sexp            as P
-import qualified Language.Kmkm.Internal.Syntax                as S
+import qualified Language.Kmkm.Internal.Build.C.IntermediateC    as I
+import qualified Language.Kmkm.Internal.Build.C.PolymorphicPoint as O
+import qualified Language.Kmkm.Internal.Build.NameResolve        as N
+import qualified Language.Kmkm.Internal.Build.TypeCheck          as T
+import qualified Language.Kmkm.Internal.Compile                  as M
+import qualified Language.Kmkm.Internal.Compile.C                as C
+import qualified Language.Kmkm.Internal.Exception                as X
+import qualified Language.Kmkm.Internal.Parse.Sexp               as P
+import qualified Language.Kmkm.Internal.Syntax.Core.Common       as S
 
 import           Control.Applicative    (Alternative)
 import           Control.Exception.Safe (MonadCatch, catch, throw)
 import qualified Control.Exception.Safe as E
+import           Data.Foldable          (Foldable (fold))
 import           Data.List.NonEmpty     (NonEmpty)
+import           Data.Monoid            (Alt (Alt, getAlt))
 import           Data.Set               (Set)
 import qualified Data.Set               as H
 import           Data.Text              (Text)
+import           GHC.Stack              (HasCallStack)
 
 compile
-  :: (Alternative m, MonadCatch m)
+  :: (Alternative m, MonadCatch m, HasCallStack)
   => (FilePath -> m FilePath) -- ^ File finder.
   -> (FilePath -> m Text) -- ^ File reader.
   -> (FilePath -> Text -> m ()) -- ^ File writer.
@@ -72,16 +77,23 @@ data Exception
   | -- | A literal is used but its type is not imported while type checking.
     TypeCheckPrimitiveTypeException
       Text -- ^ identifier.
-      (Maybe S.Location) -- ^ location .
+      (Maybe S.Location) -- ^ location.
   | -- | A number of parameters of embedded C is different from one of its type while intermediate C translating.
     IntermediateCEmbeddedParameterMismatchException
       Word -- ^ expected
       Word -- ^ actual
       (Maybe S.Location) -- ^ location.
+  | -- | A variable is not found while polymorphic parameter checking.
+    PolymorphicPointNotFoundException
+      Text -- ^ identifier.
+      (Maybe S.Location) -- ^ location.
+  | -- | Metadata is not attached while polymorphic parameter checking.
+    PolymorphicPointNoMetadataException
+      (Maybe S.Location) -- ^ location.
   | -- | Modules' dependency have a recursion while compiling.
     CompileRecursionException
       (NonEmpty Text) -- ^ modules.
-  | -- | A file's name and its enclosed module's name is mismatched while compiling.
+  | -- | A file's name and its enclosed module's name are mismatched while compiling.
     CompileModuleNameMismatchException
       FilePath -- ^ file name.
       Text -- ^ module name.
@@ -98,21 +110,36 @@ data ParseExceptionMessage
   | ParseSexpMessage String (Maybe S.Location)
   deriving (Show, Read, Eq, Ord)
 
-convertException :: X.Exception -> Exception
+convertException :: HasCallStack => X.Exception -> Exception
 convertException e =
-  case (cast e, cast e, cast e, cast e, cast e) of
-    (Just es, Nothing, Nothing, Nothing, Nothing) -> ParseException $ convertParseExceptionMessage <$> es
-    (Nothing, Just (N.UnknownIdentifierException i r), Nothing, Nothing, Nothing) -> NameResolveUnknownIdentifierException (S.pretty i) r
-    (Nothing, Nothing, Just (T.NotFoundException i r), Nothing, Nothing) -> TypeCheckNotFoundException (S.pretty i) r
-    (Nothing, Nothing, Just (T.MismatchException e a r), Nothing, Nothing) -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
-    (Nothing, Nothing, Just (T.BindProcedureEndException r), Nothing, Nothing) -> TypeCheckBindProcedureEndException r
-    (Nothing, Nothing, Just (T.RecursionException is), Nothing, Nothing) -> TypeCheckRecursionException $ H.map S.pretty is
-    (Nothing, Nothing, Just (T.PrimitiveTypeException i r), Nothing, Nothing) -> TypeCheckPrimitiveTypeException (S.pretty i) r
-    (Nothing, Nothing, Nothing, Just (I.EmbeddedParameterMismatchException e a r), Nothing) -> IntermediateCEmbeddedParameterMismatchException e a r
-    (Nothing, Nothing, Nothing, Nothing, Just (C.RecursionException ms)) -> CompileRecursionException $ S.pretty <$> ms
-    (Nothing, Nothing, Nothing, Nothing, Just (C.ModuleNameMismatchException f m r)) -> CompileModuleNameMismatchException f (S.pretty m) r
-    (Nothing, Nothing, Nothing, Nothing, Just (C.DotDotPathException f)) -> CompileDotDotPathException f
-    _ -> X.unreachable
+  let
+    e' =
+      getAlt $
+        fold
+          [ flip fmap (Alt $ cast e) $
+              ParseException . (convertParseExceptionMessage <$>)
+          , flip fmap (Alt $ cast e) $
+              \(N.UnknownIdentifierException i r) -> NameResolveUnknownIdentifierException (S.pretty i) r
+          , flip fmap (Alt $ cast e) $ \case
+              (T.NotFoundException i r)       -> TypeCheckNotFoundException (S.pretty i) r
+              (T.MismatchException e a r)     -> TypeCheckMismatchException (either id S.pretty e) (S.pretty a) r
+              (T.BindProcedureEndException r) -> TypeCheckBindProcedureEndException r
+              (T.RecursionException is)       -> TypeCheckRecursionException $ H.map S.pretty is
+              (T.PrimitiveTypeException i r)  -> TypeCheckPrimitiveTypeException (S.pretty i) r
+          , flip fmap (Alt $ cast e) $
+              \(I.EmbeddedParameterMismatchException e a r) -> IntermediateCEmbeddedParameterMismatchException e a r
+          , flip fmap (Alt $ cast e) $ \case
+              (O.NotFoundException i r) -> PolymorphicPointNotFoundException (S.pretty i) r
+              (O.NoMetadataException r) -> PolymorphicPointNoMetadataException r
+          , flip fmap (Alt $ cast e) $ \case
+              (M.RecursionException ms)             -> CompileRecursionException $ S.pretty <$> ms
+              (M.ModuleNameMismatchException f m r) -> CompileModuleNameMismatchException f (S.pretty m) r
+              (M.DotDotPathException f)             -> CompileDotDotPathException f
+          ]
+  in
+    case e' of
+      Just e'' -> e''
+      Nothing  -> X.unreachable $ "unexpected exception: " ++ E.displayException e
   where
     cast :: (E.Exception e1, E.Exception e2) => e1 -> Maybe e2
     cast = E.fromException . E.toException

@@ -31,5 +31,6 @@ kmkm_prim_int dependency_d(void)
 
 kmkm_prim_int dependency_e(void)
 {
-  return 1;
+  kmkm_prim_int _l0 = 1;
+  return _l0;
 }

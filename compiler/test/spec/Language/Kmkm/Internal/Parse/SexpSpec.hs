@@ -1,18 +1,18 @@
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds         #-}
-{-# LANGUAGE TypeFamilies      #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Language.Kmkm.Internal.Parse.SexpSpec where
 
 import           Language.Kmkm.Internal.Parse.Sexp
-import qualified Language.Kmkm.Internal.Parse.Sexp.C as C
-import           Language.Kmkm.Internal.Syntax
+import qualified Language.Kmkm.Internal.Parse.Sexp.C                                              as C
+import           Language.Kmkm.Internal.Syntax.Core.Common
+import           Language.Kmkm.Internal.Syntax.Core.NameUnresolved.Untyped.Curried.LambdaUnlifted
 import           Language.Kmkm.Internal.Syntax.Sexp
+
+import Data.Functor.F (unf)
 
 import Utility
 
@@ -116,67 +116,74 @@ spec = do
       it "bind-value foo 123" $ do
         ps valueBind "spec" ["bind-value", "foo", "123"]
           `shouldReturn`
-            ( ValueBindU "foo" (I $ UntypedValue $ I $ Literal $ I $ Integer 123 10)
-                :: ValueBind 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            ( ValueBind "foo" (FI $ Literal $ FI $ Integer 123 10)
+                :: Definition EmbeddedCType EmbeddedCValue I
             )
 
     describe "foreignValueBind" $ do
       it "bind-value-foreign foo (list (c-value \"\" (list) \"\")) foo" $
         ps foreignValueBind "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
           `shouldReturn`
-            ( ForeignValueBind (I "foo") (I $ EmbeddedCValue "" (I []) "") "foo"
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            ( ForeignValueBind "foo" (FI $ EmbeddedCValue "" [] "") "foo"
+                :: Definition EmbeddedCType EmbeddedCValue I
             )
 
     describe "foreignTypeBind" $ do
       it "bind-type-foreign foo (list (c-type \"\" \"\"))" $
         ps foreignTypeBind "spec" ["bind-type-foreign", "foo", ["list", ["c-type", "\"\"", "\"\""]]]
           `shouldReturn`
-            ForeignTypeBind (I "foo") (I $ EmbeddedCType "" "")
+            ForeignTypeBind "foo" (FI $ EmbeddedCType "" "")
 
     describe "dataDefinition" $ do
-      it "define bool (false true)" $ do
+      it "(define bool (list false true))" $ do
         ps dataDefinition "spec" ["define", "bool", ["list", "false", "true"]]
           `shouldReturn`
-            ( DataDefinition "bool" (I [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            ( DataDefinition "bool" (FI $ ValueConstructorsData [FI (ValueConstructor "false" []), FI (ValueConstructor "true" [])])
+                :: Definition EmbeddedCType EmbeddedCValue I
             )
 
       it "define book (list (book (list (title string) (author string))))" $ do
         ps dataDefinition "spec" ["define", "book", ["list", ["book", ["list", ["title", "string"], ["author", "string"]]]]]
           `shouldReturn`
-            ( DataDefinition "book" (I [I (ValueConstructor "book" $ I [I (Field "title" "string"), I (Field "author" "string")])])
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            ( DataDefinition "book" (FI $ ValueConstructorsData [FI (ValueConstructor "book" [FI (Field "title" "string"), FI (Field "author" "string")])])
+                :: Definition EmbeddedCType EmbeddedCValue I
+            )
+
+      it "(define solo (for-all a (list (solo (list (item a)))))))" $ do
+        ps dataDefinition "spec" ["define", "solo", ["for-all", "a", ["list", ["solo", ["list", ["item", "a"]]]]]]
+          `shouldReturn`
+            ( DataDefinition "solo" (FI $ ForAllData "a" (FI $ ValueConstructorsData [FI (ValueConstructor "solo" [FI (Field "item" "a")])]))
+                :: Definition EmbeddedCType EmbeddedCValue I
             )
 
     describe "definition" $ do
       it "bind-type-foreign foo (list (c-type \"\" \"unsigned int\"))" $
         ps definition "spec" ["bind-type-foreign", "foo", ["list", ["c-type", "\"\"", "\"unsigned int\""]]]
           `shouldReturn`
-            ForeignTypeBind (I "foo") (I $ EmbeddedCType "" "unsigned int")
+            ForeignTypeBind "foo" (FI $ EmbeddedCType "" "unsigned int")
 
       it "bind-value-foreign foo (list (c-value \"\" (list) \"\")) foo" $
         ps definition "spec" ["bind-value-foreign", "foo", ["list", ["c-value", "\"\"", ["list"], "\"\""]], "foo"]
           `shouldReturn`
-            ( ForeignValueBind (I "foo") (I $ EmbeddedCValue "" (I []) "") "foo"
-                :: Definition 'NameUnresolved 'Curried 'LambdaUnlifted 'Untyped EmbeddedCType EmbeddedCValue I
+            ( ForeignValueBind "foo" (FI $ EmbeddedCValue "" [] "") "foo"
+                :: Definition EmbeddedCType EmbeddedCValue I
             )
 
     describe "module" $ do
       it "(module math (list) (list (bind-value foo 123)" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["bind-value", "foo", "123"]]]
           `shouldReturn`
-            Module "math" (I []) (I [I $ ValueBind $ I $ ValueBindU "foo" $ I $ UntypedValue $ I $ Literal $ I $ Integer 123 10])
+            Module "math" [] [FI $ ValueBind "foo" $ FI $ Literal $ FI $ Integer 123 10]
 
       it "(module math (list) (list (define bool (false true)))" $ do
         ps module' "spec" ["module", "math", ["list"], ["list", ["define", "bool", ["list", "false", "true"]]]]
-          `shouldReturn` Module (I "math") (I []) (I [I $ DataDefinition (I "bool") (I [I (ValueConstructor "false" $ I []), I (ValueConstructor "true" $ I [])])])
+          `shouldReturn` Module "math" [] [FI $ DataDefinition "bool" (FI $ ValueConstructorsData [FI (ValueConstructor "false" []), FI (ValueConstructor "true" [])])]
 
 pt :: MonadThrow m => String -> Text -> m (I (Sexp I))
-pt label text = toIdentity <$> parseText label text
+pt label text = toIdentity . unf <$> parseText label text
 
-ps :: MonadCatch m => (I (Sexp I) -> ReaderT (Env EmbeddedCType EmbeddedCValue I) (Except [Exception]) (I a)) -> String -> I (Sexp I) -> m a
-ps parser label sexp = runIdentity <$> parseSexp' parser [C.embeddedParser] (traverse $ \(EmbeddedTypeC t) -> Just t) (traverse $ \(EmbeddedValueC v) -> Just v) label sexp
+ps :: MonadCatch m => (FI (Sexp I) -> ReaderT (Env EmbeddedCType EmbeddedCValue I) (Except [Exception]) (FI a)) -> String -> FI (Sexp I) -> m a
+ps parser label sexp = runIdentity . unf <$> parseSexp' parser [C.embeddedParser] (traverse $ \(EmbeddedTypeC t) -> Just t) (traverse $ \(EmbeddedValueC v) -> Just v) label sexp
 
 pc :: MonadFail m => ParsecT Void Text I a -> Text -> m a
 pc parser input =

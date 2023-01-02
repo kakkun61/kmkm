@@ -1,8 +1,13 @@
-{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Kmkm.Internal.Build.C.C
   ( render
+  , qualifiedType
+  , element
+  , typeDefinition
+  , field
+  , derivers
+  , expression
   ) where
 
 import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
@@ -10,13 +15,13 @@ import Language.Kmkm.Internal.Build.C.Syntax (ArithmeticExpression,
                                               Definition (ExpressionDefinition, StatementDefinition),
                                               Deriver (Function, Pointer),
                                               Element (Declaration, Definition, TypeDefinition),
-                                              Expression (ArithmeticExpression, Assign, Call, CompoundLiteral, Literal, StatementExpression, Variable),
+                                              Expression (Address, ArithmeticExpression, Assign, Call, Cast, CompoundLiteral, Dereference, Literal, StatementExpression, Variable),
                                               Field (Field), File (File),
                                               FractionBase (FractionDecimal, FractionHexadecimal),
                                               Identifier (Identifier),
                                               Initializer (ExpressionInitializer, ListInitializer),
                                               IntBase (IntBinary, IntDecimal, IntHexadecimal, IntOctal),
-                                              Literal (Fraction, Integer, String), QualifiedType,
+                                              Literal (Fraction, Integer, String), QualifiedType (QualifiedType),
                                               Statement (Block, Case, ExpressionStatement, If, Return),
                                               Type (Char, Double, Enumerable, EnumerableLiteral, Float, Int, Structure, StructureLiteral, TypeVariable, Union, Void),
                                               TypeQualifier (Unsigned), VariableQualifier (Constant, External))
@@ -53,7 +58,7 @@ definition (StatementDefinition t qs i ds es) =
     <> ["}"]
 
 qualifiedType :: QualifiedType -> Text
-qualifiedType (qs, t) =
+qualifiedType (QualifiedType qs t) =
   T.unwords $
     (typeQualifier <$> qs)
     <> [typ t]
@@ -91,7 +96,7 @@ typ (EnumerableLiteral i is) =
     ]
 
 field :: Field -> Text
-field (Field t i ds) = derivers (qualifiedType t <> " " <> identifier i) ds
+field (Field t i ds) = qualifiedType t <> " " <> derivers (identifier i) ds
 
 typeQualifier :: TypeQualifier -> Text
 typeQualifier Unsigned = "unsigned"
@@ -114,11 +119,13 @@ derivers :: Text -> [Deriver] -> Text
 derivers = foldl deriver
 
 deriver :: Text -> Deriver -> Text
-deriver t (Pointer qs) =
+deriver t (Pointer qs ds) =
   fold
-    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [t]
+    [ T.unwords $ ["(*"] <> (variableQualifier <$> qs) <> [dt | not $ T.null dt]
     , ")"
     ]
+  where
+    dt = derivers t ds
 deriver t (Function ps) =
   fold
     [ t
@@ -149,6 +156,12 @@ expression (StatementExpression es) =
     , "})"
     ]
 expression (Assign i e)             = identifier i <> " = " <> expression e
+expression (Cast (t, ds) e)         =
+  "((" <> T.unwords ([qualifiedType t] <> [dt | not $ T.null dt]) <> ") " <> expression e <> ")"
+  where
+    dt = derivers "" ds
+expression (Dereference e) = "*(" <> expression e <> ")"
+expression (Address e) = "&(" <> expression e <> ")"
 
 literal :: Literal -> Text
 literal (Integer v IntBinary) = "0x" <> T.pack (showHex v "")
